@@ -2325,15 +2325,21 @@
      const tbody = document.getElementById('sn-modal-tbody');
      const thFailure = document.getElementById('sn-modal-failure-th');
      if (!tbody) return;
-     if (thFailure) thFailure.style.display = 'none';
+     const hasFail = rows && rows.some(r => ((r.status || r.result || '').toString().toUpperCase()) === 'FAIL');
+     if (thFailure) thFailure.style.display = hasFail ? '' : 'none';
      if (!rows || !rows.length) {
-       tbody.innerHTML = `<tr><td colspan="6" style="color: var(--color-muted);">No data</td></tr>`;
+       const colspan = hasFail ? 7 : 6;
+       tbody.innerHTML = `<tr><td colspan="${colspan}" style="color: var(--color-muted);">No data</td></tr>`;
        return;
      }
+     const esc = (s) => (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
      tbody.innerHTML = rows.map(r => {
        const result = (r.status || r.result || '-').toUpperCase();
        const badgeClass = (result === 'PASS') ? 'status-success' : 'status-danger';
        const bp = r.is_bonepile ? 'Yes' : 'No';
+       const failCell = hasFail
+         ? `<td class="text-left text-sm" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(r.last_failure_msg)}">${esc(result === 'FAIL' ? (r.last_failure_msg || '-') : '-')}</td>`
+         : '';
        return `
          <tr>
            <td class="font-mono font-semibold">${r.sn}</td>
@@ -2342,6 +2348,7 @@
            <td class="font-mono">${(r.last_station || '-')}</td>
            <td class="font-mono">${(r.last_test_time || fmtMaybe(r.pass_ca_ms) || '-')}</td>
            <td class="font-mono">${bp}</td>
+           ${failCell}
          </tr>
        `;
      }).join('');
