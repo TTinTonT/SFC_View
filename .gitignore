@@ -11,6 +11,12 @@ env/
 # Cache & data
 analytics_cache/
 *.db
+*.xlsx
+
+# Allow Excel templates required for export (must be in repo)
+!templates/SKU_Summary.xlsx
+!templates/Tray_Summary_Template.xlsx
+!templates/SKU_Dispo.xlsx
 
 # IDE
 .idea/

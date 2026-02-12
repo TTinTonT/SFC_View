@@ -6,6 +6,7 @@ Also includes bonepile upload and disposition.
 """
 from __future__ import annotations
 
+import io
 import os
 import sqlite3
 import tempfile
@@ -13,8 +14,14 @@ import threading
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
-from flask import Flask, jsonify, render_template, request, send_file
-import io
+from flask import Flask, jsonify, render_template, request, Response, send_file
+
+# Excel export templates (formatting preserved in exported XLSX)
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES_DIR = os.path.join(APP_DIR, "templates")
+SKU_SUMMARY_TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "SKU_Summary.xlsx")
+TRAY_SUMMARY_TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "Tray_Summary_Template.xlsx")
+SKU_DISPO_TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "SKU_Dispo.xlsx")
 
 from sfc.client import request_fail_result
 from sfc.parser import parse_fail_result_html, rows_to_csv
@@ -51,6 +58,217 @@ def _parse_datetime(s: Optional[str], is_end: bool = False) -> Optional[datetime
         except ValueError:
             continue
     return None
+
+
+def _xlsx_response(data: bytes, filename: str) -> Response:
+    resp = Response(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+def _copy_cell_style(src_cell, tgt_cell):
+    """Copy font, fill, alignment, border, number_format from source cell to target cell."""
+    if src_cell.has_style:
+        tgt_cell.font = src_cell.font.copy()
+        tgt_cell.fill = src_cell.fill.copy()
+        tgt_cell.alignment = src_cell.alignment.copy()
+        tgt_cell.border = src_cell.border.copy()
+        tgt_cell.number_format = src_cell.number_format
+
+
+def _build_export_xlsx(
+    export_kind: str,
+    computed: Dict[str, Any],
+    start_s: str,
+    end_s: str,
+    start_ca: datetime,
+    end_ca: datetime,
+) -> Tuple[bytes, str]:
+    """
+    Build XLSX using templates; preserve template formatting.
+    export_kind: 'summary' | 'sku'
+    SFC_View uses computed['tray_summary'] for summary (same structure as Bonepile's summary).
+    Returns (xlsx_bytes, filename).
+    """
+    try:
+        import openpyxl
+    except ImportError:
+        raise RuntimeError("openpyxl is not installed; cannot export XLSX")
+
+    start_str = start_ca.strftime("%Y-%m-%d %H:%M")
+    end_str = end_ca.strftime("%Y-%m-%d %H:%M")
+    header_text = f"Testing from {start_str} to {end_str}"
+
+    if export_kind == "summary":
+        path = TRAY_SUMMARY_TEMPLATE_PATH
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Tray Summary template not found: {path}")
+        wb = openpyxl.load_workbook(path)
+        ws = wb.active
+        merged_ranges = list(ws.merged_cells.ranges)
+        for mr in merged_ranges:
+            mr_str = str(mr)
+            if 'A1' in mr_str or mr_str.startswith('A1:'):
+                ws.unmerge_cells(mr_str)
+        from openpyxl.styles import PatternFill
+        a1_cell = ws.cell(row=1, column=1)
+        a1_fill = a1_cell.fill.copy() if a1_cell.has_style and a1_cell.fill else None
+        if a1_cell.has_style:
+            a1_cell.fill = PatternFill()
+        header_cell = ws.cell(row=1, column=2, value=header_text)
+        ws.merge_cells('B1:D1')
+        from openpyxl.styles import Font, Alignment
+        header_cell.font = Font(bold=True, size=12)
+        header_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        if a1_fill:
+            header_cell.fill = a1_fill
+        text_length = len(header_text)
+        estimated_width = max(text_length * 1.2 / 3, 15)
+        for col in ['B', 'C', 'D']:
+            current_width = ws.column_dimensions[col].width if col in ws.column_dimensions and ws.column_dimensions[col].width else 0
+            ws.column_dimensions[col].width = max(current_width, estimated_width)
+
+        # SFC_View tray_summary: { tested: {bp, fresh, total}, pass: {...}, fail: {...} }
+        t = computed["tray_summary"]
+        ws.cell(row=3, column=1, value="TOTAL")
+        ws.cell(row=3, column=2, value=t["tested"].get("bp", 0))
+        ws.cell(row=3, column=3, value=t["tested"].get("fresh", 0))
+        ws.cell(row=3, column=4, value=t["tested"].get("total", 0))
+        ws.cell(row=4, column=1, value="PASS")
+        ws.cell(row=4, column=2, value=t["pass"].get("bp", 0))
+        ws.cell(row=4, column=3, value=t["pass"].get("fresh", 0))
+        ws.cell(row=4, column=4, value=t["pass"].get("total", 0))
+        ws.cell(row=5, column=1, value="FAIL")
+        ws.cell(row=5, column=2, value=t["fail"].get("bp", 0))
+        ws.cell(row=5, column=3, value=t["fail"].get("fresh", 0))
+        ws.cell(row=5, column=4, value=t["fail"].get("total", 0))
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.read(), f"summary_{start_s}_to_{end_s}.xlsx"
+
+    if export_kind == "sku":
+        path = SKU_SUMMARY_TEMPLATE_PATH
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"SKU Summary template not found: {path}")
+        wb = openpyxl.load_workbook(path)
+        ws = wb.active
+        ws.insert_rows(1)
+        from openpyxl.styles import PatternFill
+        a2_cell = ws.cell(row=2, column=1)
+        a2_fill = a2_cell.fill.copy() if a2_cell.has_style and a2_cell.fill else None
+        a1_cell = ws.cell(row=1, column=1)
+        if a1_cell.has_style:
+            a1_cell.fill = PatternFill()
+        if a2_cell.has_style:
+            a2_cell.fill = PatternFill()
+        header_cell = ws.cell(row=1, column=2, value=header_text)
+        ws.merge_cells('B1:D1')
+        from openpyxl.styles import Font, Alignment
+        header_cell.font = Font(bold=True, size=12)
+        header_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        if a2_fill:
+            header_cell.fill = a2_fill
+        text_length = len(header_text)
+        estimated_width = max(text_length * 1.2 / 3, 15)
+        for col in ['B', 'C', 'D']:
+            current_width = ws.column_dimensions[col].width if col in ws.column_dimensions and ws.column_dimensions[col].width else 0
+            ws.column_dimensions[col].width = max(current_width, estimated_width)
+
+        sku_rows = computed.get("sku_rows") or []
+        ws.cell(row=2, column=1, value="SKU")
+        ws.cell(row=2, column=2, value="TESTED")
+        ws.cell(row=2, column=3, value="PASS")
+        ws.cell(row=2, column=4, value="FAIL")
+        first_data_row = 3
+        template_last_data_row = 5
+        template_data_row_count = 4
+        for i, r in enumerate(sku_rows):
+            row_num = first_data_row + i
+            ws.cell(row=row_num, column=1, value=r.get("sku") or "")
+            ws.cell(row=row_num, column=2, value=r.get("tested") or 0)
+            ws.cell(row=row_num, column=3, value=r.get("pass") or 0)
+            ws.cell(row=row_num, column=4, value=r.get("fail") or 0)
+            if row_num > template_last_data_row:
+                for col in range(1, 5):
+                    src_cell = ws.cell(row=first_data_row, column=col)
+                    tgt_cell = ws.cell(row=row_num, column=col)
+                    _copy_cell_style(src_cell, tgt_cell)
+        num_used = len(sku_rows)
+        if num_used < template_data_row_count:
+            first_unused = first_data_row + num_used
+            num_to_delete = template_data_row_count - num_used
+            ws.delete_rows(first_unused, num_to_delete)
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.read(), f"sku_{start_s}_to_{end_s}.xlsx"
+
+    raise ValueError(f"Unsupported export_kind for XLSX: {export_kind}")
+
+
+def _build_dispo_sku_xlsx(
+    dispo_data: Dict[str, Any],
+    start_ca: datetime,
+    end_ca: datetime,
+) -> Tuple[bytes, str]:
+    """Build XLSX for Disposition By SKU. Uses SKU_Dispo.xlsx if present, else creates from scratch."""
+    try:
+        import openpyxl
+    except ImportError:
+        raise RuntimeError("openpyxl is not installed; cannot export XLSX")
+
+    by_sku = dispo_data.get("by_sku") or []
+    start_str = start_ca.strftime("%Y-%m-%d %H:%M")
+    end_str = end_ca.strftime("%Y-%m-%d %H:%M")
+    date_range_str = f"From {start_str} to {end_str}"
+
+    if os.path.isfile(SKU_DISPO_TEMPLATE_PATH):
+        wb = openpyxl.load_workbook(SKU_DISPO_TEMPLATE_PATH)
+        ws = wb.active
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Disposition By SKU"
+        ws.cell(row=2, column=1, value="Part Number")
+        ws.cell(row=2, column=2, value="Dispositions")
+        ws.cell(row=2, column=3, value="Complete")
+        ws.cell(row=2, column=4, value="Waiting")
+
+    ws.cell(row=1, column=2, value=date_range_str)
+    first_data_row = 3
+    for i, row in enumerate(by_sku):
+        r = first_data_row + i
+        ws.cell(row=r, column=1, value=row.get("sku") or "")
+        ws.cell(row=r, column=2, value=row.get("total") or 0)
+        ws.cell(row=r, column=3, value=row.get("complete") or 0)
+        ws.cell(row=r, column=4, value=row.get("waiting_igs") or 0)
+        if r > first_data_row:
+            for col in range(1, 5):
+                src_cell = ws.cell(row=first_data_row, column=col)
+                tgt_cell = ws.cell(row=r, column=col)
+                _copy_cell_style(src_cell, tgt_cell)
+    for i in range(len(by_sku)):
+        r = first_data_row + i
+        src_cell = ws.cell(row=r, column=1)
+        tgt_cell = ws.cell(row=r, column=5)
+        _copy_cell_style(src_cell, tgt_cell)
+    for col_idx, col_letter in enumerate(["A", "B", "C", "D", "E"], start=1):
+        max_len = 12
+        for r in range(1, first_data_row + len(by_sku) + 1):
+            val = ws.cell(row=r, column=col_idx).value
+            if val is not None:
+                max_len = max(max_len, len(str(val)) + 1)
+        max_len = min(50, max_len)
+        current = ws.column_dimensions[col_letter].width if col_letter in ws.column_dimensions and ws.column_dimensions[col_letter].width else 0
+        ws.column_dimensions[col_letter].width = max(current, max_len)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    start_s = start_ca.strftime("%Y%m%d_%H%M")
+    end_s = end_ca.strftime("%Y%m%d_%H%M")
+    return buf.read(), f"Disposition_By_SKU_{start_s}_to_{end_s}.xlsx"
 
 
 @app.route("/")
@@ -173,11 +391,70 @@ def api_fail_result():
 @app.route("/api/export", methods=["POST"])
 @app.route("/api/export/csv", methods=["POST"])
 def api_export_csv():
-    """Export CSV with BP column. Body: { start_datetime, end_datetime }."""
+    """
+    Export CSV or XLSX.
+    Body: { start_datetime, end_datetime, aggregation?, export?, format? }
+    format=xlsx with export=summary|sku|disposition_by_sku returns Excel.
+    Otherwise returns CSV.
+    """
     payload = request.json or {}
     start_s = (payload.get("start_datetime") or "").strip()
     end_s = (payload.get("end_datetime") or "").strip()
+    export_kind = (payload.get("export") or "dashboard").strip().lower()
+    export_format = (payload.get("format") or "csv").strip().lower()
 
+    # Handle XLSX export for summary, sku, disposition_by_sku
+    if export_format == "xlsx" and export_kind in ("summary", "sku", "disposition_by_sku"):
+        if export_kind == "disposition_by_sku":
+            start_ca = _parse_ca_input_datetime(start_s, is_end=False) if start_s else None
+            end_ca = _parse_ca_input_datetime(end_s, is_end=True) if end_s else None
+            if start_ca is None or end_ca is None:
+                return jsonify({"error": "start_datetime and end_datetime required for disposition export"}), 400
+            if end_ca <= start_ca:
+                return jsonify({"error": "end must be after start"}), 400
+            try:
+                ensure_db_ready()
+                start_ca_ms = utc_ms(start_ca)
+                end_ca_ms = utc_ms(end_ca)
+                dispo_data = compute_disposition_stats(aggregation="daily", start_ca_ms=start_ca_ms, end_ca_ms=end_ca_ms)
+                data_xlsx, filename = _build_dispo_sku_xlsx(dispo_data, start_ca, end_ca)
+                return _xlsx_response(data_xlsx, filename)
+            except sqlite3.OperationalError:
+                dispo_data = {"by_sku": []}
+                data_xlsx, filename = _build_dispo_sku_xlsx(dispo_data, start_ca, end_ca)
+                return _xlsx_response(data_xlsx, filename)
+            except FileNotFoundError as e:
+                return jsonify({"error": str(e)}), 404
+            except Exception as e:
+                return jsonify({"error": f"XLSX export failed: {str(e)}"}), 500
+        else:
+            user_start = _parse_datetime(start_s, is_end=False)
+            user_end = _parse_datetime(end_s, is_end=True)
+            if user_start is None or user_end is None:
+                return jsonify({"error": "start_datetime and end_datetime required"}), 400
+            if user_end < user_start:
+                return jsonify({"error": "end must be after start"}), 400
+            aggregation = (payload.get("aggregation") or "daily").strip().lower()
+            if aggregation not in ("daily", "weekly", "monthly"):
+                aggregation = "daily"
+            ok, html = request_fail_result(user_start, user_end)
+            if not ok:
+                return jsonify({"error": "SFC API request failed"}), 502
+            rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+            computed = compute_all(rows, aggregation=aggregation)
+            start_fmt = user_start.strftime("%Y%m%d_%H%M")
+            end_fmt = user_end.strftime("%Y%m%d_%H%M")
+            try:
+                data_xlsx, filename = _build_export_xlsx(
+                    export_kind, computed, start_fmt, end_fmt, user_start, user_end
+                )
+                return _xlsx_response(data_xlsx, filename)
+            except FileNotFoundError as e:
+                return jsonify({"error": str(e)}), 404
+            except Exception as e:
+                return jsonify({"error": f"XLSX export failed: {str(e)}"}), 500
+
+    # CSV export
     user_start = _parse_datetime(start_s, is_end=False)
     user_end = _parse_datetime(end_s, is_end=True)
     if user_start is None or user_end is None:
