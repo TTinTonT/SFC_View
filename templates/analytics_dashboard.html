@@ -1073,9 +1073,10 @@
             </div>
           </div>
           <p class="text-xs mt-4" style="color: var(--color-muted);">
-            <strong>Note:</strong> Total Dispositions = sum of all NV disposition entries in the selected date range (each mm/dd entry = one disposition). 
-            Waiting IGS = count of SNs with Status = Fail and PIC = IGS (not limited by date range). 
-            Complete = count of SNs that have at least one disposition in the selected date range.
+            <strong>Note:</strong> Only SNs with Status = Fail and PIC = IGS. 
+            Waiting = IGS Action empty or last IGS date &lt; last NV Disposition date. 
+            Complete = last IGS Action date &gt;= last NV Disposition date. 
+            Total = Waiting + Complete.
           </p>
         </div>
         <!-- By SKU -->
@@ -2252,8 +2253,7 @@
        const startEl = document.getElementById('start-date');
        const endEl = document.getElementById('end-date');
        const now = new Date();
-       const lastWeek = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-       if (startEl) startEl.value = fmtDateCA(lastWeek);
+       if (startEl) startEl.value = fmtDateCA(now);
        if (endEl) endEl.value = fmtDateCA(now);
        payload = getRangePayload();
      }
@@ -2501,11 +2501,7 @@
    }
    safeAddListener('apply-filter', 'click', applyFilter);
 
-   // Auto-apply when user changes filter (date/time)
-   ['start-date','end-date','start-time','end-time'].forEach((id) => {
-     const el = document.getElementById(id);
-     if (el) el.addEventListener('change', () => applyFilter());
-   });
+   // Do NOT auto-apply on date/time change; user must click Apply Filter
 
   // Export buttons
   document.getElementById('export-all').addEventListener('click', () => {
@@ -2802,17 +2798,7 @@
          try {
            const data = JSON.parse(evt.data);
            applyStatusFromPayload(data);
-           // When auto-scan completes, last_scan_ca_ms changes; auto-run Apply Filter to refresh data.
-           const lastScanMs = (data && data.cache) ? data.cache.last_scan_ca_ms : null;
-           if (window.__lastScanCaMsForAutoRefresh === undefined) {
-             window.__lastScanCaMsForAutoRefresh = lastScanMs;
-             return;
-           }
-           if (lastScanMs != null && lastScanMs !== window.__lastScanCaMsForAutoRefresh) {
-             window.__lastScanCaMsForAutoRefresh = lastScanMs;
-             runQuery().catch(function() {});
-             loadDispositionPanel().catch(function() {});
-           }
+           // Do NOT auto-run runQuery/loadDispositionPanel on scan complete; user must click Apply Filter.
          } catch (e) {}
        });
        es.addEventListener('error', () => {
@@ -2825,7 +2811,7 @@
    // Init (no auto-polling; status updates come from SSE)
    // Wrap in try-catch to prevent silent crashes
    try {
-     // Ensure default dates are ALWAYS set before first query (so runQuery has valid payload)
+     // Ensure default dates: today 12:00 AM - 11:59 PM (same day). Do NOT auto-run query; user must click Apply Filter.
      (function setDefaultRange() {
        try {
          const startEl = document.getElementById('start-date');
@@ -2838,8 +2824,7 @@
            return;
          }
          const now = new Date();
-         const lastWeek = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-         if (!startEl.value) startEl.value = fmtDateCA(lastWeek);
+         if (!startEl.value) startEl.value = fmtDateCA(now);
          if (!endEl.value) endEl.value = fmtDateCA(now);
          if (startTimeEl && !startTimeEl.value) startTimeEl.value = '00:00';
          if (endTimeEl && !endTimeEl.value) endTimeEl.value = '23:59';
@@ -2852,16 +2837,6 @@
      refreshCacheCoverage().catch(() => {});
      if (typeof startStatusStream === 'function') startStatusStream();
      if (typeof startCountdownLoop === 'function') startCountdownLoop();
-     
-     // Small delay to ensure DOM is ready
-     setTimeout(() => {
-       runQuery().catch(err => {
-         console.error('runQuery error:', err);
-         setLoading(false);
-         setApiStatus((err && err.message) ? ('Error: ' + err.message) : 'Load failed', 'err');
-       });
-       loadDispositionPanel().catch(e => console.error('loadDispositionPanel error:', e));
-     }, 50);
    } catch (e) {
       console.error('Init error:', e);
       setApiStatus('Init failed: ' + (e.message || e), 'err');
