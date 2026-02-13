@@ -7,13 +7,13 @@ Logic from Bonepile_view/analytics_server.py.
 from typing import List
 
 # Part numbers that pass at FCT (explicit list)
-PASS_AT_FCT_PART_NUMBERS = frozenset({"675-24109-0010-TS2"})
+PASS_AT_FCT_PART_NUMBERS = frozenset({"675-24109-0010-TS2", "675-24109-0020-TS2"})
 
 
 def get_pass_station_for_part_number(part_number: str) -> str:
     """
     Return the station where a part number is considered "passed".
-    - 675-24109-0010-TS2 -> FCT
+    - 675-24109-0010-TS2, 675-24109-0020-TS2 -> FCT
     - Part number contains "TS2" -> NVL
     - Others -> FCT
     """
