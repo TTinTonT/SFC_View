@@ -403,8 +403,29 @@ def api_error_stats():
     with _last_error_stats_lock:
         _last_error_stats_result = result
 
+    fail_rows = result.get("_fail_rows") or []
+    total_fail_events = len(fail_rows)
+    total_unique_trays = len(
+        set(
+            (r.get("serial_number") or r.get("sn") or "").strip()
+            for r in fail_rows
+            if (r.get("serial_number") or r.get("sn") or "").strip()
+        )
+    )
+    top_k_errors = result["top_k_errors"]
+    top_3_errors = [e["error_code"] for e in top_k_errors[:3]]
+    fail_by_station = result["fail_by_station"]
+    top_station = (
+        max(fail_by_station, key=lambda x: x.get("fail_events", 0))
+        if fail_by_station
+        else {"station_group": "-", "fail_events": 0}
+    )
     out = {
         "ok": True,
+        "total_fail_events": total_fail_events,
+        "total_unique_trays": total_unique_trays,
+        "top_3_errors": top_3_errors,
+        "top_station": {"station_group": top_station["station_group"], "fail_events": top_station["fail_events"]},
         "fail_by_station": result["fail_by_station"],
         "top_k_errors": result["top_k_errors"],
         "station_error_matrix": result["station_error_matrix"],

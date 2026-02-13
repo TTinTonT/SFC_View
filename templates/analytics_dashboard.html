@@ -51,16 +51,17 @@
     transition: background-color 0.3s, color 0.3s;
     font-size: 15px;
     line-height: 1.6;
+    overflow: hidden;
   }
   .app-wrapper {
-    min-height: 100%;
+    height: 100%;
     width: 100%;
     overflow: auto;
   }
   header {
     background: var(--color-surface);
     border-bottom: 2px solid var(--color-border);
-    padding: 1.25rem 1.5rem;
+    padding: 0.75rem 1.25rem;
     position: sticky;
     top: 0;
     z-index: 50;
@@ -70,15 +71,28 @@
   .header-content {
     max-width: 1400px;
     margin: 0 auto;
+  }
+  .header-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 1rem;
   }
+  .header-filters {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.65rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .header-filters .input-field { padding: 0.35rem 0.5rem; font-size: 0.8125rem; min-width: 0; }
   h1 {
-    font-size: 1.75rem;
+    font-size: 2.25rem;
     font-weight: 800;
     color: var(--color-text);
-    letter-spacing: -0.025em;
+    letter-spacing: -0.03em;
   }
   .header-actions {
     display: flex;
@@ -86,8 +100,8 @@
     gap: 0.75rem;
   }
   .icon-btn {
-    width: 42px;
-    height: 42px;
+    width: 38px;
+    height: 38px;
     border-radius: 10px;
     display: flex;
     align-items: center;
@@ -757,8 +771,13 @@
   <div class="app-wrapper">
    <header>
     <div class="header-content">
-     <h1 id="dashboard-title">Analytics Dashboard</h1>
-     <div class="header-actions"><button class="icon-btn" id="theme-toggle" title="Toggle theme">
+     <div class="header-row">
+      <h1 id="dashboard-title">Analytics Dashboard</h1>
+      <div class="header-actions">
+       <button type="button" class="btn-ghost btn-mini nav-section-btn" data-section="section-test-analysis">Test Analysis</button>
+       <button type="button" class="btn-ghost btn-mini nav-section-btn" data-section="section-disposition">Disposition</button>
+       <button type="button" class="btn-ghost btn-mini nav-section-btn" data-section="section-error-stats">Error Stats</button>
+       <button class="icon-btn" id="theme-toggle" title="Toggle theme">
        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewbox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
        </svg>
@@ -775,46 +794,29 @@
        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
        </svg> Upload </button>
+      </div>
+     </div>
+     <div class="header-filters">
+      <div class="flex items-center gap-2 flex-wrap">
+       <label for="start-date" class="text-xs font-semibold" style="color: var(--color-muted);">Start</label>
+       <input type="date" id="start-date" class="input-field">
+       <input type="time" id="start-time" step="60" class="input-field font-mono" value="00:00">
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+       <label for="end-date" class="text-xs font-semibold" style="color: var(--color-muted);">End</label>
+       <input type="date" id="end-date" class="input-field">
+       <input type="time" id="end-time" step="60" class="input-field font-mono" value="23:59">
+      </div>
+      <div class="text-xs" style="color: var(--color-muted);"><span class="font-bold" style="color: var(--color-text);">SFC Fail Result</span> – Data from SFC API</div>
+      <button class="btn-primary btn-mini" id="apply-filter" type="button">
+       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+       </svg> Apply Filter </button>
      </div>
     </div>
    </header>
-   <main><!-- Filter Panel -->
-    <div class="panel mb-8 animate-in delay-1">
-     <div class="flex items-center justify-between mb-6">
-      <h3 class="text-lg font-semibold" style="color: var(--color-text);">Filters &amp; Time Range</h3>
-     </div>
-     <div class="grid grid-cols-1 md:grid-cols-2 gap-6"><!-- Start Time -->
-      <div><label class="block text-sm font-bold mb-3" style="color: var(--color-text);">Start Time</label>
-       <div class="grid grid-cols-2 gap-3">
-        <div><label for="start-date" class="block text-xs font-semibold mb-2" style="color: var(--color-muted);">Date</label> <input type="date" id="start-date" class="input-field w-full">
-        </div>
-        <div><label for="start-time" class="block text-xs font-semibold mb-2" style="color: var(--color-muted);">Time (24h)</label> <input type="time" id="start-time" step="60" class="input-field w-full font-mono" value="00:00">
-        </div>
-       </div>
-      </div><!-- End Time -->
-      <div><label class="block text-sm font-bold mb-3" style="color: var(--color-text);">End Time</label>
-       <div class="grid grid-cols-2 gap-3">
-        <div><label for="end-date" class="block text-xs font-semibold mb-2" style="color: var(--color-muted);">Date</label> <input type="date" id="end-date" class="input-field w-full">
-        </div>
-        <div><label for="end-time" class="block text-xs font-semibold mb-2" style="color: var(--color-muted);">Time (24h)</label> <input type="time" id="end-time" step="60" class="input-field w-full font-mono" value="23:59">
-        </div>
-       </div>
-      </div>
-     </div>
-     <div class="mt-6 flex items-center justify-between gap-3 flex-wrap">
-      <div class="text-sm" style="color: var(--color-muted);">
-        <span class="font-bold" style="color: var(--color-text);">SFC Fail Result</span>
-        <span class="ml-2">Data from SFC API for selected date range.</span>
-      </div>
-      <div class="flex gap-3">
-        <button class="btn-primary" id="apply-filter" type="button">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
-         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-        </svg> Apply Filter </button>
-      </div>
-     </div>
-    </div>
-
+   <main>
+    <div id="section-test-analysis">
     <!-- KPI Cards -->
     <div class="kpi-grid mb-8 animate-in delay-2" id="kpi-row">
       <div class="kpi-card">
@@ -1009,10 +1011,11 @@
         </table>
       </div>
     </div>
+    </div><!-- /section-test-analysis -->
 
     <!-- NV Disposition section (loads independently, shown when ready) -->
     <div class="dispo-section-divider" style="margin-top: 2.5rem; margin-bottom: 1.5rem; border-top: 2px solid var(--color-border); padding-top: 1.5rem;"></div>
-    <div class="panel" id="dispo-section" style="display: none;">
+    <div class="panel" id="section-disposition" style="display: none;">
       <div class="flex items-center justify-between gap-4 mb-4">
         <h2 class="text-lg font-bold" style="color: var(--color-text);">NV Disposition</h2>
         <div class="flex items-center gap-2">
@@ -1153,7 +1156,7 @@
 
     <!-- Error Statistics - below Disposition -->
     <div class="dispo-section-divider" style="margin-top: 2.5rem; margin-bottom: 1.5rem; border-top: 2px solid var(--color-border); padding-top: 1.5rem;"></div>
-    <div class="panel mb-8" id="error-stats-panel">
+    <div class="panel mb-8" id="section-error-stats">
       <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold" style="color: var(--color-text);">Error Statistics</h2>
@@ -1179,6 +1182,7 @@
         </div>
       </div>
       <div id="error-stats-content" style="display: none;">
+        <div class="kpi-grid mb-6" id="err-kpi-overview"></div>
         <!-- A: Fail by Station -->
         <div class="mb-6">
           <h3 class="text-lg font-semibold mb-3" style="color: var(--color-text);">A. Fail Summary by Station</h3>
@@ -1385,6 +1389,34 @@
     </div>
   </div>
 
+  <!-- Top 3 Errors Modal (Error Code, Message, Fail Count) -->
+  <div class="modal-overlay" id="err-top3-modal">
+    <div class="modal-content" style="max-width: 700px;">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xl font-bold" style="color: var(--color-text);">Top 3 Errors</h3>
+        <button class="w-9 h-9 rounded-lg flex items-center justify-center transition-colors" style="background: var(--color-bg);" id="close-err-top3-modal" title="Close">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Error Code</th>
+              <th>Error Message</th>
+              <th>Fail Count</th>
+            </tr>
+          </thead>
+          <tbody id="err-top3-modal-tbody">
+            <tr><td colspan="3" style="color: var(--color-muted);">No data</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- Error Stats SN Modal (FAIL records drill-down) -->
   <div class="modal-overlay" id="error-stats-sn-modal">
     <div class="modal-content" style="max-width: 1100px;">
@@ -1488,6 +1520,25 @@
 
    function openErrorStatsModal() { document.getElementById('error-stats-sn-modal')?.classList.add('active'); }
    function closeErrorStatsModal() { document.getElementById('error-stats-sn-modal')?.classList.remove('active'); }
+   function openTop3ErrorsModal() {
+     const tbody = document.getElementById('err-top3-modal-tbody');
+     if (!tbody) return;
+     const data = lastTop3Errors || [];
+     if (!data.length) {
+       tbody.innerHTML = '<tr><td colspan="3" style="color: var(--color-muted);">No data</td></tr>';
+     } else {
+       const esc2 = (s) => (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+       tbody.innerHTML = data.map(r => `
+         <tr>
+           <td class="font-mono font-semibold">${esc2(r.error_code)}</td>
+           <td class="text-left" style="max-width: 400px; word-break: break-word;">${esc2(r.representative_error_message || '-')}</td>
+           <td class="font-mono">${r.fail_events ?? 0}</td>
+         </tr>
+       `).join('');
+     }
+     document.getElementById('err-top3-modal')?.classList.add('active');
+   }
+   function closeTop3ErrorsModal() { document.getElementById('err-top3-modal')?.classList.remove('active'); }
 
    // Loading overlay
    function setLoading(active, text) {
@@ -1521,9 +1572,10 @@
    let dispoAggregation = 'daily';
    let topKErrors = 5;
    let lastDispoData = null;
+   let lastTop3Errors = [];
 
    async function loadDispositionPanel() {
-     const section = document.getElementById('dispo-section');
+     const section = document.getElementById('section-disposition');
      const content = document.getElementById('dispo-content');
      if (!section || !content) return;
      section.style.display = 'block';
@@ -1774,6 +1826,34 @@
        const txt = displayText !== undefined ? displayText : value;
        return `<button type="button" class="metric-btn" data-err-metric="${metric}" ${parts.join(' ')}${dis}>${txt}</button>`;
      };
+     const mkKpi = (label, value, metric, attrs) => {
+       const parts = Object.entries(attrs || {}).map(([k,v]) => v != null && v !== '' ? `data-${k}="${esc(String(v))}"` : '').filter(Boolean);
+       const dis = (value === 0) ? ' disabled' : '';
+       return `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value"><div class="text-3xl font-extrabold" style="color: var(--color-text);">${value}</div><button type="button" class="metric-btn" data-err-metric="${metric}" ${parts.join(' ')}${dis}>View</button></div></div>`;
+     };
+
+     // Error Stats KPI Overview: Fail Events, Unresolved Trays, Top 3 Errors, Top Station Fail
+     const kpiOverview = document.getElementById('err-kpi-overview');
+     if (kpiOverview) {
+       const totalFail = data.total_fail_events ?? 0;
+       const ttc = data.ttc_overall || {};
+       const openTrays = ttc.open_unique_trays ?? ttc.open_fail_events ?? 0;
+       const topErrsFull = data.top_k_errors || [];
+       const top3 = topErrsFull.slice(0, 3);
+       lastTop3Errors = top3;
+       const topSt = data.top_station || {};
+       const topStGroup = topSt.station_group || '-';
+       const topStCount = topSt.fail_events ?? 0;
+       const topStVal = topStGroup !== '-' ? `${topStGroup} (${topStCount})` : '-';
+       const topStParts = topStGroup !== '-' ? `data-station-group="${esc(topStGroup)}"` : '';
+       const topStDis = topStCount === 0 ? ' disabled' : '';
+       kpiOverview.innerHTML = `
+         ${mkKpi('Fail Events', totalFail, 'fail_by_station', { 'drill-type': 'fail_events' })}
+         ${mkKpi('Unresolved Trays', openTrays, 'ttc_overall', { 'ttc-bucket': 'open' })}
+         <div class="kpi-card"><div class="kpi-label">Top 3 Errors</div><div class="kpi-value"><div class="text-3xl font-extrabold" style="color: var(--color-text);">3</div><button type="button" class="metric-btn err-top3-view-btn" ${top3.length ? '' : ' disabled'}>View</button></div></div>
+         <div class="kpi-card"><div class="kpi-label">Top Station Fail</div><div class="kpi-value"><div class="text-2xl font-extrabold font-mono" style="color: var(--color-text);">${esc(topStVal)}</div><button type="button" class="metric-btn" data-err-metric="fail_by_station" ${topStParts}${topStDis}>View</button></div></div>
+       `;
+     }
 
      // A: Fail by Station - Fail Events vs Unique Trays (different drill-downs)
      const failBySt = data.fail_by_station || [];
@@ -2887,6 +2967,15 @@
      });
    }
    safeAddListener('apply-filter', 'click', applyFilter);
+   document.querySelectorAll('.nav-section-btn').forEach(btn => {
+     btn.addEventListener('click', () => {
+       const id = btn.getAttribute('data-section');
+       if (id) {
+         const el = document.getElementById(id);
+         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+       }
+     });
+   });
 
    // Do NOT auto-apply on date/time change; user must click Apply Filter
 
@@ -3095,15 +3184,20 @@
         const k = parseInt(btn.getAttribute('data-top-k'), 10);
         if (isNaN(k) || k < 1) return;
         topKErrors = k;
-        document.querySelectorAll('#error-stats-panel [data-top-k]').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#section-error-stats [data-top-k]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         loadErrorStats().catch(err => { console.error(err); setLoading(false); });
       });
     });
 
-    const errStatsPanel = document.getElementById('error-stats-panel');
+    const errStatsPanel = document.getElementById('section-error-stats');
     if (errStatsPanel) {
       errStatsPanel.addEventListener('click', (e) => {
+        const top3Btn = e.target?.closest?.('button.err-top3-view-btn');
+        if (top3Btn && !top3Btn.disabled) {
+          openTop3ErrorsModal();
+          return;
+        }
         const btn = e.target?.closest?.('button[data-err-metric]');
         if (!btn || btn.disabled) return;
         const metric = btn.getAttribute('data-err-metric');
@@ -3115,7 +3209,7 @@
           drill_type: btn.getAttribute('data-drill-type') || undefined,
           title: ''
         };
-        if (metric === 'fail_by_station' && filters.station_group) filters.title = (filters.drill_type === 'unique_trays' ? 'Unique Trays' : 'Fail Events') + ' • ' + filters.station_group;
+        if (metric === 'fail_by_station') filters.title = filters.station_group ? (filters.drill_type === 'unique_trays' ? 'Unique Trays' : 'Fail Events') + ' • ' + filters.station_group : (filters.drill_type === 'unique_trays' ? 'Total Unique Trays' : 'Total Fail Events');
         else if (metric === 'top_errors' && filters.error_code) filters.title = (filters.drill_type === 'unique_trays' ? 'Unique Trays' : 'Fail Events') + ' • ' + filters.error_code;
         else if (metric === 'station_instance' && filters.station_instance) filters.title = (filters.drill_type === 'unique_trays' ? 'Unique Trays' : 'Fail Events') + ' • ' + filters.station_instance;
         else if (metric === 'station_error' && filters.station_group && filters.error_code) filters.title = filters.station_group + ' × ' + filters.error_code;
@@ -3135,6 +3229,10 @@
     if (closeErrModalEl) closeErrModalEl.addEventListener('click', closeErrorStatsModal);
     const errModalEl = document.getElementById('error-stats-sn-modal');
     if (errModalEl) errModalEl.addEventListener('click', (e) => { if (e.target.id === 'error-stats-sn-modal') closeErrorStatsModal(); });
+    const closeTop3El = document.getElementById('close-err-top3-modal');
+    if (closeTop3El) closeTop3El.addEventListener('click', closeTop3ErrorsModal);
+    const top3ModalEl = document.getElementById('err-top3-modal');
+    if (top3ModalEl) top3ModalEl.addEventListener('click', (e) => { if (e.target.id === 'err-top3-modal') closeTop3ErrorsModal(); });
   } catch (e) {
     console.error('Error setting disposition listeners:', e);
   }
