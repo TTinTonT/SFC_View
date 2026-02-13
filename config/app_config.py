@@ -19,3 +19,6 @@ CA_TZ = pytz.timezone("America/Los_Angeles") if pytz else None
 
 # Station order for Test Flow Analysis (matches Bonepile_view)
 STATIONS_ORDER = ["FLA", "FLB", "AST", "FTS", "FCT", "RIN", "NVL"]
+
+# Error Stats: default Top K errors
+TOP_K_ERRORS_DEFAULT = 5

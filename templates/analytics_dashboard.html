@@ -1150,6 +1150,133 @@
         </div>
       </div>
     </div>
+
+    <!-- Error Statistics - below Disposition -->
+    <div class="dispo-section-divider" style="margin-top: 2.5rem; margin-bottom: 1.5rem; border-top: 2px solid var(--color-border); padding-top: 1.5rem;"></div>
+    <div class="panel mb-8" id="error-stats-panel">
+      <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h2 class="text-xl font-bold" style="color: var(--color-text);">Error Statistics</h2>
+          <p class="text-sm mt-1" style="color: var(--color-muted);">Failure metrics by station, error type, and time-to-clear. Hover over Error Code for details.</p>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex gap-2 items-center">
+            <span class="text-sm font-semibold" style="color: var(--color-muted);">Top</span>
+            <div class="toggle-group">
+              <button type="button" class="toggle-btn active" id="err-top-5" data-top-k="5">5</button>
+              <button type="button" class="toggle-btn" id="err-top-10" data-top-k="10">10</button>
+              <button type="button" class="toggle-btn" id="err-top-15" data-top-k="15">15</button>
+            </div>
+            <span class="text-sm font-semibold" style="color: var(--color-muted);">errors</span>
+          </div>
+          <span class="text-sm font-semibold" style="color: var(--color-muted);" id="range-note-err">-</span>
+          <button class="btn-ghost btn-mini" id="export-error-stats" type="button" title="Export Error Stats to CSV">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0l-3-3m3 3l3-3M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"></path>
+            </svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+      <div id="error-stats-content" style="display: none;">
+        <!-- A: Fail by Station -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-3" style="color: var(--color-text);">A. Fail Summary by Station</h3>
+          <div class="table-container overflow-x-auto">
+            <table class="data-table" id="err-fail-by-station-table">
+              <thead>
+                <tr>
+                  <th>Station</th>
+                  <th>Fail Events</th>
+                  <th>Unique Trays</th>
+                  <th>% of Total</th>
+                </tr>
+              </thead>
+              <tbody id="err-fail-by-station-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- B: Top K Errors -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-3" style="color: var(--color-text);">B. Top K Errors</h3>
+          <div class="table-container overflow-x-auto">
+            <table class="data-table" id="err-top-errors-table">
+              <thead>
+                <tr>
+                  <th>Error Code</th>
+                  <th>Fail Events</th>
+                  <th>Unique Trays</th>
+                  <th>Top Station</th>
+                </tr>
+              </thead>
+              <tbody id="err-top-errors-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- D: Station Instance (optional) -->
+        <div class="mb-6" id="err-station-instance-block" style="display: none;">
+          <h3 class="text-lg font-semibold mb-3" style="color: var(--color-text);">D. Station Instance Hot Spots</h3>
+          <div class="table-container overflow-x-auto">
+            <table class="data-table" id="err-station-instance-table">
+              <thead>
+                <tr>
+                  <th>Station Instance</th>
+                  <th>Station Group</th>
+                  <th>Fail Events</th>
+                  <th>Unique Trays</th>
+                  <th>Top Error</th>
+                </tr>
+              </thead>
+              <tbody id="err-station-instance-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- E: TTC Overall (no buckets) -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-3" style="color: var(--color-text);">E. Time-to-Clear (TTC) Overall</h3>
+          <p class="text-xs mb-2" style="color: var(--color-muted);"><strong>Resolved:</strong> Clear time determined (has subsequent PASS). <strong>Open:</strong> Unique trays with unresolved fails (no subsequent PASS in data).</p>
+          <div class="kpi-grid mb-3" id="err-ttc-overall-kpis"></div>
+        </div>
+        <!-- F: TTC by Station -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-3" style="color: var(--color-text);">F. TTC by Station</h3>
+          <div class="table-container overflow-x-auto">
+            <table class="data-table" id="err-ttc-station-table">
+              <thead>
+                <tr>
+                  <th>Station</th>
+                  <th>Resolved</th>
+                  <th>Open</th>
+                  <th>Median (dd:hh:mm)</th>
+                  <th>Total (dd:hh:mm)</th>
+                </tr>
+              </thead>
+              <tbody id="err-ttc-station-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- G: TTC by Error -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-3" style="color: var(--color-text);">G. TTC by Error</h3>
+          <div class="table-container overflow-x-auto">
+            <table class="data-table" id="err-ttc-error-table">
+              <thead>
+                <tr>
+                  <th>Error Code</th>
+                  <th>Resolved</th>
+                  <th>Median (dd:hh:mm)</th>
+                  <th>Total (dd:hh:mm)</th>
+                </tr>
+              </thead>
+              <tbody id="err-ttc-error-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="error-stats-empty" style="display: block;">
+        <p class="text-center py-8" style="color: var(--color-muted);">Apply filters to load Error Statistics.</p>
+      </div>
+    </div>
    </main>
   </div><!-- Loading overlay -->
   <div class="api-status ok" id="api-status" aria-live="polite" aria-atomic="true">
@@ -1258,6 +1385,40 @@
     </div>
   </div>
 
+  <!-- Error Stats SN Modal (FAIL records drill-down) -->
+  <div class="modal-overlay" id="error-stats-sn-modal">
+    <div class="modal-content" style="max-width: 1100px;">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 id="error-stats-modal-title" class="text-xl font-bold" style="color: var(--color-text);">Error Stats – FAIL Records</h3>
+          <div id="error-stats-modal-subtitle" class="text-sm mt-1" style="color: var(--color-muted);">-</div>
+        </div>
+        <button class="w-9 h-9 rounded-lg flex items-center justify-center transition-colors" style="background: var(--color-bg);" id="close-error-stats-modal" title="Close">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="overflow-x-auto" style="max-height: 70vh; overflow-y: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>SN</th>
+              <th>Part Number</th>
+              <th>Station</th>
+          <th>Error Code</th>
+          <th>Test Time</th>
+          <th>TTC (dd:hh:mm)</th>
+            </tr>
+          </thead>
+          <tbody id="error-stats-modal-tbody">
+            <tr><td colspan="6" style="color: var(--color-muted);">No data</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- Disposition SN Modal (SN, Last NV Dispo, Last IGS Action) -->
   <div class="modal-overlay" id="dispo-sn-modal">
     <div class="modal-content" style="max-width: 1100px;">
@@ -1325,6 +1486,9 @@
    function openDispoSnModal() { document.getElementById('dispo-sn-modal').classList.add('active'); }
    function closeDispoSnModal() { document.getElementById('dispo-sn-modal').classList.remove('active'); }
 
+   function openErrorStatsModal() { document.getElementById('error-stats-sn-modal')?.classList.add('active'); }
+   function closeErrorStatsModal() { document.getElementById('error-stats-sn-modal')?.classList.remove('active'); }
+
    // Loading overlay
    function setLoading(active, text) {
      const el = document.getElementById('loading-overlay');
@@ -1355,6 +1519,7 @@
 
    // NV Disposition (loads independently)
    let dispoAggregation = 'daily';
+   let topKErrors = 5;
    let lastDispoData = null;
 
    async function loadDispositionPanel() {
@@ -1574,8 +1739,218 @@
      setLoading(false);
    }
 
+   async function loadErrorStats() {
+     const payload = getRangePayload();
+     if (!payload.start_datetime || !payload.end_datetime) return;
+     setLoading(true, 'Loading Error Stats...');
+     setApiStatus('Loading Error Stats...', 'busy');
+     try {
+       const res = await fetch('/api/error-stats', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ ...payload, top_k_errors: topKErrors })
+       });
+       const data = await res.json();
+       if (data.error) throw new Error(data.error);
+       document.getElementById('range-note-err').textContent = `${payload.start_datetime} → ${payload.end_datetime}`;
+       renderErrorStats(data);
+       document.getElementById('error-stats-content').style.display = '';
+       document.getElementById('error-stats-empty').style.display = 'none';
+       setApiStatus('Ready', 'ok');
+     } catch (e) {
+       document.getElementById('error-stats-empty').innerHTML = `<p class="text-center py-8" style="color: var(--color-danger);">${e.message || e}</p>`;
+       document.getElementById('error-stats-content').style.display = 'none';
+       document.getElementById('error-stats-empty').style.display = 'block';
+       setApiStatus('Error: ' + (e.message || e), 'err');
+     }
+     setLoading(false);
+   }
+
+   function renderErrorStats(data) {
+     const esc = (s) => (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+     const mkNumBtn = (metric, attrs, value, disabled, displayText) => {
+       const parts = Object.entries(attrs).map(([k,v]) => v != null && v !== '' ? `data-${k}="${esc(String(v))}"` : '').filter(Boolean);
+       const dis = (disabled || value === 0) ? ' disabled' : '';
+       const txt = displayText !== undefined ? displayText : value;
+       return `<button type="button" class="metric-btn" data-err-metric="${metric}" ${parts.join(' ')}${dis}>${txt}</button>`;
+     };
+
+     // A: Fail by Station - Fail Events vs Unique Trays (different drill-downs)
+     const failBySt = data.fail_by_station || [];
+     const tbodyA = document.getElementById('err-fail-by-station-tbody');
+     if (tbodyA) {
+       tbodyA.innerHTML = failBySt.map(r => `
+         <tr>
+           <td class="font-mono font-semibold">${esc(r.station_group)}</td>
+           <td class="font-mono">${mkNumBtn('fail_by_station', { 'station-group': r.station_group, 'drill-type': 'fail_events' }, r.fail_events)}</td>
+           <td class="font-mono">${mkNumBtn('fail_by_station', { 'station-group': r.station_group, 'drill-type': 'unique_trays' }, r.unique_tray)}</td>
+           <td class="font-mono">${r.pct_fail_events}%</td>
+         </tr>
+       `).join('') || '<tr><td colspan="4" style="color: var(--color-muted);">No fail data</td></tr>';
+     }
+
+     // B: Top K Errors - Fail Events vs Unique Trays (different drill-downs)
+     const topErrs = data.top_k_errors || [];
+     const tbodyB = document.getElementById('err-top-errors-tbody');
+     if (tbodyB) {
+       tbodyB.innerHTML = topErrs.map(r => {
+         const msg = (r.representative_error_message || '').trim();
+         const codeTitle = msg ? `title="${esc(msg)}"` : '';
+         return `
+         <tr>
+           <td class="font-mono" ${codeTitle} style="cursor: help; text-decoration: underline dotted;">${esc(r.error_code)}</td>
+           <td class="font-mono">${mkNumBtn('top_errors', { 'error-code': r.error_code, 'drill-type': 'fail_events' }, r.fail_events)}</td>
+           <td class="font-mono">${mkNumBtn('top_errors', { 'error-code': r.error_code, 'drill-type': 'unique_trays' }, r.unique_tray)}</td>
+           <td class="font-mono">${esc(r.top_station_group)}</td>
+         </tr>
+       `}).join('') || '<tr><td colspan="4" style="color: var(--color-muted);">No errors</td></tr>';
+     }
+
+     // D: Station Instance - Fail Events vs Unique Trays (different drill-downs)
+     const hotspots = data.station_instance_hotspots || [];
+     const blockD = document.getElementById('err-station-instance-block');
+     const tbodyD = document.getElementById('err-station-instance-tbody');
+     if (blockD && tbodyD) {
+       if (hotspots.length) {
+         blockD.style.display = '';
+         tbodyD.innerHTML = hotspots.map(r => `
+           <tr>
+             <td class="font-mono">${esc(r.station_instance)}</td>
+             <td class="font-mono">${esc(r.station_group)}</td>
+             <td class="font-mono">${mkNumBtn('station_instance', { 'station-instance': r.station_instance, 'drill-type': 'fail_events' }, r.fail_events)}</td>
+             <td class="font-mono">${mkNumBtn('station_instance', { 'station-instance': r.station_instance, 'drill-type': 'unique_trays' }, r.unique_tray)}</td>
+             <td class="font-mono">${esc(r.top_error_code)}</td>
+           </tr>
+         `).join('');
+       } else {
+         blockD.style.display = 'none';
+       }
+     }
+
+     // E: TTC Overall - KPI like Disposition (number + View button)
+     const ttc = data.ttc_overall || {};
+     const kpiE = document.getElementById('err-ttc-overall-kpis');
+     if (kpiE) {
+       const resolved = ttc.resolved_fail_events ?? 0;
+       const openCount = ttc.open_unique_trays ?? ttc.open_fail_events ?? 0;
+       const mkKpi = (label, value, metric, attrs) => {
+         const parts = Object.entries(attrs || {}).map(([k,v]) => v != null && v !== '' ? `data-${k}="${esc(String(v))}"` : '').filter(Boolean);
+         const dis = (value === 0) ? ' disabled' : '';
+         return `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value"><div class="text-3xl font-extrabold" style="color: var(--color-text);">${value}</div><button type="button" class="metric-btn" data-err-metric="${metric}" ${parts.join(' ')}${dis}>View</button></div></div>`;
+       };
+       kpiE.innerHTML = `
+         ${mkKpi('Resolved', resolved, 'ttc_overall', { 'ttc-bucket': 'resolved' })}
+         <div class="kpi-card" title="Unique trays with unresolved fails (no subsequent PASS in data)">
+           <div class="kpi-label">Open</div>
+           <div class="kpi-value"><div class="text-3xl font-extrabold" style="color: var(--color-text);">${openCount}</div><button type="button" class="metric-btn" data-err-metric="ttc_overall" data-ttc-bucket="open" ${openCount === 0 ? ' disabled' : ''}>View</button></div>
+         </div>
+         <div class="kpi-card">
+           <div class="kpi-label">Median (dd:hh:mm)</div>
+           <div class="kpi-value"><div class="text-3xl font-extrabold" style="color: var(--color-text);">${fmtMinutesToDdHhMm(ttc.median_ttc_minutes)}</div></div>
+         </div>
+         <div class="kpi-card">
+           <div class="kpi-label">Mean (dd:hh:mm)</div>
+           <div class="kpi-value"><div class="text-3xl font-extrabold" style="color: var(--color-text);">${fmtMinutesToDdHhMm(ttc.mean_ttc_minutes)}</div></div>
+         </div>
+         <div class="kpi-card">
+           <div class="kpi-label">P90 (dd:hh:mm)</div>
+           <div class="kpi-value"><div class="text-3xl font-extrabold" style="color: var(--color-text);">${fmtMinutesToDdHhMm(ttc.p90_ttc_minutes)}</div></div>
+         </div>
+       `;
+     }
+
+     // F: TTC by Station - numbers as buttons
+     const ttcSt = data.ttc_by_station || [];
+     const tbodyF = document.getElementById('err-ttc-station-tbody');
+     if (tbodyF) {
+       tbodyF.innerHTML = ttcSt.map(r => `
+         <tr>
+           <td class="font-mono font-semibold">${esc(r.station_group)}</td>
+           <td class="font-mono">${mkNumBtn('ttc_by_station', { 'station-group': r.station_group }, r.resolved_count ?? 0)}</td>
+           <td class="font-mono">${mkNumBtn('ttc_by_station_open', { 'station-group': r.station_group }, r.open_count ?? 0)}</td>
+           <td class="font-mono">${fmtMinutesToDdHhMm(r.median_ttc)}</td>
+           <td class="font-mono">${mkNumBtn('ttc_by_station', { 'station-group': r.station_group }, r.total_ttc_minutes ?? 0, false, r.total_ttc_minutes != null ? fmtMinutesToDdHhMm(r.total_ttc_minutes) : '-')}</td>
+         </tr>
+       `).join('') || '<tr><td colspan="5" style="color: var(--color-muted);">No data</td></tr>';
+     }
+
+     // G: TTC by Error - numbers as buttons
+     const ttcErr = data.ttc_by_error || [];
+     const errMsgMap = {};
+     topErrs.forEach(e => { if (e.representative_error_message) errMsgMap[e.error_code] = e.representative_error_message; });
+     const tbodyG = document.getElementById('err-ttc-error-tbody');
+     if (tbodyG) {
+       tbodyG.innerHTML = ttcErr.map(r => {
+         const msg = (errMsgMap[r.error_code] || '').trim();
+         const codeTitle = msg ? `title="${esc(msg)}" style="cursor: help; text-decoration: underline dotted;"` : '';
+         return `
+         <tr>
+           <td class="font-mono" ${codeTitle}>${esc(r.error_code)}</td>
+           <td class="font-mono">${mkNumBtn('ttc_by_error', { 'error-code': r.error_code }, r.resolved_count ?? 0)}</td>
+           <td class="font-mono">${fmtMinutesToDdHhMm(r.median_ttc)}</td>
+           <td class="font-mono">${mkNumBtn('ttc_by_error', { 'error-code': r.error_code }, r.total_ttc_minutes ?? 0, false, r.total_ttc_minutes != null ? fmtMinutesToDdHhMm(r.total_ttc_minutes) : '-')}</td>
+         </tr>
+       `}).join('') || '<tr><td colspan="4" style="color: var(--color-muted);">No data</td></tr>';
+     }
+   }
+
+   async function loadErrorStatsSnList(metric, filters) {
+     const payload = getRangePayload();
+     setLoading(true, 'Loading FAIL records...');
+     openErrorStatsModal();
+     const titleEl = document.getElementById('error-stats-modal-title');
+     const subtitleEl = document.getElementById('error-stats-modal-subtitle');
+     const tbodyEl = document.getElementById('error-stats-modal-tbody');
+     const esc2 = (s) => (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+     titleEl.textContent = 'Error Stats – FAIL Records';
+     subtitleEl.textContent = (filters.title || metric) + ' • ' + (payload.start_datetime || '') + ' → ' + (payload.end_datetime || '');
+     tbodyEl.innerHTML = '<tr><td colspan="6" style="color: var(--color-muted);">Loading…</td></tr>';
+     const apiBody = { ...payload, metric };
+     if (filters.station_group != null) apiBody.station_group = filters.station_group;
+     if (filters.error_code != null) apiBody.error_code = filters.error_code;
+     if (filters.ttc_bucket != null) apiBody.ttc_bucket = filters.ttc_bucket;
+     if (filters.station_instance != null) apiBody.station_instance = filters.station_instance;
+     if (filters.drill_type != null) apiBody.drill_type = filters.drill_type;
+     try {
+       const res = await fetch('/api/error-stats-sn-list', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify(apiBody)
+       });
+       const data = await res.json();
+       if (data.error) throw new Error(data.error);
+       const rows = data.rows || [];
+       if (!rows.length) {
+         tbodyEl.innerHTML = '<tr><td colspan="6" style="color: var(--color-muted);">No data</td></tr>';
+       } else {
+         tbodyEl.innerHTML = rows.map(r => {
+           const sn = esc2(r.sn); const pn = esc2(r.part_number); const st = esc2(r.station);
+           const ec = esc2(r.error_code); const tt = esc2(r.test_time);
+           const ttc = r.ttc_minutes != null ? fmtMinutesToDdHhMm(r.ttc_minutes) : '-';
+           const msg = (r.error_message || '').trim();
+           const codeTitle = msg ? `title="${esc2(msg)}" style="cursor: help; text-decoration: underline dotted;"` : '';
+           return `<tr><td class="font-mono font-semibold">${sn}</td><td class="font-mono">${pn}</td><td class="font-mono">${st}</td><td class="font-mono" ${codeTitle}>${ec}</td><td class="font-mono">${tt}</td><td class="font-mono">${ttc}</td></tr>`;
+         }).join('');
+       }
+       subtitleEl.textContent = (filters.title || metric) + ' • ' + (data.count || 0) + ' records';
+     } catch (e) {
+       tbodyEl.innerHTML = '<tr><td colspan="6" style="color: var(--color-danger);">' + (e.message || e) + '</td></tr>';
+     }
+     setLoading(false);
+   }
+
    // Helpers
   const CA_TIME_ZONE = 'America/Los_Angeles';
+
+  function fmtMinutesToDdHhMm(minutes) {
+    if (minutes == null || minutes === '' || minutes === '-') return '-';
+    const m = Number(minutes);
+    if (isNaN(m) || m < 0) return '-';
+    const d = Math.floor(m / 1440);
+    const h = Math.floor((m % 1440) / 60);
+    const mm = Math.floor(m % 60);
+    return `${d}d:${h}h:${mm}m`;
+  }
 
   function fmtDateTimeCAFromMs(ms) {
     if (!ms) return 'unknown';
@@ -2169,12 +2544,14 @@
 
   async function downloadCsv(exportKind) {
     const payload = getRangePayload();
+    const body = { ...payload, aggregation, export: exportKind };
+    if (exportKind === 'error_stats') body.top_k_errors = topKErrors;
     setLoading(true, 'Preparing export...');
     setApiStatus(`Exporting ${exportKind || 'csv'}...`, 'busy');
     const res = await fetch('/api/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, aggregation, export: exportKind })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       let msg = `export failed (${res.status})`;
@@ -2505,6 +2882,9 @@
      loadDispositionPanel().catch(err => {
        console.error('loadDispositionPanel error:', err);
      });
+     loadErrorStats().catch(err => {
+       console.error('loadErrorStats error:', err);
+     });
    }
    safeAddListener('apply-filter', 'click', applyFilter);
 
@@ -2548,6 +2928,13 @@
   });
   safeAddListener('export-dispo-summary', 'click', () => {
     downloadCsv('disposition_summary').catch(err => {
+      console.error(err);
+      setLoading(false);
+      alert('Error: ' + err.message);
+    });
+  });
+  safeAddListener('export-error-stats', 'click', () => {
+    downloadCsv('error_stats').catch(err => {
       console.error(err);
       setLoading(false);
       alert('Error: ' + err.message);
@@ -2702,10 +3089,52 @@
         loadDispositionPanel().catch(() => {});
       });
     });
+
+    document.querySelectorAll('[id^="err-top-"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const k = parseInt(btn.getAttribute('data-top-k'), 10);
+        if (isNaN(k) || k < 1) return;
+        topKErrors = k;
+        document.querySelectorAll('#error-stats-panel [data-top-k]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadErrorStats().catch(err => { console.error(err); setLoading(false); });
+      });
+    });
+
+    const errStatsPanel = document.getElementById('error-stats-panel');
+    if (errStatsPanel) {
+      errStatsPanel.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('button[data-err-metric]');
+        if (!btn || btn.disabled) return;
+        const metric = btn.getAttribute('data-err-metric');
+        const filters = {
+          station_group: btn.getAttribute('data-station-group') || undefined,
+          error_code: btn.getAttribute('data-error-code') || undefined,
+          ttc_bucket: btn.getAttribute('data-ttc-bucket') || undefined,
+          station_instance: btn.getAttribute('data-station-instance') || undefined,
+          drill_type: btn.getAttribute('data-drill-type') || undefined,
+          title: ''
+        };
+        if (metric === 'fail_by_station' && filters.station_group) filters.title = (filters.drill_type === 'unique_trays' ? 'Unique Trays' : 'Fail Events') + ' • ' + filters.station_group;
+        else if (metric === 'top_errors' && filters.error_code) filters.title = (filters.drill_type === 'unique_trays' ? 'Unique Trays' : 'Fail Events') + ' • ' + filters.error_code;
+        else if (metric === 'station_instance' && filters.station_instance) filters.title = (filters.drill_type === 'unique_trays' ? 'Unique Trays' : 'Fail Events') + ' • ' + filters.station_instance;
+        else if (metric === 'station_error' && filters.station_group && filters.error_code) filters.title = filters.station_group + ' × ' + filters.error_code;
+        else if (metric === 'ttc_overall') filters.title = 'TTC Overall' + (filters.ttc_bucket ? ' • ' + filters.ttc_bucket : '');
+        else if (metric === 'ttc_by_station' && filters.station_group) filters.title = 'TTC by Station • ' + filters.station_group;
+        else if (metric === 'ttc_by_station_open' && filters.station_group) filters.title = 'Open by Station • ' + filters.station_group;
+        else if (metric === 'ttc_by_error' && filters.error_code) filters.title = 'TTC by Error • ' + filters.error_code;
+        loadErrorStatsSnList(metric, filters).catch(err => { console.error(err); setLoading(false); });
+      });
+    }
     const closeDispoSnModalEl = document.getElementById('close-dispo-sn-modal');
     if (closeDispoSnModalEl) closeDispoSnModalEl.addEventListener('click', closeDispoSnModal);
     const dispoSnModalEl = document.getElementById('dispo-sn-modal');
     if (dispoSnModalEl) dispoSnModalEl.addEventListener('click', (e) => { if (e.target.id === 'dispo-sn-modal') closeDispoSnModal(); });
+
+    const closeErrModalEl = document.getElementById('close-error-stats-modal');
+    if (closeErrModalEl) closeErrModalEl.addEventListener('click', closeErrorStatsModal);
+    const errModalEl = document.getElementById('error-stats-sn-modal');
+    if (errModalEl) errModalEl.addEventListener('click', (e) => { if (e.target.id === 'error-stats-sn-modal') closeErrorStatsModal(); });
   } catch (e) {
     console.error('Error setting disposition listeners:', e);
   }

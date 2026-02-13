@@ -21,8 +21,10 @@ IDX_MODEL = 4
 IDX_STATION = 5
 IDX_TEST_TIME = 7
 IDX_RESULT = 8
+IDX_ERROR_CODE = 9  # optional; fallback to failure_msg hash in error_stats
 IDX_FAILURE_MSG = 10
 IDX_CURRENT_STATION = 18
+IDX_STATION_INSTANCE = 19  # optional; e.g. AST_170, FLB_185
 
 
 def _normalize_mo(mo: str) -> str:
@@ -94,8 +96,10 @@ def parse_fail_result_html(
         station = _cell_text(tds[IDX_STATION])
         test_time_str = _cell_text(tds[IDX_TEST_TIME])
         result = _cell_text(tds[IDX_RESULT])
+        error_code = _cell_text(tds[IDX_ERROR_CODE]) if len(tds) > IDX_ERROR_CODE else ""
         failure_msg = _cell_text(tds[IDX_FAILURE_MSG])
         current_station = _cell_text(tds[IDX_CURRENT_STATION])
+        station_instance = _cell_text(tds[IDX_STATION_INSTANCE]) if len(tds) > IDX_STATION_INSTANCE else ""
 
         test_time_dt = _parse_test_time(test_time_str)
         if user_start is not None and user_end is not None and test_time_dt is not None:
@@ -110,8 +114,10 @@ def parse_fail_result_html(
             "test_time": test_time_str,
             "test_time_dt": test_time_dt,
             "result": result,
+            "error_code": error_code,
             "failure_msg": failure_msg,
             "current_station": current_station,
+            "station_instance": station_instance,
         })
     return out
 

@@ -27,6 +27,8 @@ from sfc.client import request_fail_result
 from sfc.parser import parse_fail_result_html, rows_to_csv
 from analytics.compute import compute_all
 from analytics.sn_list import compute_sn_list
+from analytics.error_stats import compute_error_stats, compute_error_stats_sn_list
+from config.app_config import TOP_K_ERRORS_DEFAULT
 from bonepile_disposition import (
     ensure_db_ready, RawState, _bonepile_status_payload, _save_uploaded_bonepile_file,
     _copy_for_parse, new_job_id, set_job, run_bonepile_parse_job,
@@ -41,6 +43,10 @@ app = Flask(__name__)
 # Cache last query result for sn-list drill-down
 _last_query_lock = threading.Lock()
 _last_query_result: Optional[Dict[str, Any]] = None
+
+# Cache last error-stats result for drill-down
+_last_error_stats_lock = threading.Lock()
+_last_error_stats_result: Optional[Dict[str, Any]] = None
 
 
 def _parse_datetime(s: Optional[str], is_end: bool = False) -> Optional[datetime]:
@@ -359,6 +365,93 @@ def api_sn_list():
         return jsonify({"error": str(e), "count": 0, "rows": []}), 500
 
 
+@app.route("/api/error-stats", methods=["POST"])
+def api_error_stats():
+    """
+    Failure-focused error statistics for Tray testing.
+    Body: { start_datetime, end_datetime, top_k_errors?: 5 }
+    Returns tables A-G.
+    """
+    global _last_error_stats_result
+    payload = request.json or {}
+    start_s = (payload.get("start_datetime") or "").strip()
+    end_s = (payload.get("end_datetime") or "").strip()
+    top_k = payload.get("top_k_errors")
+    if top_k is None:
+        top_k = TOP_K_ERRORS_DEFAULT
+    try:
+        top_k = int(top_k)
+        if top_k < 1:
+            top_k = TOP_K_ERRORS_DEFAULT
+    except (TypeError, ValueError):
+        top_k = TOP_K_ERRORS_DEFAULT
+
+    user_start = _parse_datetime(start_s, is_end=False)
+    user_end = _parse_datetime(end_s, is_end=True)
+    if user_start is None or user_end is None:
+        return jsonify({"error": "start_datetime and end_datetime required (YYYY-MM-DD HH:MM)"}), 400
+    if user_end < user_start:
+        return jsonify({"error": "end must be after start"}), 400
+
+    ok, html = request_fail_result(user_start, user_end)
+    if not ok:
+        return jsonify({"error": "SFC API request failed (login or fail_result)"}), 502
+
+    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+    result = compute_error_stats(rows, top_k=top_k)
+
+    with _last_error_stats_lock:
+        _last_error_stats_result = result
+
+    out = {
+        "ok": True,
+        "fail_by_station": result["fail_by_station"],
+        "top_k_errors": result["top_k_errors"],
+        "station_error_matrix": result["station_error_matrix"],
+        "station_error_matrix_cols": result["station_error_matrix_cols"],
+        "station_instance_hotspots": result["station_instance_hotspots"],
+        "ttc_overall": result["ttc_overall"],
+        "ttc_by_station": result["ttc_by_station"],
+        "ttc_by_error": result["ttc_by_error"],
+    }
+    return jsonify(out)
+
+
+@app.route("/api/error-stats-sn-list", methods=["POST"])
+def api_error_stats_sn_list():
+    """
+    Drill-down SN list for Error Stats.
+    Body: { start_datetime, end_datetime, metric, station_group?, error_code?, ttc_bucket?, station_instance? }
+    """
+    payload = request.json or {}
+    metric = (payload.get("metric") or "").strip()
+    station_group = (payload.get("station_group") or "").strip() or None
+    error_code = (payload.get("error_code") or "").strip() or None
+    ttc_bucket = (payload.get("ttc_bucket") or "").strip() or None
+    station_instance = (payload.get("station_instance") or "").strip() or None
+    drill_type = (payload.get("drill_type") or "").strip() or None
+
+    with _last_error_stats_lock:
+        result = _last_error_stats_result
+
+    if not result:
+        return jsonify({"error": "Apply filter and load Error Stats first", "count": 0, "rows": []}), 400
+
+    try:
+        rows = compute_error_stats_sn_list(
+            result,
+            metric=metric,
+            station_group=station_group,
+            error_code=error_code,
+            ttc_bucket=ttc_bucket,
+            station_instance=station_instance,
+            drill_type=drill_type,
+        )
+        return jsonify({"ok": True, "count": len(rows), "rows": rows})
+    except Exception as e:
+        return jsonify({"error": str(e), "count": 0, "rows": []}), 500
+
+
 @app.route("/api/fail_result", methods=["POST"])
 def api_fail_result():
     """Legacy: returns rows + csv. Prefer /api/query."""
@@ -386,6 +479,45 @@ def api_fail_result():
         "csv": csv_str,
         "count": len(rows),
     })
+
+
+def _error_stats_to_csv(result: Dict[str, Any]) -> str:
+    """Build CSV string from error stats result (multiple tables)."""
+    import csv as csv_mod
+    buf = io.StringIO(newline="")
+    w = csv_mod.writer(buf)
+
+    def write_section(title: str, rows: list, fieldnames: list):
+        w.writerow([title])
+        w.writerow(fieldnames)
+        for r in rows:
+            w.writerow([r.get(f, "") for f in fieldnames])
+        w.writerow([])
+
+    write_section("Fail by Station", result.get("fail_by_station", []),
+                  ["station_group", "fail_events", "unique_tray", "pct_fail_events"])
+    write_section("Top K Errors", result.get("top_k_errors", []),
+                  ["error_code", "representative_error_message", "fail_events", "unique_tray", "top_station_group"])
+
+    write_section("Station Instance Hotspots", result.get("station_instance_hotspots", []),
+                  ["station_instance", "station_group", "fail_events", "unique_tray", "top_error_code"])
+
+    ttc = result.get("ttc_overall", {})
+    if ttc:
+        skip_keys = {"bucket_leq5m", "bucket_5_15m", "bucket_15_60m", "bucket_gt60m"}
+        ttc_filtered = {k: v for k, v in ttc.items() if k not in skip_keys}
+        if ttc_filtered:
+            w.writerow(["TTC Overall"])
+            w.writerow(list(ttc_filtered.keys()))
+            w.writerow(list(ttc_filtered.values()))
+            w.writerow([])
+
+    write_section("TTC by Station", result.get("ttc_by_station", []),
+                  ["station_group", "resolved_count", "open_count", "median_ttc", "mean_ttc", "max_ttc", "total_ttc_minutes"])
+    write_section("TTC by Error", result.get("ttc_by_error", []),
+                  ["error_code", "resolved_count", "median_ttc", "total_ttc_minutes"])
+
+    return buf.getvalue()
 
 
 @app.route("/api/export", methods=["POST"])
@@ -454,7 +586,42 @@ def api_export_csv():
             except Exception as e:
                 return jsonify({"error": f"XLSX export failed: {str(e)}"}), 500
 
-    # CSV export
+    # CSV export - error_stats
+    if export_kind == "error_stats":
+        top_k = payload.get("top_k_errors")
+        if top_k is None:
+            top_k = TOP_K_ERRORS_DEFAULT
+        try:
+            top_k = int(top_k)
+            if top_k < 1:
+                top_k = TOP_K_ERRORS_DEFAULT
+        except (TypeError, ValueError):
+            top_k = TOP_K_ERRORS_DEFAULT
+
+        user_start = _parse_datetime(start_s, is_end=False)
+        user_end = _parse_datetime(end_s, is_end=True)
+        if user_start is None or user_end is None:
+            return jsonify({"error": "start_datetime and end_datetime required"}), 400
+        if user_end < user_start:
+            return jsonify({"error": "end must be after start"}), 400
+
+        ok, html = request_fail_result(user_start, user_end)
+        if not ok:
+            return jsonify({"error": "SFC API request failed"}), 502
+
+        rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+        result = compute_error_stats(rows, top_k=top_k)
+        csv_str = _error_stats_to_csv(result)
+        filename = f"error_stats_{user_start.strftime('%Y%m%d_%H%M')}_to_{user_end.strftime('%Y%m%d_%H%M')}.csv"
+        buf = io.BytesIO(csv_str.encode("utf-8-sig"))
+        return send_file(
+            buf,
+            mimetype="text/csv; charset=utf-8-sig",
+            as_attachment=True,
+            download_name=filename,
+        )
+
+    # CSV export - default fail_result
     user_start = _parse_datetime(start_s, is_end=False)
     user_end = _parse_datetime(end_s, is_end=True)
     if user_start is None or user_end is None:
