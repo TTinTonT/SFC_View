@@ -5,8 +5,8 @@ import os
 
 from config.app_config import ANALYTICS_CACHE_DIR
 
-# Sheets to process (block-list style: only these are allowed; all others ignored)
-BONEPILE_ALLOWED_SHEETS = ["TS2-SKU1100", "VR-TS1", "TS2-SKU002", "TS2-SKU010"]
+# Sheets to skip (blacklist: only these are ignored; all others are processed)
+BONEPILE_IGNORED_SHEETS = ["TS2-MGX-FG", "TS2-SKU020"]
 
 # Cache of BP SNs from NV disposition sheets
 BP_SN_CACHE_PATH = os.path.join(ANALYTICS_CACHE_DIR, "bp_sn_cache.json")

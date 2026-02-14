@@ -2146,7 +2146,7 @@
        return;
      }
      const sheets = data.sheets;
-     const order = (data.allowed || Object.keys(sheets));
+     const order = Object.keys(sheets);
      wrap.innerHTML = order.map(sheet => {
        const info = sheets[sheet] || {};
        const present = !!info.present;

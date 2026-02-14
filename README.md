@@ -45,4 +45,4 @@ Mở http://localhost:5556
 ## Config (sửa tại `config/`)
 
 - **pass_rules.py**: `PASS_AT_FCT_PART_NUMBERS`, `get_pass_station_for_part_number`
-- **bonepile_config.py**: `BONEPILE_ALLOWED_SHEETS`
+- **bonepile_config.py**: `BONEPILE_IGNORED_SHEETS` (blacklist: only these sheets are skipped)

@@ -35,8 +35,7 @@ STATE_PATH = os.path.join(ANALYTICS_CACHE_DIR, "raw_state.json")
 BONEPILE_UPLOAD_PATH = os.path.join(ANALYTICS_CACHE_DIR, "bonepile_upload.xlsx")
 # Cache of BP SNs from NV disposition sheets: only add, never delete (used for is_bonepile)
 BP_SN_CACHE_PATH = os.path.join(ANALYTICS_CACHE_DIR, "bp_sn_cache.json")
-# Sheets to process (block-list style: only these are allowed; all others ignored)
-BONEPILE_ALLOWED_SHEETS = ["TS2-SKU1100", "VR-TS1", "TS2-SKU002", "TS2-SKU010"]
+from config.bonepile_config import BONEPILE_IGNORED_SHEETS
 BONEPILE_REQUIRED_FIELDS = ["sn", "nv_disposition", "status", "pic", "igs_action", "igs_status"]
 
 CA_TZ = pytz.timezone("America/Los_Angeles")
@@ -458,8 +457,8 @@ def run_bonepile_parse_job(job_id: str, sheets: Optional[List[str]] = None, path
         wb = _load_bonepile_workbook(parse_path)
         try:
             all_sheets = list(wb.sheetnames)
-            allowed = [s for s in BONEPILE_ALLOWED_SHEETS if s in all_sheets]
-            target = allowed if not sheets else [s for s in sheets if s in allowed]
+            processable = [s for s in all_sheets if s not in BONEPILE_IGNORED_SHEETS]
+            target = processable if not sheets else [s for s in sheets if s in processable]
 
             mapping_cfg = (state.bonepile_mapping or {})
             sheet_status: Dict[str, Any] = state.bonepile_sheet_status or {}
@@ -627,7 +626,7 @@ def _bonepile_status_payload(state: RawState) -> Dict[str, Any]:
     bf = state.bonepile_file or {}
     return {
         "file": bf,
-        "allowed_sheets": BONEPILE_ALLOWED_SHEETS,
+        "ignored_sheets": BONEPILE_IGNORED_SHEETS,
         "mapping": state.bonepile_mapping or {},
         "sheets": state.bonepile_sheet_status or {},
     }

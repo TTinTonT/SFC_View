@@ -35,7 +35,7 @@ from bonepile_disposition import (
     _load_bonepile_workbook, _find_header_row, _read_header_map, _auto_mapping_from_headers,
     _mapping_errors, _close_and_release_workbook, _remove_temp_file,
     _parse_ca_input_datetime, utc_ms, compute_disposition_stats, compute_disposition_sn_list,
-    BONEPILE_UPLOAD_PATH, BONEPILE_ALLOWED_SHEETS, ANALYTICS_CACHE_DIR, scan_lock, jobs_lock, jobs
+    BONEPILE_UPLOAD_PATH, BONEPILE_IGNORED_SHEETS, ANALYTICS_CACHE_DIR, scan_lock, jobs_lock, jobs
 )
 
 app = Flask(__name__)
@@ -745,7 +745,7 @@ def api_bonepile_sheets():
         return jsonify({"error": "openpyxl not installed; cannot read XLSX"}), 500
     state = RawState.load()
     if not os.path.exists(BONEPILE_UPLOAD_PATH):
-        return jsonify({"ok": True, "has_file": False, "allowed": BONEPILE_ALLOWED_SHEETS, "ignored": [], "sheets": {}})
+        return jsonify({"ok": True, "has_file": False, "ignored": BONEPILE_IGNORED_SHEETS, "sheets": {}})
     import shutil
     fd, copy_path = tempfile.mkstemp(suffix=".xlsx", prefix="bonepile_sheets_", dir=ANALYTICS_CACHE_DIR)
     os.close(fd)
@@ -754,9 +754,10 @@ def api_bonepile_sheets():
         shutil.copy2(BONEPILE_UPLOAD_PATH, copy_path)
         wb = _load_bonepile_workbook(copy_path)
         all_sheets = list(wb.sheetnames)
-        ignored = [s for s in all_sheets if s not in BONEPILE_ALLOWED_SHEETS]
+        ignored = [s for s in all_sheets if s in BONEPILE_IGNORED_SHEETS]
+        processable = [s for s in all_sheets if s not in BONEPILE_IGNORED_SHEETS]
         out: dict = {}
-        for sheet in BONEPILE_ALLOWED_SHEETS:
+        for sheet in processable:
             if sheet not in all_sheets:
                 out[sheet] = {"present": False}
                 continue
@@ -774,7 +775,7 @@ def api_bonepile_sheets():
                 "saved_mapping": (state.bonepile_mapping or {}).get(sheet),
                 "status": (state.bonepile_sheet_status or {}).get(sheet),
             }
-        return jsonify({"ok": True, "has_file": True, "allowed": BONEPILE_ALLOWED_SHEETS, "ignored": ignored, "sheets": out})
+        return jsonify({"ok": True, "has_file": True, "ignored": ignored, "sheets": out})
     except Exception as e:
         return jsonify({"error": "Failed to read workbook: " + str(e)}), 500
     finally:
@@ -792,8 +793,8 @@ def api_bonepile_mapping():
     """
     payload = request.json or {}
     sheet = str(payload.get("sheet") or "").strip()
-    if sheet not in BONEPILE_ALLOWED_SHEETS:
-        return jsonify({"error": "invalid sheet"}), 400
+    if sheet in BONEPILE_IGNORED_SHEETS:
+        return jsonify({"error": "sheet is in ignored list"}), 400
     header_row = int(payload.get("header_row") or 0)
     columns = payload.get("columns") if isinstance(payload.get("columns"), dict) else {}
     if header_row <= 0:
@@ -824,8 +825,8 @@ def api_bonepile_parse():
     sheet = str(payload.get("sheet") or "").strip() if payload.get("sheet") is not None else ""
     sheets: Optional[list] = None
     if sheet:
-        if sheet not in BONEPILE_ALLOWED_SHEETS:
-            return jsonify({"error": "invalid sheet"}), 400
+        if sheet in BONEPILE_IGNORED_SHEETS:
+            return jsonify({"error": "sheet is in ignored list"}), 400
         sheets = [sheet]
     job_id = new_job_id()
     parse_copy = os.path.join(ANALYTICS_CACHE_DIR, "bonepile_parse_" + job_id + ".xlsx")
