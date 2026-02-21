@@ -1,0 +1,34 @@
+/* Shared theme variables - extracted from analytics_dashboard.html.
+   Used by both analytics dashboard and FA Debug Place.
+   Theme toggle: add/remove .dark on <html>. */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+
+:root {
+  --color-primary: #6366F1;
+  --color-surface: #FFFFFF;
+  --color-text: #1E293B;
+  --color-bg: #F1F5F9;
+  --color-accent: #10B981;
+  --color-border: #E2E8F0;
+  --color-muted: #64748B;
+  --color-hover: #F8FAFC;
+  --color-surface-hover: #F8FAFC;
+  --color-success: #10B981;
+  --color-danger: #EF4444;
+}
+
+.dark,
+html.dark {
+  --color-primary: #818CF8;
+  --color-surface: #1E293B;
+  --color-text: #F1F5F9;
+  --color-bg: #0F172A;
+  --color-accent: #34D399;
+  --color-border: #334155;
+  --color-muted: #94A3B8;
+  --color-hover: #334155;
+  --color-surface-hover: #334155;
+  --color-success: #34D399;
+  --color-danger: #FCA5A5;
+}

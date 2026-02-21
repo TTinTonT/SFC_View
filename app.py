@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 from flask import Flask, jsonify, render_template, request, Response, send_file
+from flask_sock import Sock
 
 # Excel export templates (formatting preserved in exported XLSX)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +30,10 @@ from analytics.compute import compute_all
 from analytics.sn_list import compute_sn_list
 from analytics.error_stats import compute_error_stats, compute_error_stats_sn_list
 from config.app_config import TOP_K_ERRORS_DEFAULT
+from fa_debug import bp as fa_debug_bp
+from fa_debug.ssh_terminal import register_ssh_ws
+from etf import bp as etf_bp
+
 from bonepile_disposition import (
     ensure_db_ready, RawState, _bonepile_status_payload, _save_uploaded_bonepile_file,
     _copy_for_parse, new_job_id, set_job, run_bonepile_parse_job,
@@ -39,6 +44,10 @@ from bonepile_disposition import (
 )
 
 app = Flask(__name__)
+sock = Sock(app)
+app.register_blueprint(fa_debug_bp)
+app.register_blueprint(etf_bp)
+register_ssh_ws(sock)
 
 # Cache last query result for sn-list drill-down
 _last_query_lock = threading.Lock()

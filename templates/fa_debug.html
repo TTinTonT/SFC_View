@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FA Debug Place</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    transition: background-color 0.3s, color 0.3s;
+    font-size: 15px;
+    line-height: 1.6;
+    overflow: auto;
+  }
+  .app-wrapper { height: 100%; width: 100%; overflow: auto; }
+  header {
+    background: var(--color-surface);
+    border-bottom: 2px solid var(--color-border);
+    padding: 0.75rem 1.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .header-content { max-width: 1400px; margin: 0 auto; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .header-filters {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.65rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .header-filters .input-field {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8125rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text);
+  }
+  h1 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: var(--color-text);
+    letter-spacing: -0.03em;
+  }
+  .header-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg);
+    border: 1.5px solid var(--color-border);
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .icon-btn:hover {
+    background: var(--color-hover);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    transform: translateY(-1px);
+  }
+  .btn-primary {
+    background: var(--color-primary);
+    color: white;
+    padding: 0.625rem 1.25rem;
+    border-radius: 10px;
+    border: none;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+  }
+  .btn-primary:hover {
+    background: #4F46E5;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-muted);
+    padding: 0.625rem 1.25rem;
+    border-radius: 10px;
+    border: 1.5px solid var(--color-border);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s;
+  }
+  .btn-ghost:hover {
+    background: var(--color-hover);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+  .btn-mini {
+    padding: 0.45rem 0.85rem;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  main { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .panel {
+    background: var(--color-surface);
+    border-radius: 16px;
+    padding: 1.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border: 1.5px solid var(--color-border);
+    transition: all 0.3s;
+  }
+  .panel:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  @media (max-width: 1024px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .kpi-grid { grid-template-columns: 1fr; } }
+  .kpi-card {
+    background: linear-gradient(180deg, rgba(99,102,241,.10), rgba(99,102,241,0) 56%), var(--color-surface);
+    border: 1.5px solid var(--color-border);
+    border-radius: 16px;
+    padding: 1.25rem 1.25rem 1.1rem;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+    transition: transform .15s, box-shadow .15s, border-color .15s;
+    cursor: pointer;
+  }
+  .dark .kpi-card {
+    background: linear-gradient(180deg, rgba(129,140,248,.12), rgba(129,140,248,0) 56%), var(--color-surface);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+  }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(99,102,241,.45);
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.10);
+  }
+  .kpi-card.fail { border-left: 4px solid var(--color-danger); }
+  .kpi-card.pass { border-left: 4px solid var(--color-success); }
+  .kpi-card.total { border-left: 4px solid var(--color-primary); }
+  .kpi-label { font-size: .85rem; font-weight: 700; color: var(--color-muted); letter-spacing: .02em; }
+  .kpi-value { margin-top: .5rem; display: flex; align-items: center; gap: .75rem; }
+  .text-muted { color: var(--color-muted); }
+  .text-xs { font-size: 0.75rem; }
+  .mb-8 { margin-bottom: 2rem; }
+  .mb-6 { margin-bottom: 1.5rem; }
+  .mb-5 { margin-bottom: 1.25rem; }
+  /* Timeline */
+  .timeline { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 10px; overflow: auto; max-height: 400px; }
+  .timeline-row { display: grid; grid-template-columns: 80px 1fr 1fr 80px 120px 1fr minmax(100px, 140px); gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-size: 0.875rem; align-items: center; }
+  .timeline-row:last-child { border-bottom: none; }
+  .timeline-row.header { font-weight: 600; background: var(--color-hover); }
+  .timeline-row.pass { background: rgba(16,185,129,0.08); }
+  .timeline-row.fail { background: rgba(239,68,68,0.08); }
+  .pin-item.blink { animation: blink 0.5s ease 3; }
+  @keyframes blink { 50% { background: rgba(99,102,241,0.3); } }
+  .pin-btn { background: transparent; border: none; cursor: pointer; padding: 0 0.25rem; }
+  .log-path-btn { font-size: 0.75rem; padding: 0.2rem 0.4rem; }
+  /* ETF */
+  .etf-filter { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.875rem; min-width: 200px; }
+  .btn-rescan { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border-radius: 10px; font-weight: 600; font-size: 0.875rem; background: #FBBF24; color: #1E293B; border: none; cursor: pointer; }
+  .btn-rescan:hover { background: #F59E0B; }
+  .btn-rescan:disabled { opacity: 0.6; cursor: not-allowed; }
+  .etf-summary { display: flex; align-items: center; gap: 1.5rem; padding: 0.6rem 1rem; background: rgba(99,102,241,0.08); border: 1px solid var(--color-border); border-radius: 8px; margin-bottom: 0.75rem; font-size: 0.8125rem; }
+  .etf-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.75rem; }
+  .etf-tab { padding: 0.4rem 0.9rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-weight: 500; font-size: 0.8125rem; }
+  .etf-tab:hover { background: var(--color-hover); }
+  .etf-tab.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .etf-table-wrap { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; overflow-x: auto; }
+  .etf-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  .etf-table th { background: var(--color-bg); padding: 0.6rem 0.9rem; text-align: left; font-weight: 600; font-size: 0.75rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid var(--color-border); }
+  .etf-table td { padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--color-border); color: var(--color-text); }
+  .etf-table tbody tr:hover { background: var(--color-hover); }
+  .etf-table .sn-btn { background: var(--color-primary); color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.75rem; }
+  .etf-table .sn-btn:hover { opacity: 0.9; }
+  .etf-table .remark-input { width: 100%; min-width: 120px; padding: 0.3rem 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); color: var(--color-text); font-size: 0.75rem; }
+  /* SN debug menu + panel */
+  .sn-cell { position: relative; display: flex; align-items: center; gap: 0.35rem; }
+  .sn-menu { display: none; position: absolute; top: 100%; left: 0; margin-top: 2px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 50; padding: 0.25rem; min-width: 140px; }
+  .sn-menu.open { display: block; }
+  .sn-menu button { display: block; width: 100%; text-align: left; padding: 0.4rem 0.6rem; border: none; background: transparent; cursor: pointer; font-size: 0.8rem; border-radius: 6px; color: var(--color-text); }
+  .sn-menu button:hover { background: var(--color-hover); }
+  .sn-debug-row { background: var(--color-bg); }
+  .sn-debug-panel { padding: 0 !important; vertical-align: top; border-bottom: 2px solid var(--color-border); }
+  .sn-debug-panel-inner { background: #1e1e1e; border-radius: 8px; margin: 0.5rem; overflow: hidden; }
+  .sn-debug-header { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; background: #2d2d2d; font-size: 0.8rem; color: #94a3b8; flex-wrap: wrap; gap: 0.5rem; }
+  .sn-debug-header .sn-debug-title { font-weight: 600; }
+  .sn-debug-header button { background: transparent; border: none; color: #94a3b8; cursor: pointer; padding: 0.2rem 0.5rem; font-size: 0.75rem; }
+  .sn-debug-header button:hover { color: white; }
+  .sn-debug-ai-controls { display: flex; gap: 0.35rem; }
+  .sn-debug-ai-controls .sn-debug-btn { background: #3d3d3d; color: #94a3b8; padding: 0.3rem 0.6rem; border-radius: 4px; font-size: 0.7rem; }
+  .sn-debug-ai-controls .sn-debug-btn:hover { background: var(--color-primary); color: white; }
+  .sn-debug-resize { height: 16px; cursor: ns-resize; background: #3d3d3d; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #94a3b8; user-select: none; }
+  .sn-debug-resize:hover { background: var(--color-primary); color: white; }
+  .sn-debug-resize::before { content: "⋮⋮"; letter-spacing: 2px; }
+  .sn-debug-terminals { display: flex; flex-direction: column; gap: 0; }
+  .sn-debug-terminal { min-height: 200px; height: 380px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+  .sn-debug-terminal .xterm { width: 100% !important; flex: 1 !important; min-height: 0; }
+  .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; }
+  /* Pin sidebar */
+  .pin-sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 220px; background: var(--color-surface); border-right: 1px solid var(--color-border); z-index: 90; overflow-y: auto; box-shadow: 2px 0 8px rgba(0,0,0,0.1); }
+  .pin-sidebar-header { padding: 0.75rem; font-weight: 700; font-size: 0.875rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.5rem; }
+  .pin-sidebar-body { padding: 0.25rem 0; }
+  .pin-sidebar-item { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
+  .pin-sidebar-item .unpin { margin-left: auto; background: transparent; border: none; cursor: pointer; padding: 0 0.25rem; font-size: 1rem; color: var(--color-muted); }
+  .pin-sidebar-item:hover { background: var(--color-hover); }
+  .pin-sidebar-item .pin-icon { width: 12px; height: 12px; border-radius: 50%; }
+  .pin-icon.pass { background: var(--color-success); animation: flicker 1s ease-in-out infinite; }
+  .pin-icon.fail { background: var(--color-danger); animation: flicker 1s ease-in-out infinite; }
+  .pin-icon.unknown { background: var(--color-muted); }
+  @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .pin-sidebar-item.expanded .pin-details { display: block; }
+  .pin-details { display: none; margin-top: 0.5rem; font-size: 0.75rem; color: var(--color-muted); }
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 100; padding: 1.5rem; }
+  .modal-overlay.active { display: flex; }
+  .modal-content { background: var(--color-surface); border-radius: 16px; padding: 2rem; max-width: 600px; width: 100%; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); border: 1.5px solid var(--color-border); }
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .mb-4 { margin-bottom: 1rem; }
+  .text-xl { font-size: 1.25rem; }
+  .font-bold { font-weight: 700; }
+  .text-sm { font-size: 0.875rem; }
+  .mt-1 { margin-top: 0.25rem; }
+  .w-9 { width: 2.25rem; }
+  .h-9 { height: 2.25rem; }
+  .w-5 { width: 1.25rem; }
+  .h-5 { height: 1.25rem; }
+  .rounded-lg { border-radius: 0.5rem; }
+  .overflow-x-auto { overflow-x: auto; }
+  .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.9375rem; }
+  .data-table thead th { background: var(--color-bg); padding: 1rem 1.25rem; text-align: left; font-weight: 700; font-size: 0.875rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid var(--color-border); }
+  .data-table tbody td { padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border); color: var(--color-text); }
+  .data-table tbody tr:hover { background: var(--color-hover); }
+  .result-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+  .result-badge.fail { background: rgba(239, 68, 68, 0.25); color: #dc2626; }
+  .dark .result-badge.fail { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+  .result-badge.pass { background: rgba(16, 185, 129, 0.25); color: #059669; }
+  .dark .result-badge.pass { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+  .server-offline { display: none; padding: 0.75rem 1rem; background: rgba(239,68,68,0.15); border: 1px solid var(--color-danger); border-radius: 8px; margin-bottom: 1rem; color: var(--color-danger); font-size: 0.9rem; }
+  .server-offline.show { display: block; }
+  .hidden { display: none !important; }
+  </style>
+</head>
+<body class="h-full">
+  <div id="server-offline-banner" class="server-offline" role="alert">
+    <strong>Cannot connect to server.</strong> Check if the backend is running (e.g. <code>python app.py</code> or <code>flask run</code> on port 5556).
+  </div>
+  <div id="app-wrapper" class="app-wrapper">
+    <header>
+      <div class="header-content">
+        <div class="header-row">
+          <h1>FA Debug Place</h1>
+          <div class="header-actions">
+            <a href="/" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Analytics</a>
+            <button class="icon-btn" id="theme-toggle" title="Toggle theme">
+              <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+              <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+            </button>
+          </div>
+        </div>
+        <div class="header-filters">
+          <div class="flex items-center gap-2 flex-wrap">
+            <label for="date-start" class="text-xs font-semibold" style="color: var(--color-muted);">Start</label>
+            <input type="datetime-local" id="date-start" class="input-field">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label for="date-end" class="text-xs font-semibold" style="color: var(--color-muted);">End</label>
+            <input type="datetime-local" id="date-end" class="input-field">
+            <label class="flex items-center gap-1.5 cursor-pointer" style="font-size: 0.8125rem;">
+              <input type="checkbox" id="end-now" class="rounded">
+              <span style="color: var(--color-text);">Now</span>
+            </label>
+          </div>
+          <button class="btn-primary btn-mini" id="apply-filter" type="button">Apply Filter</button>
+          <span class="text-muted text-xs">Next update: <span id="timeline-next-update">60s</span></span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="kpi-grid mb-8">
+        <div class="kpi-card fail" id="kpi-fail" data-metric="fail">
+          <div class="kpi-label">Fail</div>
+          <div class="kpi-value"><span id="kpi-fail-val" class="text-3xl font-extrabold" style="color: var(--color-text);">0</span></div>
+        </div>
+        <div class="kpi-card pass" id="kpi-pass" data-metric="pass">
+          <div class="kpi-label">Pass</div>
+          <div class="kpi-value"><span id="kpi-pass-val" class="text-3xl font-extrabold" style="color: var(--color-text);">0</span></div>
+        </div>
+        <div class="kpi-card total" id="kpi-total" data-metric="total">
+          <div class="kpi-label">Total</div>
+          <div class="kpi-value"><span id="kpi-total-val" class="text-3xl font-extrabold" style="color: var(--color-text);">0</span></div>
+        </div>
+      </div>
+
+      <div class="panel mb-8">
+        <h2 class="text-2xl font-bold mb-6" style="color: var(--color-text);">Timeline</h2>
+        <div class="flex items-center gap-4 mb-4">
+          <input type="text" id="timeline-filter" class="etf-filter" placeholder="Filter SN, PN, Station..." style="min-width: 200px;">
+        </div>
+        <div class="timeline">
+          <div class="timeline-row header">
+            <span>Result</span><span>SN</span><span>PN</span><span>BP/NA</span><span>Time</span><span>Station</span><span>Log Path</span>
+          </div>
+          <div id="timeline-body"></div>
+        </div>
+      </div>
+
+      <div class="panel mb-8">
+        <h2 class="text-2xl font-bold mb-6" style="color: var(--color-text);">Agent Upload History</h2>
+        <div class="flex items-center gap-3 mb-4">
+          <button type="button" class="btn-ghost btn-mini" id="btn-refresh-upload-history">Refresh</button>
+          <button type="button" class="btn-ghost btn-mini" id="btn-clear-upload-history">Clear History (local)</button>
+        </div>
+        <div id="upload-history-list" style="max-height: 200px; overflow-y: auto; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem;">
+          <div class="text-muted" style="font-size: 0.875rem;">Loading...</div>
+        </div>
+      </div>
+
+      <div class="panel mb-8">
+        <h2 class="text-2xl font-bold mb-6" style="color: var(--color-text);">Tray Status</h2>
+        <div class="etf-header" style="margin-bottom: 0.75rem;">
+          <input type="text" id="etf-filter" class="etf-filter" placeholder="Filter SN, MAC, IP...">
+          <button type="button" id="btn-rescan" class="btn-rescan">Rescan</button>
+        </div>
+        <div class="etf-summary">
+          <span>Number of DUT: <strong id="dut-count">0</strong></span>
+          <span>Last Updated: <span id="last-updated">-</span> (Next update: <span id="next-update">-</span>)</span>
+        </div>
+        <div class="etf-tabs">
+          <button type="button" class="etf-tab active" data-room="etf">ETF</button>
+          <button type="button" class="etf-tab" data-room="room6">Room 6</button>
+          <button type="button" class="etf-tab" data-room="room7">Room 7</button>
+          <button type="button" class="etf-tab" data-room="room8">Room 8</button>
+        </div>
+        <div class="etf-table-wrap">
+          <table class="etf-table">
+            <thead>
+              <tr>
+                <th>SN</th>
+                <th>PN</th>
+                <th>BMC MAC</th>
+                <th>BMC IP</th>
+                <th>SYS IP</th>
+                <th>SYS MAC</th>
+                <th>Room</th>
+                <th>Remark</th>
+              </tr>
+            </thead>
+            <tbody id="etf-tbody">
+              <tr><td colspan="8" style="color: var(--color-muted); text-align: center; padding: 2rem;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="modal-drill">
+    <div class="modal-content" style="max-width: 1100px;">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 id="modal-drill-title" class="text-xl font-bold" style="color: var(--color-text);">SN List</h3>
+          <div id="modal-drill-subtitle" class="text-sm mt-1" style="color: var(--color-muted);">-</div>
+        </div>
+        <button class="w-9 h-9 rounded-lg flex items-center justify-center" style="background: var(--color-bg);" id="modal-close" title="Close">
+          <svg class="w-5 h-5" style="color: var(--color-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="overflow-x-auto" style="max-height: 70vh; overflow-y: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>SN</th>
+              <th>RESULT</th>
+              <th>PART NUMBER</th>
+              <th>LAST STATION</th>
+              <th>TEST TIME</th>
+              <th>BP</th>
+              <th>FAILURE MSG</th>
+              <th>LOG PATH</th>
+            </tr>
+          </thead>
+          <tbody id="modal-drill-tbody">
+            <tr><td colspan="8" style="color: var(--color-muted);">No data</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
+  <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js" defer></script>
+  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} };</script>
+  <script src="/static/js/fa_debug.js" defer></script>
+  <script src="/static/js/etf_status.js" defer></script>
+</body>
+</html>
