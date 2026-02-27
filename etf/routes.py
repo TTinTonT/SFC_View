@@ -145,9 +145,11 @@ def _merge_remarks(rows, room):
     remarks = _load_remarks()
     room_remarks = remarks.get(room) or {}
     for r in rows:
+        if not isinstance(r, dict):
+            continue
         key = r.get("sn") or r.get("pn") or r.get("bmc_ip") or ""
         r["remark"] = room_remarks.get(key, "")
-    return rows
+    return [r for r in (rows or []) if isinstance(r, dict)]
 
 
 def _looks_like_mac(s):
@@ -170,6 +172,8 @@ def _validate_cache_rows(rows):
         return True
     bad = 0
     for r in rows:
+        if not isinstance(r, dict):
+            return False
         bmc = (r.get("bmc_mac") or "").strip()
         if bmc and bmc not in ("NA", "N/A") and _looks_like_serial(bmc) and not _looks_like_mac(bmc):
             bad += 1
@@ -183,7 +187,7 @@ def _load_room_cache(room):
     try:
         with open(path, "r", encoding="utf-8") as f:
             d = json.load(f)
-            rows = d.get("rows", [])
+            rows = [r for r in (d.get("rows") or []) if isinstance(r, dict)]
             if not _validate_cache_rows(rows):
                 try:
                     os.remove(path)
@@ -349,6 +353,8 @@ def api_etf_reset():
 
 def _row_matches_query(row, q):
     """Check if row matches search query (case-insensitive)."""
+    if not isinstance(row, dict):
+        return False
     if not q or not q.strip():
         return False
     ql = q.strip().lower()

@@ -128,22 +128,14 @@ def api_fa_debug_agent_upload():
         ct = r.headers.get("content-type", "")
         data = r.json() if "application/json" in ct else {"ok": True}
 
-        # Save to upload history (cache persists across resets)
+        # Save to upload history (new API: success, path, filename)
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         to_append = []
-        for i, f in enumerate(files):
-            fn = f.filename or "file"
-            path = None
-            if isinstance(data, dict):
-                upl = data.get("uploaded") or data.get("paths") or data.get("files")
-                if isinstance(upl, list) and i < len(upl):
-                    p = upl[i]
-                    path = p if isinstance(p, str) else (p.get("path") or p.get("file_path") if isinstance(p, dict) else None)
-                elif data.get("path") and i == 0:
-                    path = data.get("path")
+        if isinstance(data, dict) and data.get("success") and data.get("path"):
+            fn = data.get("filename") or (files[0].filename if files else "file")
             to_append.append({
                 "filename": fn,
-                "path": path or "",
+                "path": data.get("path") or "",
                 "uploaded_at": now,
                 "row_key": row_key or "",
             })

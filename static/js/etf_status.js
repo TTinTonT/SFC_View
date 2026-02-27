@@ -10,6 +10,7 @@
   let nextUpdateSec = 0;
   let countdownInterval = null;
   const expandedPanels = new Map();
+  const panelRowKeyToSn = new Map();
   const pinnedSns = new Set();
   const roomCache = {};
   let lastDisplayRows = [];
@@ -84,13 +85,30 @@
     const displayRows = isSearchMode ? searchRows : allRows.filter(matchFilter);
     dutCountEl.textContent = displayRows.length;
 
-    if (displayRows.length === 0) {
+    if (displayRows.length === 0 && expandedPanels.size === 0) {
       const msg = isSearchMode && searchInFlight ? "Searching..." : "No DUTs";
       tbody.innerHTML = '<tr><td colspan="8" style="color: var(--color-muted); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
       return;
     }
 
     lastDisplayRows = displayRows;
+    const displayRowKeys = new Set(displayRows.map((r) => (r.sn || r.pn || r.bmc_ip || "").trim()).filter(Boolean));
+    const disconnectedRowKeys = [...expandedPanels.keys()].filter((k) => !displayRowKeys.has(k));
+
+    displayRows.forEach((r) => {
+      const rowKey = r.sn || r.pn || r.bmc_ip || "";
+      if (rowKey) panelRowKeyToSn.set(rowKey, r.sn || rowKey);
+    });
+
+    const savedPanels = new Map();
+    tbody.querySelectorAll("tr.sn-debug-row").forEach((tr) => {
+      const rowKey = tr.dataset.rowKey || "";
+      if (rowKey && expandedPanels.has(rowKey)) {
+        savedPanels.set(rowKey, tr);
+        tr.remove();
+      }
+    });
+
     const htmlParts = [];
     displayRows.forEach((r) => {
       const rowKey = r.sn || r.pn || r.bmc_ip || "";
@@ -120,7 +138,7 @@
         <td class="remark-cell"><input type="text" class="remark-input" data-row-key="${escapeHtml(rowKey)}" value="${escapeHtml(r.remark || "")}" placeholder="Add note..."></td>
       </tr>`);
 
-      if (action) {
+      if (action && !savedPanels.has(rowKey)) {
         const showAi = action === "ai" || action === "both";
         const showSsh = action === "term" || action === "both";
         htmlParts.push(`<tr class="sn-debug-row" data-row-key="${escapeHtml(rowKey)}">
@@ -142,7 +160,44 @@
       }
     });
 
+    disconnectedRowKeys.forEach((rowKey) => {
+      const snDisplay = panelRowKeyToSn.get(rowKey) || rowKey;
+      const action = expandedPanels.get(rowKey);
+      htmlParts.push(`<tr class="sn-disconnected-row" data-row-key="${escapeHtml(rowKey)}">
+        <td colspan="8" style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; color: var(--color-text); font-size: 0.9rem;">
+          <span style="font-weight: 600;">SN: ${escapeHtml(snDisplay)}</span> — Tray disconnected / cannot ping. Terminal output preserved. Close when done.
+        </td>
+      </tr>`);
+    });
+
     tbody.innerHTML = htmlParts.join("");
+
+    displayRows.forEach((r, i) => {
+      const rowKey = r.sn || r.pn || r.bmc_ip || "";
+      const saved = savedPanels.get(rowKey);
+      if (!saved) return;
+      const dataRows = tbody.querySelectorAll("tr:not(.sn-debug-row):not(.sn-disconnected-row)");
+      const targetRow = dataRows[i];
+      if (targetRow) targetRow.after(saved);
+    });
+
+    disconnectedRowKeys.forEach((rowKey) => {
+      const saved = savedPanels.get(rowKey);
+      if (!saved) return;
+      const banner = saved.querySelector(".sn-disconnect-banner");
+      if (!banner) {
+        const header = saved.querySelector(".sn-debug-header");
+        if (header) {
+          const div = document.createElement("div");
+          div.className = "sn-disconnect-banner";
+          div.style.cssText = "background: rgba(245, 158, 11, 0.2); border-left: 4px solid #f59e0b; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; font-size: 0.8125rem; color: var(--color-text);";
+          div.textContent = "Tray disconnected / cannot ping. You can continue viewing terminal output. Click Hide when done.";
+          header.before(div);
+        }
+      }
+      const placeholderRow = [...tbody.querySelectorAll("tr.sn-disconnected-row")].find((tr) => tr.dataset.rowKey === rowKey);
+      if (placeholderRow) placeholderRow.after(saved);
+    });
 
     tbody.querySelectorAll(".remark-input").forEach((input) => {
       input.addEventListener("blur", () => saveRemark(input));
@@ -196,6 +251,7 @@
     });
 
     expandedPanels.forEach((act, rowKey) => {
+      if (savedPanels.has(rowKey)) return;
       if (typeof window.etfCreateSnTerminals === "function") {
         const panel = tbody.querySelector(`.sn-debug-panel[data-row-key="${escapeHtml(rowKey)}"]`);
         if (panel) {
@@ -217,6 +273,8 @@
 
   function setupResizeHandles() {
     tbody.querySelectorAll(".sn-debug-resize").forEach((handle) => {
+      if (handle.dataset.resizeBound) return;
+      handle.dataset.resizeBound = "1";
       let startY = 0;
       let startHeight = 0;
       handle.addEventListener("mousedown", (e) => {

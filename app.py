@@ -12,7 +12,7 @@ import sqlite3
 import tempfile
 import threading
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, jsonify, render_template, request, Response, send_file
 from flask_sock import Sock
@@ -30,6 +30,7 @@ from analytics.compute import compute_all
 from analytics.sn_list import compute_sn_list
 from analytics.error_stats import compute_error_stats, compute_error_stats_sn_list
 from config.app_config import TOP_K_ERRORS_DEFAULT
+from config.analytics_config import get_pass_rules, set_pass_rules
 from fa_debug import bp as fa_debug_bp
 from fa_debug.ssh_terminal import register_ssh_ws
 from etf import bp as etf_bp
@@ -40,7 +41,8 @@ from bonepile_disposition import (
     _load_bonepile_workbook, _find_header_row, _read_header_map, _auto_mapping_from_headers,
     _mapping_errors, _close_and_release_workbook, _remove_temp_file,
     _parse_ca_input_datetime, utc_ms, compute_disposition_stats, compute_disposition_sn_list,
-    BONEPILE_UPLOAD_PATH, BONEPILE_IGNORED_SHEETS, ANALYTICS_CACHE_DIR, scan_lock, jobs_lock, jobs
+    BONEPILE_UPLOAD_PATH, BONEPILE_IGNORED_SHEETS, ANALYTICS_CACHE_DIR, scan_lock, jobs_lock, jobs,
+    invalidate_bp_sn_cache, BP_SN_CACHE_PATH, STATE_PATH, connect_db,
 )
 
 app = Flask(__name__)
@@ -158,6 +160,48 @@ def _build_export_xlsx(
         ws.cell(row=5, column=2, value=t["fail"].get("bp", 0))
         ws.cell(row=5, column=3, value=t["fail"].get("fresh", 0))
         ws.cell(row=5, column=4, value=t["fail"].get("total", 0))
+
+        # Unique SN list: SN, BP, result, part_number, last_station, last_test_time, error_code, failure_msg
+        sn_tests = computed.get("_sn_tests") or {}
+        sn_pass = computed.get("_sn_pass") or {}
+        sn_is_bp = computed.get("_sn_is_bp") or {}
+        sn_latest_part = computed.get("_sn_latest_part") or {}
+        sn_latest_dt = computed.get("_sn_latest_dt") or {}
+        sn_list_col = 6
+        headers = ["SN", "BP", "RESULT", "PART_NUMBER", "LAST_STATION", "LAST_TEST_TIME", "ERROR_CODE", "FAILURE_MSG"]
+        for c, h in enumerate(headers, start=sn_list_col):
+            ws.cell(row=2, column=c, value=h)
+        sn_rows = []
+        for sn in sorted(sn_tests.keys()):
+            tests = sn_tests.get(sn, [])
+            if not tests:
+                continue
+            last_row = max(tests, key=lambda r: r.get("test_time_dt") or datetime.min)
+            last_station = (last_row.get("station") or "").strip()
+            last_test_time = (last_row.get("test_time") or "").strip()
+            if sn_latest_dt.get(sn):
+                try:
+                    last_test_time = sn_latest_dt[sn].strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    pass
+            result = "PASS" if sn_pass.get(sn) else "FAIL"
+            bp_val = "Yes" if sn_is_bp.get(sn) else "No"
+            part_num = (sn_latest_part.get(sn) or "").strip() or ""
+            err_code = (last_row.get("error_code") or "").strip() or ""
+            fail_msg = (last_row.get("failure_msg") or "").strip() or ""
+            sn_rows.append((sn, bp_val, result, part_num, last_station, last_test_time, err_code, fail_msg))
+        sn_first_data_row = 3
+        for r_idx, row_data in enumerate(sn_rows, start=sn_first_data_row):
+            for c_idx, val in enumerate(row_data, start=sn_list_col):
+                tgt = ws.cell(row=r_idx, column=c_idx, value=val)
+                if r_idx > sn_first_data_row:
+                    src = ws.cell(row=sn_first_data_row, column=c_idx)
+                    _copy_cell_style(src, tgt)
+        for c in range(sn_list_col, sn_list_col + len(headers)):
+            col_letter = openpyxl.utils.get_column_letter(c)
+            curr = ws.column_dimensions[col_letter].width if col_letter in ws.column_dimensions else 10
+            ws.column_dimensions[col_letter].width = max(curr or 10, 12)
+
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -286,6 +330,71 @@ def _build_dispo_sku_xlsx(
     return buf.read(), f"Disposition_By_SKU_{start_s}_to_{end_s}.xlsx"
 
 
+def _build_dispo_sn_list_xlsx(
+    sn_rows: List[dict],
+    start_ca: datetime,
+    end_ca: datetime,
+) -> Tuple[bytes, str]:
+    """Build XLSX for Disposition SN List (Total KPI): SN, SKU, STATUS, PIC, LAST NV DISPO, LAST IGS ACTION.
+    Format: header bold+uppercase, light fill colors, all cells centered."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    except ImportError:
+        raise RuntimeError("openpyxl is not installed; cannot export XLSX")
+    center = Alignment(horizontal="center", vertical="center")
+    header_fill = PatternFill(start_color="E8D5B7", end_color="E8D5B7", fill_type="solid")
+    data_fill = PatternFill(start_color="FFF8E7", end_color="FFF8E7", fill_type="solid")
+    thin = Side(style="thin", color="000000")
+    all_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Disposition SN List"
+    start_str = start_ca.strftime("%Y-%m-%d %H:%M")
+    end_str = end_ca.strftime("%Y-%m-%d %H:%M")
+    ws.cell(row=1, column=1, value=f"NV Disposition SN List (Total) – {start_str} to {end_str}")
+    ws.merge_cells("A1:F1")
+    for col in range(1, 7):
+        c1 = ws.cell(row=1, column=col)
+        c1.border = all_border
+    ws.cell(row=1, column=1).font = Font(bold=True, size=12)
+    ws.cell(row=1, column=1).alignment = center
+    ws.cell(row=1, column=1).fill = header_fill
+    headers = ["SN", "SKU", "STATUS", "PIC", "LAST NV DISPO", "LAST IGS ACTION"]
+    for c, h in enumerate(headers, start=1):
+        cell = ws.cell(row=2, column=c, value=h.upper())
+        cell.font = Font(bold=True)
+        cell.alignment = center
+        cell.fill = header_fill
+        cell.border = all_border
+    for r_idx, row in enumerate(sn_rows, start=3):
+        ws.cell(row=r_idx, column=1, value=row.get("sn") or "")
+        ws.cell(row=r_idx, column=2, value=row.get("nvpn") or "")
+        ws.cell(row=r_idx, column=3, value=row.get("status") or "")
+        ws.cell(row=r_idx, column=4, value=row.get("pic") or "")
+        ws.cell(row=r_idx, column=5, value=row.get("last_nv_dispo") or "")
+        ws.cell(row=r_idx, column=6, value=row.get("last_igs_action") or "")
+        for c in range(1, 7):
+            cell = ws.cell(row=r_idx, column=c)
+            cell.alignment = center
+            cell.fill = data_fill
+            cell.border = all_border
+    keys = ["sn", "nvpn", "status", "pic", "last_nv_dispo", "last_igs_action"]
+    for col_idx, key in enumerate(keys, start=1):
+        col_letter = openpyxl.utils.get_column_letter(col_idx)
+        max_len = 15
+        for r in sn_rows:
+            val = r.get(key) or ""
+            max_len = max(max_len, min(50, len(str(val)) + 2))
+        ws.column_dimensions[col_letter].width = max_len
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    start_s = start_ca.strftime("%Y%m%d_%H%M")
+    end_s = end_ca.strftime("%Y%m%d_%H%M")
+    return buf.read(), f"Disposition_SN_List_{start_s}_to_{end_s}.xlsx"
+
+
 @app.route("/")
 def index():
     """Serve analytics dashboard."""
@@ -331,8 +440,31 @@ def api_query():
         "breakdown_rows": computed["breakdown_rows"],
         "test_flow": computed["test_flow"],
         "rows": computed["rows"],
+        "unassigned_part_numbers": computed.get("unassigned_part_numbers", []),
+        "unassigned_part_numbers_detail": computed.get("unassigned_part_numbers_detail", []),
     }
     return jsonify(out)
+
+
+@app.route("/api/analytics/pass-rules", methods=["GET", "POST"])
+def api_analytics_pass_rules():
+    """GET: return pass rules. POST: save pass_rules from body, reload, return new rules."""
+    if request.method == "GET":
+        try:
+            rules = get_pass_rules()
+            return jsonify({"ok": True, "pass_rules": rules})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    # POST
+    payload = request.json or {}
+    pr = payload.get("pass_rules")
+    if not isinstance(pr, dict):
+        return jsonify({"error": "pass_rules object required"}), 400
+    try:
+        set_pass_rules(pr)
+        return jsonify({"ok": True, "pass_rules": get_pass_rules()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/sn-list", methods=["POST"])
@@ -565,8 +697,30 @@ def api_export_csv():
     export_kind = (payload.get("export") or "dashboard").strip().lower()
     export_format = (payload.get("format") or "csv").strip().lower()
 
-    # Handle XLSX export for summary, sku, disposition_by_sku
-    if export_format == "xlsx" and export_kind in ("summary", "sku", "disposition_by_sku"):
+    # Handle XLSX export for summary, sku, disposition_by_sku, disposition_sn_list
+    if export_format == "xlsx" and export_kind in ("summary", "sku", "disposition_by_sku", "disposition_sn_list"):
+        if export_kind == "disposition_sn_list":
+            start_ca = _parse_ca_input_datetime(start_s, is_end=False) if start_s else None
+            end_ca = _parse_ca_input_datetime(end_s, is_end=True) if end_s else None
+            if start_ca is None or end_ca is None:
+                return jsonify({"error": "start_datetime and end_datetime required for disposition export"}), 400
+            if end_ca <= start_ca:
+                return jsonify({"error": "end must be after start"}), 400
+            aggregation = (payload.get("aggregation") or "daily").strip().lower()
+            if aggregation not in ("daily", "weekly", "monthly"):
+                aggregation = "daily"
+            try:
+                ensure_db_ready()
+                start_ca_ms = utc_ms(start_ca)
+                end_ca_ms = utc_ms(end_ca)
+                sn_rows = compute_disposition_sn_list(metric="total", aggregation=aggregation, start_ca_ms=start_ca_ms, end_ca_ms=end_ca_ms)
+                data_xlsx, filename = _build_dispo_sn_list_xlsx(sn_rows, start_ca, end_ca)
+                return _xlsx_response(data_xlsx, filename)
+            except sqlite3.OperationalError:
+                data_xlsx, filename = _build_dispo_sn_list_xlsx([], start_ca, end_ca)
+                return _xlsx_response(data_xlsx, filename)
+            except Exception as e:
+                return jsonify({"error": f"XLSX export failed: {str(e)}"}), 500
         if export_kind == "disposition_by_sku":
             start_ca = _parse_ca_input_datetime(start_s, is_end=False) if start_s else None
             end_ca = _parse_ca_input_datetime(end_s, is_end=True) if end_s else None
@@ -615,6 +769,30 @@ def api_export_csv():
                 return jsonify({"error": str(e)}), 404
             except Exception as e:
                 return jsonify({"error": f"XLSX export failed: {str(e)}"}), 500
+
+    # Export disposition_summary (SN list Total KPI) as XLSX with formatting
+    if export_kind == "disposition_summary":
+        start_ca = _parse_ca_input_datetime(start_s, is_end=False) if start_s else None
+        end_ca = _parse_ca_input_datetime(end_s, is_end=True) if end_s else None
+        if start_ca is None or end_ca is None:
+            return jsonify({"error": "start_datetime and end_datetime required for disposition export"}), 400
+        if end_ca <= start_ca:
+            return jsonify({"error": "end must be after start"}), 400
+        aggregation = (payload.get("aggregation") or "daily").strip().lower()
+        if aggregation not in ("daily", "weekly", "monthly"):
+            aggregation = "daily"
+        try:
+            ensure_db_ready()
+            start_ca_ms = utc_ms(start_ca)
+            end_ca_ms = utc_ms(end_ca)
+            sn_rows = compute_disposition_sn_list(metric="total", aggregation=aggregation, start_ca_ms=start_ca_ms, end_ca_ms=end_ca_ms)
+        except sqlite3.OperationalError:
+            sn_rows = []
+        try:
+            data_xlsx, filename = _build_dispo_sn_list_xlsx(sn_rows, start_ca, end_ca)
+            return _xlsx_response(data_xlsx, filename)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     # CSV export - error_stats
     if export_kind == "error_stats":
@@ -845,6 +1023,35 @@ def api_bonepile_parse():
     t = threading.Thread(target=run_bonepile_parse_job, args=(job_id, sheets), kwargs={"path": parse_copy}, daemon=True)
     t.start()
     return jsonify({"ok": True, "job_id": job_id})
+
+
+@app.route("/api/clear-cache", methods=["POST"])
+def api_clear_cache():
+    """
+    Clear bonepile cache: BP SN cache, raw state, bonepile_entries, uploaded file.
+    Returns JSON { ok: true } or { error: "..." }.
+    """
+    global _last_query_result
+    try:
+        invalidate_bp_sn_cache()
+        if os.path.isfile(BP_SN_CACHE_PATH):
+            os.remove(BP_SN_CACHE_PATH)
+        if os.path.isfile(STATE_PATH):
+            os.remove(STATE_PATH)
+        if os.path.isfile(BONEPILE_UPLOAD_PATH):
+            os.remove(BONEPILE_UPLOAD_PATH)
+        ensure_db_ready()
+        conn = connect_db()
+        try:
+            conn.execute("DELETE FROM bonepile_entries")
+            conn.commit()
+        finally:
+            conn.close()
+        with _last_query_lock:
+            _last_query_result = None
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/bonepile/disposition")

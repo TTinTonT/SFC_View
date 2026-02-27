@@ -214,10 +214,19 @@
     });
   }
 
+  function fetchRoomForSn(sn) {
+    if (!sn || !sn.trim()) return Promise.resolve(null);
+    return fetch('/api/etf/search?q=' + encodeURIComponent(sn.trim()))
+      .then((r) => r.json())
+      .then((data) => (data.ok && data.rows && data.rows[0]) ? data.rows[0] : null)
+      .catch(() => null);
+  }
+
   function openDrillDown(rowOrFilter) {
     const modal = $('modal-drill');
     const titleEl = $('modal-drill-title');
     const subtitleEl = $('modal-drill-subtitle');
+    const roomEl = $('modal-drill-room');
     const tbody = $('modal-drill-tbody');
     if (!modal || !tbody) return;
     const filteredRows = getRowsForDrillDown(rowOrFilter);
@@ -230,8 +239,9 @@
     const dateEnd = $('date-end')?.value || '';
     const rangeStr = dateStart && dateEnd ? dateStart.slice(0, 16) + ' \u2192 ' + dateEnd.slice(0, 16) + ' (CA)' : '';
     if (subtitleEl) subtitleEl.textContent = (rangeStr ? rangeStr + ' \u2022 ' : '') + snRows.length + ' SN';
+    if (roomEl) roomEl.textContent = '';
     if (!snRows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="color: var(--color-muted);">No data</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="color: var(--color-muted);">No data</td></tr>';
     } else {
       tbody.innerHTML = snRows.map((r) => {
         const res = (r.result || '').toUpperCase();
@@ -240,19 +250,31 @@
         const bpVal = r.is_bonepile ? 'Yes' : 'No';
         const lastStation = r.station || '-';
         const failureMsg = r.failure_msg || r.error_code || '-';
+        const sn = r.serial_number || '';
         return '<tr>' +
-          '<td>' + escapeHtml(r.serial_number || '') + '</td>' +
+          '<td>' + escapeHtml(sn) + '</td>' +
           '<td><span class="result-badge ' + badgeClass + '">' + (res || '-') + '</span></td>' +
           '<td>' + escapeHtml(r.part_number || '-') + '</td>' +
           '<td>' + escapeHtml(lastStation) + '</td>' +
           '<td>' + escapeHtml(r.test_time || '-') + '</td>' +
           '<td>' + escapeHtml(bpVal) + '</td>' +
+          '<td class="room-cell" data-sn="' + escapeAttr(sn) + '">-</td>' +
           '<td>' + escapeHtml(String(failureMsg).slice(0, 80)) + (String(failureMsg).length > 80 ? '...' : '') + '</td>' +
-          '<td class="log-path-cell">' + (r.serial_number ? '<button type="button" class="log-path-btn" data-sn="' + escapeAttr(r.serial_number) + '" title="Get log path from Crabber">Get log</button>' : '-') + '</td>' +
+          '<td class="log-path-cell">' + (sn ? '<button type="button" class="log-path-btn" data-sn="' + escapeAttr(sn) + '" title="Get log path from Crabber">Get log</button>' : '-') + '</td>' +
           '</tr>';
       }).join('');
     }
     modal.classList.add('active');
+
+    const uniqueSns = [...new Set(snRows.map((r) => (r.serial_number || '').trim()).filter(Boolean))];
+    uniqueSns.forEach((sn) => {
+      fetchRoomForSn(sn).then((row) => {
+        if (!row || !row.room) return;
+        const label = row.ssh_host ? row.room + ' (' + row.ssh_host + ')' : row.room;
+        if (singleSn && roomEl) roomEl.textContent = 'Room: ' + label;
+        tbody.querySelectorAll('.room-cell').forEach((td) => { if (td.dataset.sn === sn) td.textContent = label; });
+      });
+    });
   }
 
   function closeDrillDown() {
@@ -296,6 +318,72 @@
     renderPinPanel();
   }
 
+  const NOTEPAD_KEY = 'fa-debug-notepad-content';
+  const NOTEPAD_EXPANDED_KEY = 'fa-debug-notepad-expanded';
+  let notepadExpanded = true;
+  try { notepadExpanded = localStorage.getItem(NOTEPAD_EXPANDED_KEY) !== 'false'; } catch (_) {}
+  let notepadSaveTimer = null;
+
+  function updateLeftSidebars() {
+    const notepadEl = $('notepad-sidebar');
+    const pinEl = $('pin-sidebar');
+    const app = document.getElementById('app-wrapper') || document.querySelector('.app-wrapper');
+    const pinW = pinEl ? 220 : 0;
+    if (pinEl) pinEl.style.left = '0px';
+    if (app) app.style.marginLeft = pinW ? pinW + 'px' : '';
+  }
+
+  function renderNotepadSidebar() {
+    let np = $('notepad-sidebar');
+    if (!np) {
+      np = el('div', { id: 'notepad-sidebar', className: 'notepad-sidebar' });
+      np.classList.toggle('expanded', notepadExpanded);
+      np.classList.toggle('collapsed', !notepadExpanded);
+      document.body.insertBefore(np, document.body.firstChild);
+      const toggle = el('button', { type: 'button', className: 'notepad-sidebar-toggle' });
+      const toggleSpan = document.createElement('span');
+      toggleSpan.textContent = 'Notepad';
+      toggle.appendChild(toggleSpan);
+      const toggleIcon = document.createElement('span');
+      toggleIcon.textContent = notepadExpanded ? '−' : '+';
+      toggle.appendChild(toggleIcon);
+      toggle.addEventListener('click', () => {
+        notepadExpanded = !notepadExpanded;
+        np.classList.toggle('expanded', notepadExpanded);
+        np.classList.toggle('collapsed', !notepadExpanded);
+        toggleIcon.textContent = notepadExpanded ? '−' : '+';
+        const body = np.querySelector('.notepad-sidebar-body');
+        if (body) body.style.display = notepadExpanded ? 'flex' : 'none';
+        try { localStorage.setItem(NOTEPAD_EXPANDED_KEY, notepadExpanded ? 'true' : 'false'); } catch (_) {}
+        updateLeftSidebars();
+      });
+      np.appendChild(toggle);
+      const body = el('div', { className: 'notepad-sidebar-body' });
+      body.style.display = notepadExpanded ? 'flex' : 'none';
+      const toolbar = el('div', { className: 'notepad-toolbar' });
+      const copyBtn = el('button', { type: 'button' });
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => {
+        const ta = np.querySelector('.notepad-textarea');
+        if (ta) navigator.clipboard?.writeText(ta.value || '').then(() => {}).catch(() => {});
+      });
+      toolbar.appendChild(copyBtn);
+      body.appendChild(toolbar);
+      const ta = el('textarea', { className: 'notepad-textarea' });
+      ta.placeholder = 'Ghi chú, paste text...';
+      try { ta.value = localStorage.getItem(NOTEPAD_KEY) || ''; } catch (_) {}
+      const saveNotepad = () => { try { localStorage.setItem(NOTEPAD_KEY, ta.value); } catch (_) {} };
+      ta.addEventListener('input', () => {
+        if (notepadSaveTimer) clearTimeout(notepadSaveTimer);
+        notepadSaveTimer = setTimeout(() => { saveNotepad(); notepadSaveTimer = null; }, 300);
+      });
+      ta.addEventListener('blur', saveNotepad);
+      body.appendChild(ta);
+      np.appendChild(body);
+    }
+    updateLeftSidebars();
+  }
+
   function renderPinPanel() {
     renderPinSidebar();
   }
@@ -306,17 +394,15 @@
     if (!hasTimeline && !hasEtf) {
       const sb = $('pin-sidebar');
       if (sb) sb.remove();
-      const app = document.getElementById('app-wrapper') || document.querySelector('.app-wrapper');
-      if (app) app.style.marginLeft = '';
+      updateLeftSidebars();
       return;
     }
     let sidebar = $('pin-sidebar');
     if (!sidebar) {
       sidebar = el('div', { id: 'pin-sidebar', className: 'pin-sidebar' });
-      document.body.insertBefore(sidebar, document.body.firstChild);
+      const np = $('notepad-sidebar');
+      document.body.insertBefore(sidebar, np ? np.nextSibling : document.body.firstChild);
     }
-    const app = document.getElementById('app-wrapper') || document.querySelector('.app-wrapper');
-    if (app) app.style.marginLeft = '220px';
     const header = el('div', { className: 'pin-sidebar-header' });
     const toggleBtn = el('button', { type: 'button' });
     toggleBtn.textContent = pinPanelExpanded ? '−' : '+';
@@ -373,6 +459,7 @@
       body.appendChild(div);
     });
     sidebar.appendChild(body);
+    updateLeftSidebars();
   }
 
   function applyFilter() {
@@ -401,6 +488,7 @@
   function init() {
     setDefaultDates();
     initTheme();
+    renderNotepadSidebar();
     fetchData(false);
 
     const applyBtn = $('apply-filter');
@@ -466,6 +554,7 @@
   }
 
   function scrollTerminalToBottom(containerEl) {
+    if (!containerEl?.isConnected) return;
     const viewport = containerEl?.querySelector?.('.xterm-viewport');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }
@@ -491,6 +580,9 @@
     term.open(containerEl);
     let fitPending = null;
     const doFit = () => {
+      if (!containerEl?.isConnected) return;
+      const rect = containerEl.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return;
       if (fitAddon) { try { fitAddon.fit(); } catch (_) {} }
       scrollTerminalToBottomDebounced(containerEl);
     };
@@ -499,7 +591,7 @@
       fitPending = true;
       requestAnimationFrame(() => {
         doFit();
-        setTimeout(() => { fitPending = false; }, 100);
+        setTimeout(() => { fitPending = false; }, 200);
       });
     };
     setTimeout(doFit, 80);
@@ -532,7 +624,7 @@
     try {
       containerEl.innerHTML = '';
       containerEl.style.minHeight = '120px';
-      const term = new TerminalCls({ cursorBlink: true, theme: { background: '#1e1e1e', foreground: '#d4d4d4' } });
+      const term = new TerminalCls({ cursorBlink: false, theme: { background: '#1e1e1e', foreground: '#d4d4d4' } });
       fitAddon = initFitAddonAndOpen(term, containerEl);
       const cfg = getConfig();
       const url = cfg.wsUrl || 'ws://10.16.138.80:5111/api/agent/terminal';
@@ -541,13 +633,22 @@
       ws.onopen = () => {};
       ws.onmessage = (e) => {
         decodeMsgAsPromise(e.data).then((txt) => {
-          term?.write(txt);
+          try { if (term && containerEl?.isConnected) term.write(txt); } catch (_) {}
           scrollTerminalToBottomDebounced(containerEl);
         }).catch(() => {});
       };
       ws.onerror = () => {};
-      ws.onclose = () => {};
-      term.onData((data) => { if (ai.ws && ai.ws.readyState === WebSocket.OPEN) ai.ws.send(data); });
+      ws.onclose = () => {
+        try {
+          if (term && containerEl?.isConnected) {
+            term.write('\r\n\r\n\x1b[33m[Session ended. Click Start Session to reconnect.]\x1b[0m\r\n');
+            scrollTerminalToBottomDebounced(containerEl);
+          }
+        } catch (_) {}
+      };
+      term.onData((data) => {
+        try { if (ai.ws && ai.ws.readyState === WebSocket.OPEN) ai.ws.send(data); } catch (_) {}
+      });
       return ai;
     } catch (err) {
       console.error('AI Terminal error:', err);
@@ -563,7 +664,7 @@
     try {
       containerEl.innerHTML = '';
       containerEl.style.minHeight = '120px';
-      const term = new TerminalCls({ cursorBlink: true, theme: { background: '#1e1e1e', foreground: '#d4d4d4' } });
+      const term = new TerminalCls({ cursorBlink: false, theme: { background: '#1e1e1e', foreground: '#d4d4d4' } });
       fitAddon = initFitAddonAndOpen(term, containerEl);
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       let url = proto + '//' + location.host + '/ws/ssh';
@@ -572,7 +673,7 @@
       ws.onopen = () => {};
       ws.onmessage = (e) => {
         decodeMsgAsPromise(e.data).then((txt) => {
-          term?.write(txt);
+          try { if (term && containerEl?.isConnected) term.write(txt); } catch (_) {}
           scrollTerminalToBottomDebounced(containerEl);
         }).catch(() => {});
       };
@@ -631,13 +732,23 @@
     ws.onopen = () => {};
     ws.onmessage = (e) => {
       decodeMsgAsPromise(e.data).then((txt) => {
-        ai.term?.write(txt);
-        const container = ai.term?.element?.closest?.('.sn-debug-ai-container');
-        if (container) scrollTerminalToBottom(container);
+        try {
+          const c = ai.term?.element?.closest?.('.sn-debug-ai-container');
+          if (ai.term && c?.isConnected) ai.term.write(txt);
+          if (c) scrollTerminalToBottom(c);
+        } catch (_) {}
       }).catch(() => {});
     };
     ws.onerror = () => {};
-    ws.onclose = () => {};
+    ws.onclose = () => {
+      try {
+        const c = ai.term?.element?.closest?.('.sn-debug-ai-container');
+        if (ai.term && c?.isConnected) {
+          ai.term.write('\r\n\r\n\x1b[33m[Session ended. Click Start Session to reconnect.]\x1b[0m\r\n');
+          if (c) scrollTerminalToBottom(c);
+        }
+      } catch (_) {}
+    };
     ai.ws = ws;
   };
 
@@ -713,12 +824,12 @@
         el.innerHTML = entries.map((e) => {
           const sn = e.row_key ? escapeHtml(e.row_key) : '-';
           const p = (e.path || '').trim();
-          const path = p ? escapeHtml(p.length > 50 ? p.slice(0, 50) + '...' : p) : '';
-          return '<div class="upload-history-item" style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;font-size:0.8125rem;border-bottom:1px solid var(--color-border);">' +
-            '<span title="' + escapeAttr(e.filename) + '">' + escapeHtml(e.filename) + '</span>' +
-            '<span class="text-muted">' + escapeHtml(e.uploaded_at || '') + '</span>' +
-            (sn !== '-' ? '<span class="text-muted">SN:' + sn + '</span>' : '') +
-            (path ? '<span class="text-muted" title="' + escapeAttr(e.path || '') + '">' + path + '</span>' : '') +
+          const path = p ? escapeHtml(p) : '';
+          return '<div class="upload-history-item" style="display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem;padding:0.4rem 0;font-size:0.8125rem;border-bottom:1px solid var(--color-border);word-break:break-all;">' +
+            '<span style="flex-shrink:0;">' + escapeHtml(e.filename) + '</span>' +
+            '<span class="text-muted" style="flex-shrink:0;">' + escapeHtml(e.uploaded_at || '') + '</span>' +
+            (sn !== '-' ? '<span class="text-muted" style="flex-shrink:0;">SN:' + sn + '</span>' : '') +
+            (path ? '<span class="text-muted" style="min-width:0;overflow-wrap:break-word;">' + path + '</span>' : '') +
             '</div>';
         }).join('');
       })
@@ -747,7 +858,8 @@
     const panel = snDebugPanels.get(rowKey);
     if (!panel) return;
     [panel.ai, panel.ssh].forEach((x) => {
-      if (x?.fitAddon) { try { x.fitAddon.fit(); } catch (_) {} }
+      const el = x?.term?.element;
+      if (x?.fitAddon && el?.isConnected) { try { x.fitAddon.fit(); } catch (_) {} }
     });
   };
 

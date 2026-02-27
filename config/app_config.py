@@ -3,22 +3,24 @@
 
 import os
 
-try:
-    import pytz
-except ImportError:
-    pytz = None  # type: ignore
+from config.analytics_config import (
+    get_ca_tz,
+    get_extend_hours,
+    get_stations_order,
+    get_top_k_errors_default,
+)
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ANALYTICS_CACHE_DIR = os.path.join(APP_DIR, "analytics_cache")
 
-# SFC API: extend request range by N hours to avoid missing data
-EXTEND_HOURS = 2
+# SFC API: extend request range by N hours (from analytics_config)
+EXTEND_HOURS = get_extend_hours()
 
-# California timezone for date ranges
-CA_TZ = pytz.timezone("America/Los_Angeles") if pytz else None
+# California timezone for date ranges (from analytics_config)
+CA_TZ = get_ca_tz()
 
-# Station order for Test Flow Analysis (matches Bonepile_view)
-STATIONS_ORDER = ["FLA", "FLB", "AST", "FTS", "FCT", "RIN", "NVL"]
+# Station order for Test Flow Analysis (from analytics_config)
+STATIONS_ORDER = get_stations_order()
 
-# Error Stats: default Top K errors
-TOP_K_ERRORS_DEFAULT = 5
+# Error Stats: default Top K errors (from analytics_config)
+TOP_K_ERRORS_DEFAULT = get_top_k_errors_default()

@@ -11,6 +11,7 @@ import statistics
 from typing import Any, Dict, List, Optional, Tuple
 
 from config.app_config import STATIONS_ORDER
+from config.analytics_config import get_error_stats_p90, get_error_stats_ttc_buckets
 
 
 def _norm(s: Any) -> str:
@@ -260,11 +261,15 @@ def compute_station_instance_hotspots(fail_rows: List[dict]) -> List[dict]:
 
 
 def _ttc_bucket(minutes: float) -> str:
-    if minutes <= 5:
+    buckets = get_error_stats_ttc_buckets()
+    b0 = buckets[0] if len(buckets) >= 1 else 5
+    b1 = buckets[1] if len(buckets) >= 2 else 15
+    b2 = buckets[2] if len(buckets) >= 3 else 60
+    if minutes <= b0:
         return "<=5m"
-    if minutes <= 15:
+    if minutes <= b1:
         return "5-15m"
-    if minutes <= 60:
+    if minutes <= b2:
         return "15-60m"
     return ">60m"
 
@@ -289,7 +294,7 @@ def compute_ttc_overall(resolved_rows: List[dict], open_rows: List[dict]) -> dic
         "median_ttc_minutes": round(statistics.median(ttc_vals), 2) if ttc_vals else None,
         "mean_ttc_minutes": round(statistics.mean(ttc_vals), 2) if ttc_vals else None,
         "p90_ttc_minutes": round(
-            sorted(ttc_vals)[min(int(len(ttc_vals) * 0.9), len(ttc_vals) - 1)] if ttc_vals else 0,
+            sorted(ttc_vals)[min(int(len(ttc_vals) * get_error_stats_p90()), len(ttc_vals) - 1)] if ttc_vals else 0,
             2,
         ) if ttc_vals else None,
         "bucket_leq5m": buckets["<=5m"],

@@ -12,12 +12,12 @@ WS_TERMINAL_URL = os.environ.get(
 )
 UPLOAD_URL = os.environ.get(
     "UPLOAD_URL",
-    "http://10.16.138.80:5111/api/agent-uploads/upload",
+    "http://10.16.138.80:5111/api/agent/upload",
 )
 # AI server admin API (for purge uploads)
 AI_ADMIN_BASE_URL = os.environ.get("AI_ADMIN_BASE_URL", "http://10.16.138.80:5111").rstrip("/")
 # Form field name for file upload (e.g. "file", "files", "upload")
-UPLOAD_FIELD_NAME = os.environ.get("UPLOAD_FIELD_NAME", "files")
+UPLOAD_FIELD_NAME = os.environ.get("UPLOAD_FIELD_NAME", "file")
 
 # SSH to DHCP server (for terminal proxy)
 SSH_DHCP_HOST = "10.16.138.67"

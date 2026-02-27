@@ -1,0 +1,42 @@
+{
+  "pass_rules": {
+    "FLA": [],
+    "FLB": [],
+    "AST": [],
+    "FTS": [],
+    "FCT": [
+      "675-24109-0010-TS2",
+      "675-24109-0020-TS2",
+      "675-24109-1000-TS2"
+    ],
+    "RIN": [
+      "675-24109-0000-T2B",
+      "675-24109-0000-TS1",
+      "675-24109-0002-TS1"
+    ],
+    "NVL": [
+      "675-24109-0000-TS2",
+      "675-24109-0002-TS2"
+    ],
+    "unknown_station": "FCT"
+  },
+  "stations_order": [
+    "FLA",
+    "FLB",
+    "AST",
+    "FTS",
+    "FCT",
+    "RIN",
+    "NVL"
+  ],
+  "timezone": "America/Los_Angeles",
+  "extend_hours": 2,
+  "top_k_errors_default": 5,
+  "aggregation_default": "daily",
+  "error_stats_ttc_buckets": [
+    5,
+    15,
+    60
+  ],
+  "error_stats_p90": 0.9
+}

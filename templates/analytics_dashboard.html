@@ -563,6 +563,12 @@
     max-height: 85vh;
     overflow: auto;
   }
+  /* Pass Rules modal: scrollable so Apply button and all stations are reachable */
+  #pass-rules-modal .modal-content {
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
   .bp-card{
     background: var(--color-bg);
     border: 1.5px solid var(--color-border);
@@ -784,10 +790,15 @@
        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
        </svg> Apply Filter </button>
+      <button class="btn-ghost btn-mini" id="pass-rules-btn" type="button" title="Configure All Pass rules: station and part numbers">
+       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+       </svg> Pass Rules </button>
      </div>
     </div>
    </header>
    <main>
+    <div id="unassigned-pn-banner" class="mb-4 px-4 py-3 rounded-lg" style="display: none; background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text);"></div>
     <div id="section-test-analysis">
     <!-- KPI Cards -->
     <div class="kpi-grid mb-8 animate-in delay-2" id="kpi-row">
@@ -1002,11 +1013,11 @@
             <h3 class="text-lg font-semibold" style="color: var(--color-text);">Disposition Overview</h3>
             <div class="flex items-center gap-3">
               <span class="text-sm font-semibold" style="color: var(--color-muted);" id="range-note-dispo">-</span>
-              <button class="btn-ghost btn-mini" id="export-dispo-summary" type="button" title="Export Disposition Summary to CSV">
+              <button class="btn-ghost btn-mini" id="export-dispo-summary" type="button" title="Export Disposition SN List (Total) to Excel">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0l-3-3m3 3l3-3M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"></path>
                 </svg>
-                Export CSV
+                Export to Excel
               </button>
             </div>
           </div>
@@ -1456,6 +1467,27 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-overlay" id="pass-rules-modal">
+    <div class="modal-content">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xl font-bold" style="color: var(--color-text);">Pass Rules – All Pass by Station</h3>
+        <button class="w-9 h-9 rounded-lg flex items-center justify-center transition-colors" style="background: var(--color-bg);" id="close-pass-rules-modal" title="Close">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <p class="text-sm mb-4" style="color: var(--color-muted);">Assign part numbers to stations. SN is considered All Pass when it has RESULT=PASS at the assigned station for its part number. Unknown part numbers use <strong>unknown_station</strong>.</p>
+      <div id="pass-rules-container" class="space-y-4 mb-4">
+        <!-- Populated by JS -->
+      </div>
+      <div class="flex gap-3 justify-end">
+        <button class="btn-ghost" id="pass-rules-cancel" type="button">Cancel</button>
+        <button class="btn-primary" id="pass-rules-apply" type="button">Apply</button>
+      </div>
+    </div>
+  </div>
   <script>
    const defaultConfig = {
      dashboard_title: 'Analytics Dashboard',
@@ -1511,6 +1543,146 @@
      document.getElementById('err-top3-modal')?.classList.add('active');
    }
    function closeTop3ErrorsModal() { document.getElementById('err-top3-modal')?.classList.remove('active'); }
+
+   function openPassRulesModal() {
+     document.getElementById('pass-rules-modal').classList.add('active');
+     loadPassRulesForm();
+   }
+   function closePassRulesModal() { document.getElementById('pass-rules-modal').classList.remove('active'); }
+
+   const STATIONS_ORDER = ['FLA','FLB','AST','FTS','FCT','RIN','NVL'];
+   let lastUnassignedPartNumbers = [];
+   let lastUnassignedPartNumbersDetail = [];
+
+   async function loadPassRulesForm() {
+     const container = document.getElementById('pass-rules-container');
+     if (!container) return;
+     container.innerHTML = '<p style="color: var(--color-muted);">Loading...</p>';
+     try {
+       const res = await fetch('/api/analytics/pass-rules');
+       const data = await res.json();
+       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to load pass rules');
+       const pr = data.pass_rules || {};
+       const unknown = (pr.unknown_station || 'RIN').toString().trim().toUpperCase();
+       let html = '';
+       if (lastUnassignedPartNumbersDetail && lastUnassignedPartNumbersDetail.length > 0) {
+         html += `<div class="mb-4 p-3 rounded-lg border" id="pass-rules-unassigned-block" style="border-color: var(--color-primary); background: var(--color-bg);">`;
+         html += `<div class="text-sm font-semibold mb-1" style="color: var(--color-text);">Part numbers not yet assigned to a station</div>`;
+         html += `<p class="text-sm mb-2" style="color: var(--color-muted);">Pass count per station (to choose which station to assign).</p>`;
+         html += `<div class="overflow-x-auto"><table class="w-full text-sm border-collapse" style="color: var(--color-text);">`;
+         html += `<thead><tr><th class="text-left py-1 pr-2 font-semibold border-b" style="border-color: var(--color-border);">SKU</th>`;
+         STATIONS_ORDER.forEach(st => { html += `<th class="text-center py-1 px-1 font-semibold border-b" style="border-color: var(--color-border); min-width: 52px;">${st}</th>`; });
+         html += `</tr></thead><tbody id="pass-rules-unassigned-list">`;
+         lastUnassignedPartNumbersDetail.forEach(d => {
+           const pn = (d.part_number || '').toString().trim();
+           const stations = d.stations || {};
+           html += `<tr class="pass-rules-unassigned-li border-b" data-part-number="${escapeHtml(pn)}" style="border-color: var(--color-border);">`;
+           html += `<td class="py-1 pr-2 font-mono font-semibold">${escapeHtml(pn)}</td>`;
+           STATIONS_ORDER.forEach(st => {
+             const cell = stations[st];
+             const pass = cell && cell.pass != null ? cell.pass : 0;
+             html += `<td class="text-center py-1 px-1 font-mono">${pass === 0 ? '—' : pass}</td>`;
+           });
+           html += `</tr>`;
+         });
+         html += `</tbody></table></div></div>`;
+       }
+       html += `<div class="mb-4"><label class="block text-sm font-semibold mb-2" style="color: var(--color-text);">Unknown part number station</label>`;
+       html += `<select id="pass-rules-unknown-station" class="input-field" style="min-width: 120px;">`;
+       for (const st of STATIONS_ORDER) {
+         html += `<option value="${st}"${st === unknown ? ' selected' : ''}>${st}</option>`;
+       }
+       html += `</select></div>`;
+       for (const st of STATIONS_ORDER) {
+         const list = Array.isArray(pr[st]) ? pr[st] : [];
+         html += `<div class="border rounded-lg p-3" style="border-color: var(--color-border);">`;
+         html += `<div class="font-bold mb-2" style="color: var(--color-text);">${st}</div>`;
+         html += `<ul id="pass-rules-list-${st}" class="list-none space-y-1 mb-2">`;
+         for (const pn of list) {
+           const p = (pn || '').toString().trim();
+           if (!p) continue;
+           html += `<li class="flex items-center gap-2"><span class="font-mono flex-1">${escapeHtml(p)}</span><button type="button" class="pass-rules-remove text-sm" data-station="${st}" data-pn="${escapeHtml(p)}" title="Remove">Remove</button></li>`;
+         }
+         html += `</ul>`;
+         html += `<div class="flex gap-2"><input type="text" id="pass-rules-input-${st}" class="input-field flex-1" placeholder="Add part number"><button type="button" class="pass-rules-add btn-ghost btn-mini" data-station="${st}">Add</button></div>`;
+         html += `</div>`;
+       }
+       container.innerHTML = html;
+       container.querySelectorAll('.pass-rules-add').forEach(btn => {
+         btn.addEventListener('click', () => {
+           const st = btn.dataset.station;
+           const inp = document.getElementById(`pass-rules-input-${st}`);
+           const val = (inp?.value || '').trim();
+           if (!val) return;
+           const ul = document.getElementById(`pass-rules-list-${st}`);
+           if (ul) {
+             ul.insertAdjacentHTML('beforeend', `<li class="flex items-center gap-2"><span class="font-mono flex-1">${escapeHtml(val)}</span><button type="button" class="pass-rules-remove text-sm" data-station="${st}" data-pn="${escapeHtml(val)}" title="Remove">Remove</button></li>`);
+             inp.value = '';
+             removePartNumberFromUnassignedList(val);
+           }
+         });
+       });
+       container.querySelectorAll('.pass-rules-remove').forEach(btn => {
+         btn.addEventListener('click', () => btn.closest('li')?.remove());
+       });
+     } catch (e) {
+       container.innerHTML = `<p style="color: var(--color-danger);">${escapeHtml(String(e.message || e))}</p>`;
+     }
+   }
+
+   function escapeHtml(s) {
+     return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+   }
+
+   function removePartNumberFromUnassignedList(partNumber) {
+     const pn = (partNumber || '').toString().trim();
+     if (!pn) return;
+     const listEl = document.getElementById('pass-rules-unassigned-list');
+     const blockEl = document.getElementById('pass-rules-unassigned-block');
+     if (listEl) {
+       const items = listEl.querySelectorAll('.pass-rules-unassigned-li');
+       items.forEach(li => {
+         const dataPn = (li.getAttribute('data-part-number') || '').trim();
+         if (dataPn.toUpperCase() === pn.toUpperCase()) li.remove();
+       });
+       if (blockEl && listEl.children.length === 0) blockEl.style.display = 'none';
+     }
+     lastUnassignedPartNumbersDetail = (lastUnassignedPartNumbersDetail || []).filter(d => (d.part_number || '').toString().trim().toUpperCase() !== pn.toUpperCase());
+     lastUnassignedPartNumbers = lastUnassignedPartNumbersDetail.map(d => d.part_number || '');
+   }
+
+   function collectPassRulesFromForm() {
+     const pr = {};
+     pr.unknown_station = (document.getElementById('pass-rules-unknown-station')?.value || 'RIN').trim();
+     for (const st of STATIONS_ORDER) {
+       const ul = document.getElementById(`pass-rules-list-${st}`);
+       if (!ul) continue;
+       const items = ul.querySelectorAll('li span.font-mono');
+       const pns = [];
+       items.forEach(span => {
+         const v = (span?.textContent || '').trim();
+         if (v) pns.push(v);
+       });
+       pr[st] = pns;
+     }
+     return pr;
+   }
+
+   async function applyPassRules() {
+     const pr = collectPassRulesFromForm();
+     try {
+       const res = await fetch('/api/analytics/pass-rules', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ pass_rules: pr })
+       });
+       const data = await res.json();
+       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to save');
+       window.location.reload();
+     } catch (e) {
+       alert('Error: ' + (e.message || e));
+     }
+   }
 
    // Loading overlay
    function setLoading(active, text) {
@@ -2594,9 +2766,10 @@
     return m ? m[1] : null;
   }
 
-  async function downloadCsv(exportKind) {
+  async function downloadCsv(exportKind, aggregationOverride) {
     const payload = getRangePayload();
-    const body = { ...payload, aggregation, export: exportKind };
+    const agg = (aggregationOverride != null ? aggregationOverride : aggregation) || 'daily';
+    const body = { ...payload, aggregation: agg, export: exportKind };
     if (exportKind === 'error_stats') body.top_k_errors = topKErrors;
     setLoading(true, 'Preparing export...');
     setApiStatus(`Exporting ${exportKind || 'csv'}...`, 'busy');
@@ -2630,14 +2803,15 @@
     setLoading(false);
   }
 
-  async function downloadExcel(exportKind) {
+  async function downloadExcel(exportKind, aggregationOverride) {
     const payload = getRangePayload();
+    const agg = (aggregationOverride != null ? aggregationOverride : aggregation) || 'daily';
     setLoading(true, 'Preparing Excel export...');
     setApiStatus(`Exporting ${exportKind} to Excel...`, 'busy');
     const res = await fetch('/api/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, aggregation, export: exportKind, format: 'xlsx' })
+      body: JSON.stringify({ ...payload, aggregation: agg, export: exportKind, format: 'xlsx' })
     });
     if (!res.ok) {
       let msg = `export failed (${res.status})`;
@@ -2709,8 +2883,23 @@
      renderSkuRows(data.sku_rows);
      renderBreakdown(data.breakdown_rows);
      renderTestFlow(data.test_flow);
+     lastUnassignedPartNumbersDetail = data.unassigned_part_numbers_detail || [];
+     lastUnassignedPartNumbers = lastUnassignedPartNumbersDetail.map(d => d.part_number || '');
+     showUnassignedPnBanner(lastUnassignedPartNumbers);
      setApiStatus('Ready', 'ok');
      setLoading(false);
+   }
+
+   function showUnassignedPnBanner(unassigned) {
+     const el = document.getElementById('unassigned-pn-banner');
+     if (!el) return;
+     if (!unassigned || unassigned.length === 0) {
+       el.style.display = 'none';
+       return;
+     }
+     el.innerHTML = 'Part number(s) not assigned: <strong>' + (unassigned.map(s => escapeHtml(s)).join(', ')) + '</strong>. Please assign station in Pass Rules. <button type="button" class="pass-rules-open-link underline font-semibold ml-2">Pass Rules</button>';
+     el.style.display = 'block';
+     el.querySelector('.pass-rules-open-link')?.addEventListener('click', openPassRulesModal);
    }
 
    function fmtMaybe(ms) {
@@ -2841,10 +3030,15 @@
    try {
      safeAddListener('theme-toggle', 'click', toggleTheme);
      safeAddListener('upload-btn', 'click', openModal);
-     safeAddListener('close-modal', 'click', closeModal);
-     safeAddListener('upload-modal', 'click', (e) => { if (e.target.id === 'upload-modal') closeModal(); });
-     safeAddListener('close-sn-modal', 'click', closeSnModal);
-     safeAddListener('sn-modal', 'click', (e) => { if (e.target.id === 'sn-modal') closeSnModal(); });
+   safeAddListener('close-modal', 'click', closeModal);
+   safeAddListener('upload-modal', 'click', (e) => { if (e.target.id === 'upload-modal') closeModal(); });
+   safeAddListener('close-sn-modal', 'click', closeSnModal);
+   safeAddListener('sn-modal', 'click', (e) => { if (e.target.id === 'sn-modal') closeSnModal(); });
+   safeAddListener('pass-rules-btn', 'click', openPassRulesModal);
+   safeAddListener('close-pass-rules-modal', 'click', closePassRulesModal);
+   safeAddListener('pass-rules-modal', 'click', (e) => { if (e.target.id === 'pass-rules-modal') closePassRulesModal(); });
+   safeAddListener('pass-rules-cancel', 'click', closePassRulesModal);
+   safeAddListener('pass-rules-apply', 'click', () => applyPassRules().catch(err => alert('Error: ' + (err.message || err))));
    } catch (e) {
      console.error('Error setting main event listeners:', e);
    }
@@ -2988,7 +3182,7 @@
     });
   });
   safeAddListener('export-dispo-summary', 'click', () => {
-    downloadCsv('disposition_summary').catch(err => {
+    downloadExcel('disposition_summary', dispoAggregation).catch(err => {
       console.error(err);
       setLoading(false);
       alert('Error: ' + err.message);
@@ -3003,7 +3197,7 @@
   });
 
   safeAddListener('export-dispo-by-sku-excel', 'click', () => {
-    downloadExcel('disposition_by_sku').catch(err => {
+    downloadExcel('disposition_by_sku', dispoAggregation).catch(err => {
       console.error(err);
       setLoading(false);
       alert('Error: ' + err.message);

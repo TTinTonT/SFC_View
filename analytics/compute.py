@@ -5,10 +5,12 @@ breakdown_rows, test_flow.
 """
 
 import re
+from collections import Counter
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from config.app_config import CA_TZ, STATIONS_ORDER
+from config.analytics_config import get_unassigned_part_numbers
 from analytics.pass_fail import is_sn_passed
 from analytics.bp_check import add_bp_to_rows
 
@@ -214,6 +216,41 @@ def compute_all(
 
     test_flow = {"stations": stations, "totals": totals, "rows": test_flow_rows}
 
+    observed_pns = {pn for pn in sn_latest_part.values() if pn and (pn or "").strip().upper() != "UNKNOWN"}
+    unassigned_part_numbers = get_unassigned_part_numbers(observed_pns)
+
+    unassigned_part_numbers_detail: List[Dict[str, Any]] = []
+    for pn in unassigned_part_numbers:
+        pn_upper = (pn or "").strip().upper()
+        trays = [sn for sn in sn_tests if (sn_latest_part.get(sn) or "").strip().upper() == pn_upper]
+        tray_count = len(trays)
+        pass_station_counts: Counter = Counter()
+        for sn in trays:
+            if not sn_pass.get(sn):
+                continue
+            for r in sn_tests[sn]:
+                if (r.get("result") or "").strip().upper() == "PASS":
+                    st = (r.get("station") or "").strip().upper()
+                    if st:
+                        pass_station_counts[st] += 1
+                    break
+        pass_station_summary = ", ".join(f"{st}: {c}" for st, c in pass_station_counts.most_common()) if pass_station_counts else ""
+        stations_cells: Dict[str, Dict[str, int]] = {}
+        if pn in sku_sets:
+            for st in stations:
+                total_at_st = len(sku_sets[pn][st]["pass"]) + len(sku_sets[pn][st]["fail"])
+                pass_at_st = len(sku_sets[pn][st]["pass"])
+                stations_cells[st] = {"total": total_at_st, "pass": pass_at_st}
+        else:
+            for st in stations:
+                stations_cells[st] = {"total": 0, "pass": 0}
+        unassigned_part_numbers_detail.append({
+            "part_number": pn,
+            "tray_count": tray_count,
+            "pass_station_summary": pass_station_summary,
+            "stations": stations_cells,
+        })
+
     return {
         "summary": summary,
         "tray_summary": tray_summary,
@@ -221,6 +258,8 @@ def compute_all(
         "breakdown_rows": breakdown_rows,
         "test_flow": test_flow,
         "rows": rows,
+        "unassigned_part_numbers": unassigned_part_numbers,
+        "unassigned_part_numbers_detail": unassigned_part_numbers_detail,
         "_sn_tests": sn_tests,
         "_sn_pass": sn_pass,
         "_sn_is_bp": sn_is_bp,
@@ -232,6 +271,8 @@ def compute_all(
 def _empty_result(aggregation: str) -> Dict[str, Any]:
     return {
         "summary": {"total": 0, "pass": 0, "fail": 0},
+        "unassigned_part_numbers": [],
+        "unassigned_part_numbers_detail": [],
         "tray_summary": {
             "tested": {"bp": 0, "fresh": 0, "total": 0},
             "pass": {"bp": 0, "fresh": 0, "total": 0},

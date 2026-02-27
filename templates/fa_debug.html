@@ -223,7 +223,20 @@
   .sn-debug-terminal .xterm { width: 100% !important; flex: 1 !important; min-height: 0; }
   .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; }
   /* Pin sidebar */
-  .pin-sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 220px; background: var(--color-surface); border-right: 1px solid var(--color-border); z-index: 90; overflow-y: auto; box-shadow: 2px 0 8px rgba(0,0,0,0.1); }
+  .notepad-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 91; background: var(--color-surface); border-right: 1px solid var(--color-border); box-shadow: 2px 0 8px rgba(0,0,0,0.1); transition: width 0.2s ease; overflow: hidden; display: flex; flex-direction: column; }
+  .notepad-sidebar.collapsed { width: 40px; }
+  .notepad-sidebar.expanded { width: 260px; }
+  .notepad-sidebar-toggle { width: 100%; padding: 0.5rem; background: var(--color-bg); border: none; border-bottom: 1px solid var(--color-border); cursor: pointer; font-size: 0.75rem; color: var(--color-muted); display: flex; align-items: center; justify-content: center; min-height: 40px; }
+  .notepad-sidebar-toggle:hover { background: var(--color-hover); color: var(--color-primary); }
+  .notepad-sidebar.expanded .notepad-sidebar-toggle { justify-content: space-between; padding: 0.4rem 0.6rem; }
+  .notepad-sidebar.collapsed .notepad-sidebar-toggle span { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 0.7rem; }
+  .notepad-sidebar-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0.5rem; }
+  .notepad-sidebar-body .notepad-toolbar { display: flex; gap: 0.35rem; margin-bottom: 0.35rem; }
+  .notepad-sidebar-body .notepad-toolbar button { background: var(--color-bg); color: var(--color-muted); border: 1px solid var(--color-border); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; cursor: pointer; }
+  .notepad-sidebar-body .notepad-toolbar button:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .notepad-sidebar-body .notepad-textarea { flex: 1; min-height: 120px; padding: 0.5rem; font-family: inherit; font-size: 0.8rem; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 6px; resize: none; outline: none; }
+  .notepad-sidebar-body .notepad-textarea::placeholder { color: var(--color-muted); }
+  .pin-sidebar { position: fixed; top: 0; bottom: 0; width: 220px; background: var(--color-surface); border-right: 1px solid var(--color-border); z-index: 90; overflow-y: auto; box-shadow: 2px 0 8px rgba(0,0,0,0.1); }
   .pin-sidebar-header { padding: 0.75rem; font-weight: 700; font-size: 0.875rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.5rem; }
   .pin-sidebar-body { padding: 0.25rem 0; }
   .pin-sidebar-item { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
@@ -339,7 +352,7 @@
           <button type="button" class="btn-ghost btn-mini" id="btn-refresh-upload-history">Refresh</button>
           <button type="button" class="btn-ghost btn-mini" id="btn-clear-upload-history">Clear History (local)</button>
         </div>
-        <div id="upload-history-list" style="max-height: 200px; overflow-y: auto; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem;">
+        <div id="upload-history-list" style="max-height: 200px; overflow-y: auto; overflow-x: auto; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem;">
           <div class="text-muted" style="font-size: 0.875rem;">Loading...</div>
         </div>
       </div>
@@ -389,6 +402,7 @@
         <div>
           <h3 id="modal-drill-title" class="text-xl font-bold" style="color: var(--color-text);">SN List</h3>
           <div id="modal-drill-subtitle" class="text-sm mt-1" style="color: var(--color-muted);">-</div>
+          <div id="modal-drill-room" class="text-sm mt-1" style="color: var(--color-primary); font-weight: 600;"></div>
         </div>
         <button class="w-9 h-9 rounded-lg flex items-center justify-center" style="background: var(--color-bg);" id="modal-close" title="Close">
           <svg class="w-5 h-5" style="color: var(--color-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -406,12 +420,13 @@
               <th>LAST STATION</th>
               <th>TEST TIME</th>
               <th>BP</th>
+              <th>ROOM</th>
               <th>FAILURE MSG</th>
               <th>LOG PATH</th>
             </tr>
           </thead>
           <tbody id="modal-drill-tbody">
-            <tr><td colspan="8" style="color: var(--color-muted);">No data</td></tr>
+            <tr><td colspan="9" style="color: var(--color-muted);">No data</td></tr>
           </tbody>
         </table>
       </div>
