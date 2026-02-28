@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Bonepile check: wrap load_bp_sn_set and add is_bonepile to rows."""
+"""Add is_bonepile to rows using BP SN cache."""
 
 from typing import List, Set
 

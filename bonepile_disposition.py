@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Bonepile upload and disposition logic (copied from Bonepile_view/analytics_server.py).
-Handles NV/IGS workbook upload, parsing, and disposition stats computation.
+Bonepile: NV/IGS workbook upload, parse, BP SN cache, disposition stats and SN list.
 """
 from __future__ import annotations
 
@@ -25,20 +24,28 @@ try:
 except Exception:  # pragma: no cover
     openpyxl = None
 
-# Config
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-ANALYTICS_CACHE_DIR = os.path.join(APP_DIR, "analytics_cache")
+from config.app_config import ANALYTICS_CACHE_DIR
+from config.bonepile_config import BONEPILE_IGNORED_SHEETS, BP_SN_CACHE_PATH
+
 DB_PATH = os.path.join(ANALYTICS_CACHE_DIR, "analytics.db")
 STATE_PATH = os.path.join(ANALYTICS_CACHE_DIR, "raw_state.json")
-
-# Uploaded NV/IGS bonepile workbook (single file; replaced on each upload)
 BONEPILE_UPLOAD_PATH = os.path.join(ANALYTICS_CACHE_DIR, "bonepile_upload.xlsx")
-# Cache of BP SNs from NV disposition sheets: only add, never delete (used for is_bonepile)
-BP_SN_CACHE_PATH = os.path.join(ANALYTICS_CACHE_DIR, "bp_sn_cache.json")
-from config.bonepile_config import BONEPILE_IGNORED_SHEETS
+
 BONEPILE_REQUIRED_FIELDS = ["sn", "nv_disposition", "status", "pic", "igs_action", "igs_status"]
 
-CA_TZ = pytz.timezone("America/Los_Angeles")
+
+def _get_ca_tz():
+    """California timezone for disposition; fallback if config returns None."""
+    from config.analytics_config import get_ca_tz
+    tz = get_ca_tz()
+    if tz is not None:
+        return tz
+    if pytz is not None:
+        return pytz.timezone("America/Los_Angeles")
+    return None
+
+
+CA_TZ = _get_ca_tz()
 
 # BP SN cache: load set (read-only) and merge new SNs (never delete)
 _bp_sn_cache_lock = threading.Lock()
@@ -120,6 +127,27 @@ def invalidate_bp_sn_cache() -> None:
     global _bp_sn_cache_set
     with _bp_sn_cache_lock:
         _bp_sn_cache_set = None
+
+
+def clear_disposition_cache() -> None:
+    """
+    Clear all disposition/bonepile caches: BP SN cache file, raw state,
+    uploaded workbook, and bonepile_entries table. Call ensure_db_ready() first.
+    """
+    invalidate_bp_sn_cache()
+    if os.path.isfile(BP_SN_CACHE_PATH):
+        os.remove(BP_SN_CACHE_PATH)
+    if os.path.isfile(STATE_PATH):
+        os.remove(STATE_PATH)
+    if os.path.isfile(BONEPILE_UPLOAD_PATH):
+        os.remove(BONEPILE_UPLOAD_PATH)
+    ensure_db_ready()
+    conn = connect_db()
+    try:
+        conn.execute("DELETE FROM bonepile_entries")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 @dataclass

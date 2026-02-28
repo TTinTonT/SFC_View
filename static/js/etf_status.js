@@ -14,6 +14,7 @@
   const pinnedSns = new Set();
   const roomCache = {};
   let lastDisplayRows = [];
+  let sfcSnMap = {};
 
   const tbody = document.getElementById("etf-tbody");
   const dutCountEl = document.getElementById("dut-count");
@@ -29,6 +30,43 @@
     return div.innerHTML;
   }
 
+  /** Parse SFC last end time "YYYY/MM/DD HH:mm:ss" to Date (local). Returns null if invalid. */
+  function parseLastEndTime(s) {
+    if (!s || typeof s !== "string") return null;
+    const m = s.trim().match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  }
+
+  /** Format seconds to "Xd Xh Xm Xs", e.g. 2d 3h 5m 10s. */
+  function formatDuration(seconds) {
+    if (seconds < 0 || !Number.isFinite(seconds)) return "-";
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const sec = Math.floor(seconds % 60);
+    const parts = [];
+    if (d > 0) parts.push(d + "d");
+    if (h > 0) parts.push(h + "h");
+    if (m > 0) parts.push(m + "m");
+    parts.push(sec + "s");
+    return parts.join(" ");
+  }
+
+  function updateLastEndDurations() {
+    const now = Date.now();
+    document.querySelectorAll(".last-end-cell").forEach((td) => {
+      const raw = td.dataset.lastEnd;
+      const date = parseLastEndTime(raw);
+      if (!date) {
+        td.textContent = td.dataset.lastEnd ? "-" : "-";
+        return;
+      }
+      const sec = (now - date.getTime()) / 1000;
+      td.textContent = formatDuration(sec);
+    });
+  }
+
   function matchFilter(row) {
     if (!filterQuery || filterQuery.trim() === "") return true;
     const q = filterQuery.trim().toLowerCase();
@@ -38,7 +76,13 @@
     const bmcIp = (row.bmc_ip || "").toLowerCase();
     const sysIp = (row.sys_ip || "").toLowerCase();
     const sysMac = (row.sys_mac || "").toLowerCase();
-    return sn.includes(q) || pn.includes(q) || bmcMac.includes(q) || bmcIp.includes(q) || sysIp.includes(q) || sysMac.includes(q);
+    const sfc = sfcSnMap[row.sn] || {};
+    const fixture = (sfc.fixture_no || "").toLowerCase();
+    const slot = (sfc.slot_no || "").toLowerCase();
+    const status = (sfc.status || "").toLowerCase();
+    const sfcRemark = (sfc.remark || "").toLowerCase();
+    return sn.includes(q) || pn.includes(q) || bmcMac.includes(q) || bmcIp.includes(q) || sysIp.includes(q) || sysMac.includes(q) ||
+      fixture.includes(q) || slot.includes(q) || status.includes(q) || sfcRemark.includes(q);
   }
 
   function closeAllMenus() {
@@ -87,7 +131,7 @@
 
     if (displayRows.length === 0 && expandedPanels.size === 0) {
       const msg = isSearchMode && searchInFlight ? "Searching..." : "No DUTs";
-      tbody.innerHTML = '<tr><td colspan="8" style="color: var(--color-muted); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
+      tbody.innerHTML = '<tr><td colspan="9" style="color: var(--color-muted); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
       return;
     }
 
@@ -115,7 +159,12 @@
       const snDisplay = r.sn || "-";
       const action = expandedPanels.get(rowKey);
       const isPinned = pinnedSns.has(rowKey);
-      const roomLabel = (r.room && r.ssh_host) ? escapeHtml(r.room) + " (" + escapeHtml(r.ssh_host) + ")" : "-";
+      const sfc = sfcSnMap[r.sn] || {};
+      const sfcSlot = escapeHtml(sfc.slot_no || "-");
+      const rawLastEnd = (sfc.last_end_time || "").trim();
+      const endDate = rawLastEnd ? parseLastEndTime(rawLastEnd) : null;
+      const lastEndDisplay = endDate ? formatDuration((Date.now() - endDate.getTime()) / 1000) : "-";
+      const sfcRemarkVal = escapeHtml(sfc.remark || "-");
 
       htmlParts.push(`<tr data-sn="${escapeHtml(r.sn)}" data-row-key="${escapeHtml(rowKey)}">
         <td>
@@ -134,15 +183,16 @@
         <td>${escapeHtml(r.bmc_ip)}</td>
         <td>${escapeHtml(r.sys_ip)}</td>
         <td>${escapeHtml(r.sys_mac || "-")}</td>
-        <td class="room-cell" style="font-size:0.8125rem;color:var(--color-muted);">${roomLabel}</td>
-        <td class="remark-cell"><input type="text" class="remark-input" data-row-key="${escapeHtml(rowKey)}" value="${escapeHtml(r.remark || "")}" placeholder="Add note..."></td>
+        <td>${sfcSlot}</td>
+        <td class="last-end-cell" data-last-end="${escapeHtml(rawLastEnd)}">${lastEndDisplay}</td>
+        <td>${sfcRemarkVal}</td>
       </tr>`);
 
       if (action && !savedPanels.has(rowKey)) {
         const showAi = action === "ai" || action === "both";
         const showSsh = action === "term" || action === "both";
         htmlParts.push(`<tr class="sn-debug-row" data-row-key="${escapeHtml(rowKey)}">
-          <td colspan="8" class="sn-debug-panel" data-row-key="${escapeHtml(rowKey)}">
+          <td colspan="9" class="sn-debug-panel" data-row-key="${escapeHtml(rowKey)}">
             <div class="sn-debug-panel-inner">
               <div class="sn-debug-header">
                 <span class="sn-debug-title">${escapeHtml(snDisplay)} – ${action === "ai" ? "AI Debug" : action === "term" ? "Terminal Debug" : "AI + Terminal"}</span>
@@ -164,7 +214,7 @@
       const snDisplay = panelRowKeyToSn.get(rowKey) || rowKey;
       const action = expandedPanels.get(rowKey);
       htmlParts.push(`<tr class="sn-disconnected-row" data-row-key="${escapeHtml(rowKey)}">
-        <td colspan="8" style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; color: var(--color-text); font-size: 0.9rem;">
+        <td colspan="9" style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; color: var(--color-text); font-size: 0.9rem;">
           <span style="font-weight: 600;">SN: ${escapeHtml(snDisplay)}</span> — Tray disconnected / cannot ping. Terminal output preserved. Close when done.
         </td>
       </tr>`);
@@ -197,13 +247,6 @@
       }
       const placeholderRow = [...tbody.querySelectorAll("tr.sn-disconnected-row")].find((tr) => tr.dataset.rowKey === rowKey);
       if (placeholderRow) placeholderRow.after(saved);
-    });
-
-    tbody.querySelectorAll(".remark-input").forEach((input) => {
-      input.addEventListener("blur", () => saveRemark(input));
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") input.blur();
-      });
     });
 
     tbody.querySelectorAll(".sn-btn").forEach((btn) => {
@@ -311,30 +354,18 @@
     });
   }
 
-  function saveRemark(input) {
-    const rowKey = input.dataset.rowKey || "";
-    const remark = (input.value || "").trim();
-    const row = lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === rowKey);
-    const room = (row && row.room) ? row.room : currentRoom;
-    fetch("/api/etf/remark", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ room, sn: rowKey, remark }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.ok && row) row.remark = remark;
-      })
-      .catch((err) => console.warn("Remark save failed:", err));
-  }
-
   function fetchData(isRescan) {
     const url = isRescan ? `/api/etf/reset?room=${currentRoom}` : `/api/etf/data?room=${currentRoom}`;
     const opts = isRescan ? { method: "POST" } : {};
     if (isRescan) btnRescan.disabled = true;
-    fetch(url, opts)
-      .then((res) => res.json())
-      .then((data) => {
+    Promise.all([
+      fetch(url, opts).then((res) => res.json()),
+      fetch("/api/sfc/tray-status")
+        .then((res) => res.json().then((data) => ({ ok: data.ok && res.ok, sn_map: data.sn_map || {} })))
+        .catch(() => ({ ok: false, sn_map: {} })),
+    ])
+      .then(([data, sfcData]) => {
+        sfcSnMap = (sfcData.ok && sfcData.sn_map) ? sfcData.sn_map : {};
         if (data.ok && Array.isArray(data.rows)) {
           roomCache[currentRoom] = { rows: data.rows, last_updated: data.last_updated || "-" };
           const rowsJson = JSON.stringify(data.rows.map((r) => (r.sn || "") + (r.pn || "") + (r.bmc_ip || "")));
@@ -355,12 +386,12 @@
             nextUpdateEl.textContent = nextUpdateSec + "s";
           }, 1000);
         } else if (data.error) {
-          tbody.innerHTML = '<tr><td colspan="8" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(data.error) + "</td></tr>";
+          tbody.innerHTML = '<tr><td colspan="13" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(data.error) + "</td></tr>";
         }
       })
       .catch((err) => {
         const msg = (err && err.message && err.message.includes('fetch')) ? "Cannot connect to server. Check if backend is running (python app.py)" : String(err);
-        tbody.innerHTML = '<tr><td colspan="8" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
+        tbody.innerHTML = '<tr><td colspan="13" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
       })
       .finally(() => {
         if (isRescan) btnRescan.disabled = false;
@@ -433,7 +464,7 @@
         renderTable(cached.rows);
         lastUpdatedEl.textContent = cached.last_updated || "-";
       } else {
-        tbody.innerHTML = '<tr><td colspan="8" style="color: var(--color-muted); text-align: center; padding: 2rem;">Loading...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="color: var(--color-muted); text-align: center; padding: 2rem;">Loading...</td></tr>';
       }
       fetchData(false);
       schedulePoll();
@@ -442,4 +473,7 @@
 
   fetchData(false);
   schedulePoll();
+
+  updateLastEndDurations();
+  setInterval(updateLastEndDurations, 1000);
 })();

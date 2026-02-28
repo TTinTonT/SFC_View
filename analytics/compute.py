@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Compute analytics from SFC rows: summary, tray_summary, sku_rows,
-breakdown_rows, test_flow.
-"""
+"""Compute analytics from SFC rows: summary, tray_summary, sku_rows, breakdown_rows, test_flow."""
 
 import re
 from collections import Counter

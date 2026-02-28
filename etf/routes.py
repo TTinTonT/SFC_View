@@ -9,14 +9,14 @@ import threading
 from datetime import datetime
 
 import paramiko
+import requests
 
 from config.app_config import ANALYTICS_CACHE_DIR
-from config.etf_config import ROOMS
+from config.etf_config import ROOMS, ETF_POLL_INTERVAL_SEC, SFC_LEVEL_GRADE, SFC_TRAY_STATUS_URL
 from flask import Blueprint, jsonify, render_template, request
 
 bp = Blueprint("etf", __name__, url_prefix="", template_folder="../templates")
 
-ETF_POLL_INTERVAL_SEC = 60
 _cache_lock = threading.Lock()
 _cache: dict = {}
 _remarks_path = os.path.join(ANALYTICS_CACHE_DIR, "etf_remarks.json")
@@ -254,6 +254,44 @@ def _maybe_start_background():
         _ensure_background_poller()
     except Exception:
         pass
+
+
+@bp.route("/api/sfc/tray-status")
+def api_sfc_tray_status():
+    """Proxy SFC Test_Fixture_Status API; return sn_map for frontend merge. On SFC failure returns 200 with ok=False so UI still loads."""
+    try:
+        r = requests.post(
+            SFC_TRAY_STATUS_URL,
+            json={"Level_Grade": SFC_LEVEL_GRADE},
+            timeout=15,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as e:
+        return jsonify({"ok": False, "error": str(e), "sn_map": {}})
+    except (ValueError, TypeError) as e:
+        return jsonify({"ok": False, "error": f"Invalid response: {e}", "sn_map": {}})
+
+    raw_list = data.get("DATA") if isinstance(data, dict) else None
+    if not isinstance(raw_list, list):
+        return jsonify({"ok": True, "sn_map": {}})
+
+    sn_map = {}
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        sn = (item.get("Serial_Number") or "").strip()
+        if not sn:
+            continue
+        if sn not in sn_map:
+            sn_map[sn] = {
+                "fixture_no": (item.get("Fixture_No") or "").strip() or None,
+                "slot_no": (item.get("Slot_No") or "").strip() or None,
+                "status": (item.get("Status") or "").strip() or None,
+                "last_end_time": (item.get("Last_End_Time") or "").strip() or None,
+                "remark": (item.get("Remark") or "").strip() or None,
+            }
+    return jsonify({"ok": True, "sn_map": sn_map})
 
 
 @bp.route("/api/etf/data")

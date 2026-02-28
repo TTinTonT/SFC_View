@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Failure-focused error statistics for Tray testing flow.
-Compute metrics A-G: fail by station, top K errors, station×error matrix,
-station instance hotspots, TTC overall/by station/by error.
-"""
+"""Error stats: fail by station, top K errors, station×error matrix, TTC buckets."""
 from __future__ import annotations
 
 import hashlib

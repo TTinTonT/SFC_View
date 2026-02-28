@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Central analytics configuration. Loads from analytics_config.json.
-Provides getters and setters for pass_rules (read/write file).
-"""
+"""Analytics config: load/save analytics_config.json, pass_rules, stations_order, timezone, defaults."""
 
 import json
 import os

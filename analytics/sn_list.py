@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Compute SN list for drill-down modal.
-Uses pre-computed result from compute_all.
-"""
+"""SN list drill-down from compute_all result."""
 
 import re
 from datetime import date, datetime, timedelta

@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
-"""ETF Status config: per-room SSH and script paths."""
+"""ETF Status config: per-room SSH, script paths, poll interval."""
 
 import os
 
 from config.debug_config import SSH_DHCP_HOST, SSH_DHCP_PASSWORD, SSH_DHCP_USER
 
-# Per-room config: host, user, pass, script_path, state_dir
+ETF_POLL_INTERVAL_SEC = int(os.environ.get("ETF_POLL_INTERVAL_SEC", "60"))
+
+SFC_TRAY_STATUS_URL = os.environ.get(
+    "SFC_TRAY_STATUS_URL",
+    "http://10.16.137.115/SFCAPI/SFC/Test_Fixture_Status",
+).rstrip("/")
+
+SFC_LEVEL_GRADE = os.environ.get("SFC_LEVEL_GRADE", "L10")
+
 ROOMS = {
     "etf": {
         "ssh_host": os.environ.get("ETF_SSH_HOST", SSH_DHCP_HOST),

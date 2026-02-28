@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-SFC API client: login (get session) and fetch fail_result_new.jsp HTML.
-Session is cached; re-login if expired (~30 min) or on auth failure.
-"""
+"""SFC API: session login, fetch fail_result HTML. Session cached; re-login on expiry or auth failure."""
 from __future__ import annotations
 
 import os
@@ -13,22 +10,21 @@ from typing import Optional, Tuple
 
 import requests
 
-from config.app_config import EXTEND_HOURS
+from config.app_config import (
+    EXTEND_HOURS,
+    SFC_BASE_URL,
+    SFC_GROUP_NAME,
+    SFC_PWD,
+    SFC_SESSION_TTL_SECONDS,
+    SFC_USER,
+)
 
-SFC_BASE_URL = os.environ.get("SFC_BASE_URL", "http://10.16.137.110")
 LOGIN_URL = f"{SFC_BASE_URL}/System/Login.jsp"
 FAIL_RESULT_URL = f"{SFC_BASE_URL}/L10_Report/Manufacture/fail_result_new.jsp"
 
-SFC_USER = os.environ.get("SFC_USER", "SFC")
-SFC_PWD = os.environ.get("SFC_PWD", "EPD2TJW")
-
-GROUP_NAME = "'AST','FCT','FLA','FLB','FLC','FTS','IOT','NVL','PRET','RIN'"
-
-# Session cache
 _session_lock = threading.Lock()
 _cached_session: Optional[requests.Session] = None
 _session_obtained_at: float = 0
-SESSION_TTL_SECONDS = 30 * 60  # 30 minutes
 
 
 def _login(session: Optional[requests.Session] = None) -> Tuple[bool, requests.Session]:
@@ -53,7 +49,7 @@ def _get_session(force_new: bool = False) -> Optional[requests.Session]:
     global _cached_session, _session_obtained_at
     with _session_lock:
         now = time.time()
-        if force_new or _cached_session is None or (now - _session_obtained_at) > SESSION_TTL_SECONDS:
+        if force_new or _cached_session is None or (now - _session_obtained_at) > SFC_SESSION_TTL_SECONDS:
             ok, sess = _login()
             if ok:
                 _cached_session = sess
@@ -79,7 +75,7 @@ def _fetch_fail_result_html(
         "ToTime": to_time,
         "ModelName": "ALL",
         "MONumber": "",
-        "GroupName": GROUP_NAME,
+        "GroupName": SFC_GROUP_NAME,
         "TestResult": "ALL",
         "SerialNumber": "",
         "StationID": "",

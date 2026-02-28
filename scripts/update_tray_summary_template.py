@@ -14,8 +14,9 @@ except ImportError:
     print("openpyxl required: pip install openpyxl")
     sys.exit(1)
 
-APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEMPLATE_PATH = os.path.join(APP_DIR, "templates", "Tray_Summary_Template.xlsx")
+from config.app_config import TRAY_SUMMARY_TEMPLATE_PATH
+
+TEMPLATE_PATH = TRAY_SUMMARY_TEMPLATE_PATH
 
 SN_HEADERS = ["SN", "BP", "RESULT", "PART_NUMBER", "LAST_STATION", "LAST_TEST_TIME", "ERROR_CODE", "FAILURE_MSG"]
 

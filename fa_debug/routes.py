@@ -8,12 +8,10 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
 
-from analytics.compute import compute_all
+from analytics.service import run_analytics_query
 from config.app_config import ANALYTICS_CACHE_DIR
 from config.debug_config import LOOKBACK_HOURS, POLL_INTERVAL_SEC
 from fa_debug.logic import prepare_debug_rows
-from sfc.client import request_fail_result
-from sfc.parser import parse_fail_result_html
 
 bp = Blueprint("fa_debug", __name__, url_prefix="", template_folder="../templates")
 
@@ -43,11 +41,10 @@ def _parse_dt(s, is_end=False):
 
 
 def _fetch_debug_data(user_start, user_end):
-    ok, html = request_fail_result(user_start, user_end)
-    if not ok:
+    try:
+        computed = run_analytics_query(user_start, user_end, aggregation="daily")
+    except RuntimeError:
         return None
-    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    computed = compute_all(rows, aggregation="daily")
     prepared = prepare_debug_rows(computed["rows"])
     return {"summary": computed["summary"], "rows": prepared}
 

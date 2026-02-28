@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Parse SFC fail_result HTML table into rows for CSV/display.
-Filter by TEST TIME in user range. Add test_time_dt for compute.
-"""
+"""Parse SFC fail_result HTML to rows; filter by user time range; add test_time_dt."""
 from __future__ import annotations
 
 import csv

@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-SFC_View: Flask app on port 5556.
-User picks start/end datetime -> Apply Filter -> SFC API (with -2h/+2h) -> parse HTML -> filter -> analytics.
-Also includes bonepile upload and disposition.
+SFC_View: Flask app. Analytics (SFC fail result + filter), bonepile upload, disposition, ETF, debug.
+Port and paths from config.
 """
 from __future__ import annotations
 
@@ -17,32 +16,61 @@ from typing import Any, Dict, List, Optional, Tuple
 from flask import Flask, jsonify, render_template, request, Response, send_file
 from flask_sock import Sock
 
-# Excel export templates (formatting preserved in exported XLSX)
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES_DIR = os.path.join(APP_DIR, "templates")
-SKU_SUMMARY_TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "SKU_Summary.xlsx")
-TRAY_SUMMARY_TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "Tray_Summary_Template.xlsx")
-SKU_DISPO_TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "SKU_Dispo.xlsx")
-
-from sfc.client import request_fail_result
-from sfc.parser import parse_fail_result_html, rows_to_csv
-from analytics.compute import compute_all
-from analytics.sn_list import compute_sn_list
-from analytics.error_stats import compute_error_stats, compute_error_stats_sn_list
-from config.app_config import TOP_K_ERRORS_DEFAULT
+from config.app_config import (
+    ANALYTICS_CACHE_DIR,
+    DISPO_XLSX_DATA_FILL,
+    DISPO_XLSX_HEADER_FILL,
+    FLASK_DEBUG,
+    FLASK_HOST,
+    FLASK_PORT,
+    SKU_DISPO_TEMPLATE_PATH,
+    SKU_SUMMARY_TEMPLATE_PATH,
+    TRAY_SUMMARY_TEMPLATE_PATH,
+    TOP_K_ERRORS_DEFAULT,
+)
+from sfc.parser import rows_to_csv
+from analytics.service import (
+    run_analytics_query,
+    run_fail_result_rows,
+    get_sn_list,
+    run_error_stats,
+    get_error_stats_sn_list,
+)
+from analytics.bp_check import add_bp_to_rows
 from config.analytics_config import get_pass_rules, set_pass_rules
 from fa_debug import bp as fa_debug_bp
 from fa_debug.ssh_terminal import register_ssh_ws
 from etf import bp as etf_bp
 
 from bonepile_disposition import (
-    ensure_db_ready, RawState, _bonepile_status_payload, _save_uploaded_bonepile_file,
-    _copy_for_parse, new_job_id, set_job, run_bonepile_parse_job,
-    _load_bonepile_workbook, _find_header_row, _read_header_map, _auto_mapping_from_headers,
-    _mapping_errors, _close_and_release_workbook, _remove_temp_file,
-    _parse_ca_input_datetime, utc_ms, compute_disposition_stats, compute_disposition_sn_list,
-    BONEPILE_UPLOAD_PATH, BONEPILE_IGNORED_SHEETS, ANALYTICS_CACHE_DIR, scan_lock, jobs_lock, jobs,
-    invalidate_bp_sn_cache, BP_SN_CACHE_PATH, STATE_PATH, connect_db,
+    ensure_db_ready,
+    RawState,
+    _bonepile_status_payload,
+    _save_uploaded_bonepile_file,
+    _copy_for_parse,
+    new_job_id,
+    set_job,
+    run_bonepile_parse_job,
+    _load_bonepile_workbook,
+    _find_header_row,
+    _read_header_map,
+    _auto_mapping_from_headers,
+    _mapping_errors,
+    _close_and_release_workbook,
+    _remove_temp_file,
+    _parse_ca_input_datetime,
+    utc_ms,
+    compute_disposition_stats,
+    compute_disposition_sn_list,
+    clear_disposition_cache,
+    BONEPILE_UPLOAD_PATH,
+    BONEPILE_IGNORED_SHEETS,
+    scan_lock,
+    jobs_lock,
+    jobs,
+    BP_SN_CACHE_PATH,
+    STATE_PATH,
+    connect_db,
 )
 
 app = Flask(__name__)
@@ -51,11 +79,8 @@ app.register_blueprint(fa_debug_bp)
 app.register_blueprint(etf_bp)
 register_ssh_ws(sock)
 
-# Cache last query result for sn-list drill-down
 _last_query_lock = threading.Lock()
 _last_query_result: Optional[Dict[str, Any]] = None
-
-# Cache last error-stats result for drill-down
 _last_error_stats_lock = threading.Lock()
 _last_error_stats_result: Optional[Dict[str, Any]] = None
 
@@ -85,7 +110,7 @@ def _xlsx_response(data: bytes, filename: str) -> Response:
 
 
 def _copy_cell_style(src_cell, tgt_cell):
-    """Copy font, fill, alignment, border, number_format from source cell to target cell."""
+    """Copy font, fill, alignment, border, number_format from source to target cell."""
     if src_cell.has_style:
         tgt_cell.font = src_cell.font.copy()
         tgt_cell.fill = src_cell.fill.copy()
@@ -146,7 +171,6 @@ def _build_export_xlsx(
             current_width = ws.column_dimensions[col].width if col in ws.column_dimensions and ws.column_dimensions[col].width else 0
             ws.column_dimensions[col].width = max(current_width, estimated_width)
 
-        # SFC_View tray_summary: { tested: {bp, fresh, total}, pass: {...}, fail: {...} }
         t = computed["tray_summary"]
         ws.cell(row=3, column=1, value="TOTAL")
         ws.cell(row=3, column=2, value=t["tested"].get("bp", 0))
@@ -161,7 +185,6 @@ def _build_export_xlsx(
         ws.cell(row=5, column=3, value=t["fail"].get("fresh", 0))
         ws.cell(row=5, column=4, value=t["fail"].get("total", 0))
 
-        # Unique SN list: SN, BP, result, part_number, last_station, last_test_time, error_code, failure_msg
         sn_tests = computed.get("_sn_tests") or {}
         sn_pass = computed.get("_sn_pass") or {}
         sn_is_bp = computed.get("_sn_is_bp") or {}
@@ -343,8 +366,8 @@ def _build_dispo_sn_list_xlsx(
     except ImportError:
         raise RuntimeError("openpyxl is not installed; cannot export XLSX")
     center = Alignment(horizontal="center", vertical="center")
-    header_fill = PatternFill(start_color="E8D5B7", end_color="E8D5B7", fill_type="solid")
-    data_fill = PatternFill(start_color="FFF8E7", end_color="FFF8E7", fill_type="solid")
+    header_fill = PatternFill(start_color=DISPO_XLSX_HEADER_FILL, end_color=DISPO_XLSX_HEADER_FILL, fill_type="solid")
+    data_fill = PatternFill(start_color=DISPO_XLSX_DATA_FILL, end_color=DISPO_XLSX_DATA_FILL, fill_type="solid")
     thin = Side(style="thin", color="000000")
     all_border = Border(left=thin, right=thin, top=thin, bottom=thin)
     wb = openpyxl.Workbook()
@@ -422,12 +445,10 @@ def api_query():
     if user_end < user_start:
         return jsonify({"error": "end must be after start"}), 400
 
-    ok, html = request_fail_result(user_start, user_end)
-    if not ok:
-        return jsonify({"error": "SFC API request failed (login or fail_result)"}), 502
-
-    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    computed = compute_all(rows, aggregation=aggregation)
+    try:
+        computed = run_analytics_query(user_start, user_end, aggregation=aggregation)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
 
     with _last_query_lock:
         _last_query_result = computed
@@ -455,7 +476,6 @@ def api_analytics_pass_rules():
             return jsonify({"ok": True, "pass_rules": rules})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
-    # POST
     payload = request.json or {}
     pr = payload.get("pass_rules")
     if not isinstance(pr, dict):
@@ -492,7 +512,7 @@ def api_sn_list():
         return jsonify({"error": "Apply filter first", "count": 0, "rows": []}), 400
 
     try:
-        rows = compute_sn_list(
+        rows = get_sn_list(
             computed,
             metric=metric,
             sku=sku,
@@ -534,12 +554,10 @@ def api_error_stats():
     if user_end < user_start:
         return jsonify({"error": "end must be after start"}), 400
 
-    ok, html = request_fail_result(user_start, user_end)
-    if not ok:
-        return jsonify({"error": "SFC API request failed (login or fail_result)"}), 502
-
-    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    result = compute_error_stats(rows, top_k=top_k)
+    try:
+        result = run_error_stats(user_start, user_end, top_k=top_k)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
 
     with _last_error_stats_lock:
         _last_error_stats_result = result
@@ -600,7 +618,7 @@ def api_error_stats_sn_list():
         return jsonify({"error": "Apply filter and load Error Stats first", "count": 0, "rows": []}), 400
 
     try:
-        rows = compute_error_stats_sn_list(
+        rows = get_error_stats_sn_list(
             result,
             metric=metric,
             station_group=station_group,
@@ -616,7 +634,7 @@ def api_error_stats_sn_list():
 
 @app.route("/api/fail_result", methods=["POST"])
 def api_fail_result():
-    """Legacy: returns rows + csv. Prefer /api/query."""
+    """Legacy: returns rows + csv. Dashboard uses /api/query; this kept for external callers."""
     payload = request.json or {}
     start_s = (payload.get("start_datetime") or "").strip()
     end_s = (payload.get("end_datetime") or "").strip()
@@ -628,19 +646,12 @@ def api_fail_result():
     if user_end < user_start:
         return jsonify({"error": "end must be after start"}), 400
 
-    ok, html = request_fail_result(user_start, user_end)
-    if not ok:
-        return jsonify({"error": "SFC API request failed (login or fail_result)"}), 502
-
-    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+    try:
+        rows = run_fail_result_rows(user_start, user_end)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
     csv_str = rows_to_csv(rows, include_bp=False)
-
-    return jsonify({
-        "ok": True,
-        "rows": rows,
-        "csv": csv_str,
-        "count": len(rows),
-    })
+    return jsonify({"ok": True, "rows": rows, "csv": csv_str, "count": len(rows)})
 
 
 def _error_stats_to_csv(result: Dict[str, Any]) -> str:
@@ -697,7 +708,6 @@ def api_export_csv():
     export_kind = (payload.get("export") or "dashboard").strip().lower()
     export_format = (payload.get("format") or "csv").strip().lower()
 
-    # Handle XLSX export for summary, sku, disposition_by_sku, disposition_sn_list
     if export_format == "xlsx" and export_kind in ("summary", "sku", "disposition_by_sku", "disposition_sn_list"):
         if export_kind == "disposition_sn_list":
             start_ca = _parse_ca_input_datetime(start_s, is_end=False) if start_s else None
@@ -753,11 +763,10 @@ def api_export_csv():
             aggregation = (payload.get("aggregation") or "daily").strip().lower()
             if aggregation not in ("daily", "weekly", "monthly"):
                 aggregation = "daily"
-            ok, html = request_fail_result(user_start, user_end)
-            if not ok:
-                return jsonify({"error": "SFC API request failed"}), 502
-            rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-            computed = compute_all(rows, aggregation=aggregation)
+            try:
+                computed = run_analytics_query(user_start, user_end, aggregation=aggregation)
+            except RuntimeError as e:
+                return jsonify({"error": str(e)}), 502
             start_fmt = user_start.strftime("%Y%m%d_%H%M")
             end_fmt = user_end.strftime("%Y%m%d_%H%M")
             try:
@@ -770,7 +779,6 @@ def api_export_csv():
             except Exception as e:
                 return jsonify({"error": f"XLSX export failed: {str(e)}"}), 500
 
-    # Export disposition_summary (SN list Total KPI) as XLSX with formatting
     if export_kind == "disposition_summary":
         start_ca = _parse_ca_input_datetime(start_s, is_end=False) if start_s else None
         end_ca = _parse_ca_input_datetime(end_s, is_end=True) if end_s else None
@@ -794,7 +802,6 @@ def api_export_csv():
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    # CSV export - error_stats
     if export_kind == "error_stats":
         top_k = payload.get("top_k_errors")
         if top_k is None:
@@ -813,12 +820,10 @@ def api_export_csv():
         if user_end < user_start:
             return jsonify({"error": "end must be after start"}), 400
 
-        ok, html = request_fail_result(user_start, user_end)
-        if not ok:
-            return jsonify({"error": "SFC API request failed"}), 502
-
-        rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-        result = compute_error_stats(rows, top_k=top_k)
+        try:
+            result = run_error_stats(user_start, user_end, top_k=top_k)
+        except RuntimeError as e:
+            return jsonify({"error": str(e)}), 502
         csv_str = _error_stats_to_csv(result)
         filename = f"error_stats_{user_start.strftime('%Y%m%d_%H%M')}_to_{user_end.strftime('%Y%m%d_%H%M')}.csv"
         buf = io.BytesIO(csv_str.encode("utf-8-sig"))
@@ -829,7 +834,6 @@ def api_export_csv():
             download_name=filename,
         )
 
-    # CSV export - default fail_result
     user_start = _parse_datetime(start_s, is_end=False)
     user_end = _parse_datetime(end_s, is_end=True)
     if user_start is None or user_end is None:
@@ -837,12 +841,10 @@ def api_export_csv():
     if user_end < user_start:
         return jsonify({"error": "end must be after start"}), 400
 
-    ok, html = request_fail_result(user_start, user_end)
-    if not ok:
-        return jsonify({"error": "SFC API request failed"}), 502
-
-    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    from analytics.bp_check import add_bp_to_rows
+    try:
+        rows = run_fail_result_rows(user_start, user_end)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
     rows = add_bp_to_rows(rows)
     csv_str = rows_to_csv(rows, include_bp=True)
     filename = f"fail_result_{user_start.strftime('%Y%m%d_%H%M')}_to_{user_end.strftime('%Y%m%d_%H%M')}.csv"
@@ -854,11 +856,6 @@ def api_export_csv():
         as_attachment=True,
         download_name=filename,
     )
-
-
-# -----------------------------
-# Bonepile Upload & Disposition Routes (copied from Bonepile_view)
-# -----------------------------
 
 
 @app.route("/api/job/<job_id>")
@@ -1027,26 +1024,10 @@ def api_bonepile_parse():
 
 @app.route("/api/clear-cache", methods=["POST"])
 def api_clear_cache():
-    """
-    Clear bonepile cache: BP SN cache, raw state, bonepile_entries, uploaded file.
-    Returns JSON { ok: true } or { error: "..." }.
-    """
+    """Clear disposition cache and in-memory query result. Returns JSON { ok: true } or { error }."""
     global _last_query_result
     try:
-        invalidate_bp_sn_cache()
-        if os.path.isfile(BP_SN_CACHE_PATH):
-            os.remove(BP_SN_CACHE_PATH)
-        if os.path.isfile(STATE_PATH):
-            os.remove(STATE_PATH)
-        if os.path.isfile(BONEPILE_UPLOAD_PATH):
-            os.remove(BONEPILE_UPLOAD_PATH)
-        ensure_db_ready()
-        conn = connect_db()
-        try:
-            conn.execute("DELETE FROM bonepile_entries")
-            conn.commit()
-        finally:
-            conn.close()
+        clear_disposition_cache()
         with _last_query_lock:
             _last_query_result = None
         return jsonify({"ok": True})
@@ -1130,4 +1111,4 @@ def api_bonepile_disposition_sn_list():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5556, debug=True)
+    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=FLASK_DEBUG)

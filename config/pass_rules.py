@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Pass station rules by part number.
-Logic loaded from config/analytics_config.json.
-"""
+"""Pass station by part number; uses analytics_config pass_rules."""
 
 from typing import List
 
