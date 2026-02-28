@@ -183,6 +183,13 @@
   .log-path-btn { font-size: 0.75rem; padding: 0.2rem 0.4rem; }
   /* ETF */
   .etf-filter { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.875rem; min-width: 200px; }
+  .etf-mac-key-label { font-size: 0.8125rem; color: var(--color-muted); }
+  .etf-mac-key-input { margin-left: 0.25rem; padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.8125rem; min-width: 140px; }
+  .btn-save-mac-keys { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.8rem; border-radius: 10px; font-weight: 600; font-size: 0.875rem; background: #60A5FA; color: #0B1F3A; border: none; cursor: pointer; }
+  .btn-save-mac-keys:hover { background: #3B82F6; color: #EFF6FF; }
+  .btn-verify-mac { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border-radius: 10px; font-weight: 600; font-size: 0.875rem; background: #34D399; color: #064E3B; border: none; cursor: pointer; }
+  .btn-verify-mac:hover { background: #10B981; }
+  .btn-verify-mac:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn-rescan { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border-radius: 10px; font-weight: 600; font-size: 0.875rem; background: #FBBF24; color: #1E293B; border: none; cursor: pointer; }
   .btn-rescan:hover { background: #F59E0B; }
   .btn-rescan:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -194,7 +201,18 @@
   .etf-table-wrap { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; overflow-x: auto; }
   .etf-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
   .etf-table th { background: var(--color-bg); padding: 0.6rem 0.9rem; text-align: left; font-weight: 600; font-size: 0.75rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid var(--color-border); }
-  .etf-table td { padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--color-border); color: var(--color-text); }
+  .etf-table tbody tr { min-height: 3rem; }
+  .etf-table td.etf-td { padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--color-border); color: var(--color-text); vertical-align: top; overflow: hidden; line-height: 1.25; box-sizing: border-box; }
+  .etf-table .etf-cell-inner { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; overflow: hidden; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-height: 2.5em; }
+  .etf-table .etf-cell-inner--sn { -webkit-line-clamp: unset; min-height: 0; }
+  .etf-table .etf-cell-inner--mac { display: flex; flex-direction: column; justify-content: center; gap: 0.1rem; -webkit-line-clamp: unset; min-height: 2.5em; }
+  .etf-table .etf-cell-inner--mac .mac-line { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 0.8125rem; }
+  .etf-table .etf-cell-inner--mac .mac-diff-inline { font-size: 0.7rem; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .etf-table .etf-cell-inner--time { white-space: nowrap; font-variant-numeric: tabular-nums; -webkit-line-clamp: unset; min-width: 11ch; min-height: 2.5em; }
+  .etf-table .etf-cell-inner--time .last-end-value { font-variant-numeric: tabular-nums; }
+  .etf-cell-inner--mac .mac-icon { font-weight: bold; margin-left: 0.25rem; }
+  .etf-cell-inner--mac .mac-ok { color: #22C55E; }
+  .etf-cell-inner--mac .mac-fail { color: #EF4444; }
   .etf-table tbody tr:hover { background: var(--color-hover); }
   .etf-table .sn-btn { background: var(--color-primary); color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.75rem; }
   .etf-table .sn-btn:hover { opacity: 0.9; }
@@ -361,6 +379,15 @@
         <h2 class="text-2xl font-bold mb-6" style="color: var(--color-text);">Tray Status</h2>
         <div class="etf-header" style="margin-bottom: 0.75rem;">
           <input type="text" id="etf-filter" class="etf-filter" placeholder="Filter SN, MAC, IP...">
+          <label class="etf-mac-key-label">BMC key:
+            <input type="text" id="etf-mac-key-bmc" class="etf-mac-key-input" list="etf-mac-key-options" placeholder="e.g. BMC MAC">
+          </label>
+          <label class="etf-mac-key-label">SYS key:
+            <input type="text" id="etf-mac-key-sys" class="etf-mac-key-input" list="etf-mac-key-options" placeholder="e.g. SYS MAC">
+          </label>
+          <button type="button" id="btn-save-mac-keys" class="btn-save-mac-keys" title="Save key names for MAC compare">Save</button>
+          <datalist id="etf-mac-key-options"></datalist>
+          <button type="button" id="btn-verify-mac" class="btn-verify-mac" title="Verify MAC with SFC AssyInfo">Verify MAC</button>
           <button type="button" id="btn-rescan" class="btn-rescan">Rescan</button>
         </div>
         <div class="etf-summary">

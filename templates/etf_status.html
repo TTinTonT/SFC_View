@@ -111,11 +111,16 @@
     letter-spacing: 0.05em;
     border-bottom: 2px solid var(--color-border);
   }
+  .etf-table tbody tr { height: 3rem; min-height: 3rem; }
   .etf-table td {
-    padding: 0.75rem 1rem;
+    padding: 0.4rem 0.7rem;
     border-bottom: 1px solid var(--color-border);
     color: var(--color-text);
+    vertical-align: middle;
+    overflow: hidden;
+    line-height: 1.25;
   }
+  .cell-clip-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-height: 2.5em; line-height: 1.25; }
   .etf-table tbody tr:hover { background: var(--color-hover); }
   .etf-table .sn-btn {
     background: var(--color-primary);

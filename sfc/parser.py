@@ -119,6 +119,86 @@ def parse_fail_result_html(
     return out
 
 
+def _row_bgcolor(tr) -> str:
+    """Get row background color from tr or first td. Normalized to uppercase without #."""
+    val = (tr.get("bgcolor") or "").strip().upper().lstrip("#")
+    if val:
+        return val
+    first_td = tr.find("td")
+    if first_td:
+        val = (first_td.get("bgcolor") or "").strip().upper().lstrip("#")
+    return val or ""
+
+
+def parse_assy_info_html(html: str) -> Optional[dict]:
+    """
+    Parse AssyInfo HTML table. Extract sys_mac and bmc_mac from SEMI PN/SEMI SN.
+    Rows with bgcolor #F8BEBE = dekit (skip). Rows with bgcolor #D4EDCB = valid (use).
+    No DEKIT column. For bmc_mac/sys_mac use only "BMC MAC"/"SYS MAC" (exclude BLUEFIELD_*).
+    Returns dict with sys_mac, bmc_mac, and all_keys (SEMI PN -> SEMI SN).
+    """
+    if BeautifulSoup is None:
+        raise RuntimeError("beautifulsoup4 is required; pip install beautifulsoup4")
+    if not html or not html.strip():
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    result: dict = {"sys_mac": "", "bmc_mac": "", "all_keys": {}}
+    DEKIT_COLOR = "F8BEBE"
+    VALID_COLOR = "D4EDCB"
+    for table in soup.find_all("table"):
+        rows = table.find_all("tr")
+        idx_semi_pn = idx_semi_sn = -1
+        header_row_idx = -1
+        for i, tr in enumerate(rows):
+            cells = tr.find_all(["th", "td"])
+            if not cells:
+                continue
+            texts = [_cell_text(c) for c in cells]
+            for j, t in enumerate(texts):
+                u = (t or "").strip().upper().replace(" ", "").replace("_", "")
+                if "SEMIPN" in u or u == "SEMIPN":
+                    idx_semi_pn = j
+                if "SEMISN" in u or u == "SEMISN":
+                    idx_semi_sn = j
+            if idx_semi_pn >= 0 and idx_semi_sn >= 0:
+                header_row_idx = i
+                break
+        if header_row_idx < 0 or idx_semi_pn < 0 or idx_semi_sn < 0:
+            continue
+        max_idx = max(idx_semi_pn, idx_semi_sn)
+        for tr in rows[header_row_idx + 1 :]:
+            tds = tr.find_all("td")
+            if len(tds) <= max_idx:
+                continue
+            bg = _row_bgcolor(tr)
+            if bg == DEKIT_COLOR:
+                continue
+            if bg != VALID_COLOR:
+                continue
+            semi_pn = _cell_text(tds[idx_semi_pn]).strip()
+            semi_sn = _cell_text(tds[idx_semi_sn])
+            if not semi_sn or semi_sn.upper() in ("N/A", "NULL"):
+                continue
+            raw_sn = semi_sn.strip()
+            # If value is wrapped by *...* then ignore this row
+            if len(raw_sn) >= 2 and raw_sn.startswith("*") and raw_sn.endswith("*"):
+                continue
+            val = raw_sn.replace(":", "").strip()
+            semi_pn_upper = semi_pn.upper()
+            if semi_pn:
+                result.setdefault("all_keys", {})[semi_pn] = val
+            pn_norm = semi_pn_upper.replace(" ", "_")
+            # Only exact "BMC MAC" / "BMC_MAC", not BLUEFIELD_BMC_MAC
+            if "BLUEFIELD" not in semi_pn_upper and pn_norm == "BMC_MAC" and not result["bmc_mac"]:
+                result["bmc_mac"] = val
+            # Only exact "SYS MAC" / "SYS_MAC", not BLUEFIELD_SYS_MAC
+            if "BLUEFIELD" not in semi_pn_upper and pn_norm == "SYS_MAC" and not result["sys_mac"]:
+                result["sys_mac"] = val
+        if result["sys_mac"] or result["bmc_mac"]:
+            return result
+    return result if (result["sys_mac"] or result["bmc_mac"]) else None
+
+
 def rows_to_csv(rows: List[dict], include_bp: bool = False) -> str:
     """Convert list of dicts to CSV string (UTF-8). If include_bp, add BP column."""
     if not rows:

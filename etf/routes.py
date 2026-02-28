@@ -12,6 +12,8 @@ import paramiko
 import requests
 
 from config.app_config import ANALYTICS_CACHE_DIR
+from sfc import client as sfc_client
+from sfc import parser as sfc_parser
 from config.etf_config import ROOMS, ETF_POLL_INTERVAL_SEC, SFC_LEVEL_GRADE, SFC_TRAY_STATUS_URL
 from flask import Blueprint, jsonify, render_template, request
 
@@ -292,6 +294,63 @@ def api_sfc_tray_status():
                 "remark": (item.get("Remark") or "").strip() or None,
             }
     return jsonify({"ok": True, "sn_map": sn_map})
+
+
+@bp.route("/api/sfc/assy-info", methods=["POST"])
+def api_sfc_assy_info():
+    """Fetch AssyInfo HTML for each SN, parse SEMI PN/SN for sys_mac and bmc_mac. Returns sn_map."""
+    MAX_SNS = 50
+    try:
+        data = request.get_json() or {}
+        sns = data.get("sns") or []
+        if not isinstance(sns, list):
+            sns = []
+        sns = [str(s).strip() for s in sns[:MAX_SNS] if s]
+    except Exception:
+        sns = []
+    sn_map = {}
+    for sn in sns:
+        if not sn:
+            continue
+        try:
+            ok, html = sfc_client.request_assy_info(sn)
+            if not ok or not html:
+                continue
+            parsed = sfc_parser.parse_assy_info_html(html)
+            if parsed:
+                sn_map[sn] = {
+                    "sys_mac": parsed.get("sys_mac") or "",
+                    "bmc_mac": parsed.get("bmc_mac") or "",
+                    "all_keys": parsed.get("all_keys") or {},
+                }
+        except Exception:
+            continue
+    return jsonify({"ok": True, "sn_map": sn_map})
+
+
+def _project_root():
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+@bp.route("/api/sfc/assy-info-raw", methods=["GET"])
+def api_sfc_assy_info_raw():
+    """Fetch AssyInfo HTML for one SN and save to project debug/ folder. For debugging wrong MAC data."""
+    sn = (request.args.get("sn") or "").strip()
+    if not sn:
+        return jsonify({"ok": False, "error": "missing sn"}), 400
+    try:
+        ok, html = sfc_client.request_assy_info(sn)
+        if not ok:
+            return jsonify({"ok": False, "error": "fetch failed", "sn": sn}), 502
+        debug_dir = os.path.join(_project_root(), "debug")
+        os.makedirs(debug_dir, exist_ok=True)
+        filename = f"assy_info_{sn}.html"
+        filepath = os.path.join(debug_dir, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(html)
+        return jsonify({"ok": True, "sn": sn, "path": filepath, "filename": filename})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "sn": sn}), 500
 
 
 @bp.route("/api/etf/data")

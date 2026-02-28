@@ -26,6 +26,9 @@ DISPO_XLSX_HEADER_FILL = os.environ.get("DISPO_XLSX_HEADER_FILL", "E8D5B7")
 DISPO_XLSX_DATA_FILL = os.environ.get("DISPO_XLSX_DATA_FILL", "FFF8E7")
 
 SFC_BASE_URL = os.environ.get("SFC_BASE_URL", "http://10.16.137.110").rstrip("/")
+SFC_ASSY_INFO_URL = os.environ.get(
+    "SFC_ASSY_INFO_URL", SFC_BASE_URL + "/L10_Report/NewAssembly/AssyInfo.jsp"
+)
 SFC_USER = os.environ.get("SFC_USER", "SFC")
 SFC_PWD = os.environ.get("SFC_PWD", "EPD2TJW")
 SFC_GROUP_NAME = os.environ.get("SFC_GROUP_NAME", "'AST','FCT','FLA','FLB','FLC','FTS','IOT','NVL','PRET','RIN'")

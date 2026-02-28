@@ -12,6 +12,7 @@ import requests
 
 from config.app_config import (
     EXTEND_HOURS,
+    SFC_ASSY_INFO_URL,
     SFC_BASE_URL,
     SFC_GROUP_NAME,
     SFC_PWD,
@@ -113,4 +114,30 @@ def request_fail_result(
         sess = _get_session(force_new=True)
         if sess:
             ok, html = _fetch_fail_result_html(sess, from_dt, to_dt)
+    return ok, html
+
+
+def _fetch_assy_info_html(session: requests.Session, sn: str) -> Tuple[bool, str]:
+    """POST AssyInfo.jsp?qtype=1 with PPID=sn. Returns (success, html_string). Decodes big5."""
+    try:
+        url = f"{SFC_ASSY_INFO_URL.rstrip('/')}?qtype=1"
+        r = session.post(url, data={"PPID": sn}, timeout=30)
+        if r.status_code != 200:
+            return False, ""
+        r.encoding = r.encoding or "big5"
+        return True, r.text
+    except Exception:
+        return False, ""
+
+
+def request_assy_info(sn: str) -> Tuple[bool, str]:
+    """Get session, then fetch AssyInfo HTML for SN. Returns (success, html)."""
+    sess = _get_session()
+    if sess is None:
+        return False, ""
+    ok, html = _fetch_assy_info_html(sess, sn)
+    if not ok:
+        sess = _get_session(force_new=True)
+        if sess:
+            ok, html = _fetch_assy_info_html(sess, sn)
     return ok, html
