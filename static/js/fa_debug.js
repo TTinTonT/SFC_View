@@ -70,7 +70,7 @@
       url = '/api/debug-query';
       body = '{}';
     }
-    fetch(url, {
+    return fetch(url, {
       method: body ? 'POST' : 'GET',
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body,
@@ -101,7 +101,8 @@
         console.error(err);
         const banner = document.getElementById('server-offline-banner');
         if (banner) banner.classList.add('show');
-      });
+      })
+      .then(() => undefined);
   }
 
   function render() {
@@ -133,7 +134,7 @@
       const logPathCell = makeLogPathCell(r.serial_number);
       row.innerHTML = [
         `<span>${result || '-'}</span>`,
-        `<span><button type="button" class="pin-btn" data-sn="${escapeAttr(r.serial_number)}" title="Pin">📌</button> ${escapeHtml(r.serial_number || '')}</span>`,
+        `<span><button type="button" class="pin-btn pin-icon-btn" data-sn="${escapeAttr(r.serial_number)}" title="Pin"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg></button> ${escapeHtml(r.serial_number || '')}</span>`,
         `<span>${escapeHtml(r.part_number || '')}</span>`,
         `<span>${bpNa}</span>`,
         `<span>${escapeHtml(r.test_time || '')}</span>`,
@@ -289,7 +290,9 @@
     if (pinned.has(sn)) {
       pinned.delete(sn);
     } else {
-      pinned.set(sn, { sn, row, lastData: JSON.stringify(row), blink: false, expanded: false });
+      const res = (row?.result || '').toUpperCase();
+      const lastResult = res === 'PASS' ? 'PASS' : res === 'FAIL' ? 'FAIL' : 'unknown';
+      pinned.set(sn, { sn, row, lastData: JSON.stringify(row), lastResult, blink: false, expanded: false });
     }
     renderPinPanel();
   }
@@ -305,13 +308,20 @@
     pinned.forEach((p) => {
       const list = bySn[p.sn] || [];
       const latest = list[0];
-      const newData = latest ? JSON.stringify(latest) : '';
-      if (newData && newData !== p.lastData) {
+      if (!latest) return;
+      const newData = JSON.stringify(latest);
+      const newRes = (latest.result || '').toUpperCase();
+      const newResult = newRes === 'PASS' ? 'PASS' : newRes === 'FAIL' ? 'FAIL' : 'unknown';
+      const prevResult = p.lastResult || 'unknown';
+      if (newData !== p.lastData) {
         p.lastData = newData;
         p.row = latest;
-        p.blink = true;
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          new Notification('FA Debug: ' + p.sn, { body: 'New data for pinned tray' });
+        p.lastResult = newResult;
+        if (newResult === 'PASS' && prevResult !== 'PASS') {
+          p.blink = true;
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            new Notification('FA Debug: ' + p.sn, { body: 'Test PASS' });
+          }
         }
       }
     });
@@ -328,9 +338,9 @@
     const notepadEl = $('notepad-sidebar');
     const pinEl = $('pin-sidebar');
     const app = document.getElementById('app-wrapper') || document.querySelector('.app-wrapper');
-    const pinW = pinEl ? 220 : 0;
-    if (pinEl) pinEl.style.left = '0px';
-    if (app) app.style.marginLeft = pinW ? pinW + 'px' : '';
+    const pinW = pinEl ? 90 : 0;
+    if (pinEl) pinEl.style.right = '0px';
+    if (app) app.style.marginRight = pinW ? pinW + 'px' : '';
   }
 
   function renderNotepadSidebar() {
@@ -400,62 +410,78 @@
     let sidebar = $('pin-sidebar');
     if (!sidebar) {
       sidebar = el('div', { id: 'pin-sidebar', className: 'pin-sidebar' });
-      const np = $('notepad-sidebar');
-      document.body.insertBefore(sidebar, np ? np.nextSibling : document.body.firstChild);
+      document.body.appendChild(sidebar);
     }
     const header = el('div', { className: 'pin-sidebar-header' });
     const toggleBtn = el('button', { type: 'button' });
     toggleBtn.textContent = pinPanelExpanded ? '−' : '+';
-    header.appendChild(document.createTextNode('Pinned '));
+    header.appendChild(document.createTextNode('Pin'));
     header.appendChild(toggleBtn);
     toggleBtn.addEventListener('click', () => {
       pinPanelExpanded = !pinPanelExpanded;
       toggleBtn.textContent = pinPanelExpanded ? '−' : '+';
       const b = sidebar.querySelector('.pin-sidebar-body');
-      if (b) b.style.display = pinPanelExpanded ? 'block' : 'none';
+      if (b) b.style.display = pinPanelExpanded ? 'flex' : 'none';
     });
     sidebar.innerHTML = '';
     sidebar.appendChild(header);
     const body = el('div', { className: 'pin-sidebar-body' });
-    body.style.display = pinPanelExpanded ? 'block' : 'none';
+    body.style.display = pinPanelExpanded ? 'flex' : 'none';
     pinned.forEach((p) => {
       const res = (p.row?.result || '').toUpperCase();
       const status = res === 'PASS' ? 'pass' : res === 'FAIL' ? 'fail' : 'unknown';
       const div = el('div', { className: 'pin-sidebar-item ' + (p.expanded ? 'expanded' : '') });
-      div.innerHTML = `<span class="pin-icon ${status}"></span><span class="pin-sn">${escapeHtml(p.sn)}</span><button type="button" class="unpin">×</button>`;
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'pin-icon ' + status + (p.blink ? ' blink' : '');
       if (p.blink) {
         p.blink = false;
-        div.classList.add('blink');
-        setTimeout(() => div.classList.remove('blink'), 2000);
+        setTimeout(() => iconSpan.classList.remove('blink'), 2400);
       }
-      div.querySelector('.unpin')?.addEventListener('click', (e) => { e.stopPropagation(); pinned.delete(p.sn); renderPinSidebar(); });
+      const unpinBtn = el('button', { type: 'button', className: 'unpin' });
+      unpinBtn.textContent = '×';
+      unpinBtn.title = 'Unpin';
+      div.appendChild(iconSpan);
+      div.appendChild(unpinBtn);
+      const room = p.row?.room || '–';
+      const err = res === 'FAIL' ? (p.row?.failure_msg || p.row?.error_code || '') : '';
+      const detailsText = room + ' | ' + (p.sn || '') + ' | ' + (res || '–') + (err ? ' | ' + err : '');
+      const details = el('div', { className: 'pin-details' });
+      details.textContent = detailsText;
+      details.title = detailsText;
+      details.style.display = p.expanded ? 'block' : 'none';
+      div.appendChild(details);
+      unpinBtn.addEventListener('click', (e) => { e.stopPropagation(); pinned.delete(p.sn); renderPinSidebar(); });
       div.addEventListener('click', (e) => {
         if (!e.target.classList.contains('unpin')) {
           p.expanded = !p.expanded;
           div.classList.toggle('expanded', p.expanded);
-          const details = div.querySelector('.pin-details');
-          if (details) details.style.display = p.expanded ? 'block' : 'none';
+          details.style.display = p.expanded ? 'block' : 'none';
         }
       });
-      const details = el('div', { className: 'pin-details' });
-      details.innerHTML = 'Chi tiet se duoc tich hop sau khi co API';
-      details.style.display = p.expanded ? 'block' : 'none';
-      div.appendChild(details);
       body.appendChild(div);
     });
-    etfPinnedSns.forEach(({ rowKey, sn }) => {
+    etfPinnedSns.forEach(({ rowKey, sn, room }) => {
       const div = el('div', { className: 'pin-sidebar-item' });
-      div.innerHTML = `<span class="pin-icon unknown"></span><span class="pin-sn">${escapeHtml(sn || rowKey)}</span>`;
-      div.title = 'ETF SN – Chi tiet sau khi co API';
-      div.addEventListener('click', () => {
-        div.classList.toggle('expanded');
-        const details = div.querySelector('.pin-details');
-        if (details) details.style.display = details.style.display === 'none' ? 'block' : 'none';
-      });
+      div.innerHTML = `<span class="pin-icon unknown"></span><button type="button" class="unpin">×</button>`;
       const details = el('div', { className: 'pin-details' });
-      details.innerHTML = 'Chi tiet se duoc tich hop sau khi co API';
+      details.textContent = (room || 'ETF') + ' | ' + (sn || rowKey) + ' | –';
       details.style.display = 'none';
       div.appendChild(details);
+      div.title = 'ETF | ' + (sn || rowKey) + ' – click to expand';
+      div.querySelector('.unpin')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof window.etfUnpinSn === 'function') window.etfUnpinSn(rowKey);
+        else {
+          etfPinnedSns.splice(etfPinnedSns.findIndex((x) => x.rowKey === rowKey), 1);
+          renderPinSidebar();
+        }
+      });
+      div.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('unpin')) {
+          div.classList.toggle('expanded');
+          details.style.display = div.classList.contains('expanded') ? 'block' : 'none';
+        }
+      });
       body.appendChild(div);
     });
     sidebar.appendChild(body);
@@ -463,7 +489,15 @@
   }
 
   function applyFilter() {
-    fetchData(true);
+    const btn = $('apply-filter');
+    const txt = btn?.querySelector('.btn-text');
+    const spin = btn?.querySelector('.btn-spinner');
+    if (txt) txt.classList.add('hidden');
+    if (spin) spin.classList.remove('hidden');
+    fetchData(true).finally(() => {
+      if (txt) txt.classList.remove('hidden');
+      if (spin) spin.classList.add('hidden');
+    });
   }
 
   function initTheme() {
@@ -514,10 +548,16 @@
     if (timelineFilterEl) timelineFilterEl.addEventListener('input', () => { timelineFilterQuery = timelineFilterEl.value; render(); });
 
     const endNowEl = $('end-now');
+    const endDateWrap = $('end-date-wrap');
+    const toggleEndDateVisibility = () => {
+      if (endDateWrap) endDateWrap.style.display = endNowEl?.checked ? 'none' : '';
+      const endEl = $('date-end');
+      if (endEl) endEl.disabled = endNowEl?.checked ?? false;
+    };
     if (endNowEl) {
+      toggleEndDateVisibility();
       endNowEl.addEventListener('change', () => {
-        const endEl = $('date-end');
-        if (endEl) endEl.disabled = endNowEl.checked;
+        toggleEndDateVisibility();
         if (endNowEl.checked) fetchData(true);
       });
     }

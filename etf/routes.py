@@ -22,6 +22,7 @@ bp = Blueprint("etf", __name__, url_prefix="", template_folder="../templates")
 _cache_lock = threading.Lock()
 _cache: dict = {}
 _remarks_path = os.path.join(ANALYTICS_CACHE_DIR, "etf_remarks.json")
+_mac_verify_keys_path = os.path.join(ANALYTICS_CACHE_DIR, "etf_mac_verify_keys.json")
 _cache_dir = os.path.join(ANALYTICS_CACHE_DIR, "etf_cache")
 
 
@@ -38,6 +39,26 @@ def _load_remarks():
 def _save_remarks(data):
     os.makedirs(os.path.dirname(_remarks_path), exist_ok=True)
     with open(_remarks_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def _load_mac_verify_keys():
+    if not os.path.isfile(_mac_verify_keys_path):
+        return {"bmc": "", "sys": ""}
+    try:
+        with open(_mac_verify_keys_path, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return {
+            "bmc": (d.get("bmc") or "").strip(),
+            "sys": (d.get("sys") or "").strip(),
+        }
+    except Exception:
+        return {"bmc": "", "sys": ""}
+
+
+def _save_mac_verify_keys(data):
+    os.makedirs(os.path.dirname(_mac_verify_keys_path), exist_ok=True)
+    with open(_mac_verify_keys_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -486,6 +507,24 @@ def api_etf_search():
                     r_copy["room"] = room
                     results.append(r_copy)
     return jsonify({"ok": True, "rows": results})
+
+
+@bp.route("/api/etf/mac-verify-keys", methods=["GET", "POST"])
+def api_etf_mac_verify_keys():
+    """GET: return BMC/SYS key names (empty = N/A). POST: save {bmc?, sys?}."""
+    if request.method == "POST":
+        payload = request.get_json() or {}
+        bmc = (payload.get("bmc") or "").strip()
+        sys = (payload.get("sys") or "").strip()
+        current = _load_mac_verify_keys()
+        if "bmc" in payload:
+            current["bmc"] = bmc
+        if "sys" in payload:
+            current["sys"] = sys
+        _save_mac_verify_keys(current)
+        return jsonify({"ok": True, "bmc": current["bmc"], "sys": current["sys"]})
+    keys = _load_mac_verify_keys()
+    return jsonify({"ok": True, "bmc": keys["bmc"], "sys": keys["sys"]})
 
 
 @bp.route("/api/etf/remark", methods=["POST"])

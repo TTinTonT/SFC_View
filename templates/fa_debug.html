@@ -184,9 +184,11 @@
   /* ETF */
   .etf-filter { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.875rem; min-width: 200px; }
   .etf-mac-key-label { font-size: 0.8125rem; color: var(--color-muted); }
-  .etf-mac-key-input { margin-left: 0.25rem; padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.8125rem; min-width: 140px; }
-  .btn-save-mac-keys { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.8rem; border-radius: 10px; font-weight: 600; font-size: 0.875rem; background: #60A5FA; color: #0B1F3A; border: none; cursor: pointer; }
-  .btn-save-mac-keys:hover { background: #3B82F6; color: #EFF6FF; }
+  .mac-key-wrap { display: inline-flex; align-items: center; gap: 0.25rem; }
+  .etf-mac-key-input { padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.8125rem; min-width: 140px; }
+  .etf-mac-key-input:read-only { background: var(--color-bg); color: var(--color-muted); }
+  .mac-key-lock { background: transparent; border: none; cursor: pointer; padding: 0.2rem; font-size: 1rem; line-height: 1; opacity: 0.85; }
+  .mac-key-lock:hover { opacity: 1; }
   .btn-verify-mac { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border-radius: 10px; font-weight: 600; font-size: 0.875rem; background: #34D399; color: #064E3B; border: none; cursor: pointer; }
   .btn-verify-mac:hover { background: #10B981; }
   .btn-verify-mac:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -204,7 +206,8 @@
   .etf-table tbody tr { min-height: 3rem; }
   .etf-table td.etf-td { padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--color-border); color: var(--color-text); vertical-align: top; overflow: hidden; line-height: 1.25; box-sizing: border-box; }
   .etf-table .etf-cell-inner { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; overflow: hidden; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-height: 2.5em; }
-  .etf-table .etf-cell-inner--sn { -webkit-line-clamp: unset; min-height: 0; }
+  .etf-table td.etf-td:first-child { overflow: visible; }
+  .etf-table .etf-cell-inner--sn { -webkit-line-clamp: unset; min-height: 0; overflow: visible; }
   .etf-table .etf-cell-inner--mac { display: flex; flex-direction: column; justify-content: center; gap: 0.1rem; -webkit-line-clamp: unset; min-height: 2.5em; }
   .etf-table .etf-cell-inner--mac .mac-line { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 0.8125rem; }
   .etf-table .etf-cell-inner--mac .mac-diff-inline { font-size: 0.7rem; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -240,7 +243,28 @@
   .sn-debug-terminal { min-height: 200px; height: 380px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
   .sn-debug-terminal .xterm { width: 100% !important; flex: 1 !important; min-height: 0; }
   .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; }
-  /* Pin sidebar */
+  /* Pin bar - right side, compact */
+  .pin-sidebar { position: fixed; top: 0; bottom: 0; right: 0; left: auto; width: 90px; min-width: 90px; background: var(--color-surface); border-left: 1px solid var(--color-border); border-right: none; z-index: 90; overflow-y: auto; box-shadow: -2px 0 8px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+  .pin-sidebar-header { padding: 0.4rem 0.5rem; font-weight: 700; font-size: 0.75rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0; }
+  .pin-sidebar-body { padding: 0.25rem 0.35rem; display: flex; flex-direction: column; gap: 0.25rem; flex: 1; min-height: 0; overflow-y: auto; }
+  .pin-sidebar-item { padding: 0.35rem 0.4rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; min-height: 28px; }
+  .pin-sidebar-item:hover { background: var(--color-hover); }
+  .pin-sidebar-item.expanded { flex-wrap: wrap; }
+  .pin-sidebar-item .pin-icon { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .pin-icon.pass { background: var(--color-success); }
+  .pin-icon.fail { background: var(--color-danger); }
+  .pin-icon.unknown { background: var(--color-muted); }
+  .pin-icon.pass.blink { animation: blink-green 0.6s ease 4; }
+  @keyframes blink-green { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--color-success); } 50% { opacity: 0.6; box-shadow: 0 0 6px 2px var(--color-success); } }
+  .pin-sidebar-item .pin-sn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .pin-sidebar-item .unpin { margin-left: auto; background: transparent; border: none; cursor: pointer; padding: 0 0.2rem; font-size: 0.9rem; color: var(--color-muted); flex-shrink: 0; }
+  .pin-sidebar-item .unpin:hover { color: var(--color-danger); }
+  .pin-sidebar-item:not(.expanded) .unpin { display: none; }
+  .pin-details { display: none; width: 100%; font-size: 0.65rem; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.2rem; line-height: 1.3; }
+  .pin-sidebar-item.expanded .pin-details { display: block; }
+  .pin-icon-btn { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; color: var(--color-muted); border-radius: 4px; }
+  .pin-icon-btn:hover { color: var(--color-primary); background: var(--color-hover); }
+  /* Notepad sidebar */
   .notepad-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 91; background: var(--color-surface); border-right: 1px solid var(--color-border); box-shadow: 2px 0 8px rgba(0,0,0,0.1); transition: width 0.2s ease; overflow: hidden; display: flex; flex-direction: column; }
   .notepad-sidebar.collapsed { width: 40px; }
   .notepad-sidebar.expanded { width: 260px; }
@@ -254,19 +278,6 @@
   .notepad-sidebar-body .notepad-toolbar button:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .notepad-sidebar-body .notepad-textarea { flex: 1; min-height: 120px; padding: 0.5rem; font-family: inherit; font-size: 0.8rem; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 6px; resize: none; outline: none; }
   .notepad-sidebar-body .notepad-textarea::placeholder { color: var(--color-muted); }
-  .pin-sidebar { position: fixed; top: 0; bottom: 0; width: 220px; background: var(--color-surface); border-right: 1px solid var(--color-border); z-index: 90; overflow-y: auto; box-shadow: 2px 0 8px rgba(0,0,0,0.1); }
-  .pin-sidebar-header { padding: 0.75rem; font-weight: 700; font-size: 0.875rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.5rem; }
-  .pin-sidebar-body { padding: 0.25rem 0; }
-  .pin-sidebar-item { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
-  .pin-sidebar-item .unpin { margin-left: auto; background: transparent; border: none; cursor: pointer; padding: 0 0.25rem; font-size: 1rem; color: var(--color-muted); }
-  .pin-sidebar-item:hover { background: var(--color-hover); }
-  .pin-sidebar-item .pin-icon { width: 12px; height: 12px; border-radius: 50%; }
-  .pin-icon.pass { background: var(--color-success); animation: flicker 1s ease-in-out infinite; }
-  .pin-icon.fail { background: var(--color-danger); animation: flicker 1s ease-in-out infinite; }
-  .pin-icon.unknown { background: var(--color-muted); }
-  @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-  .pin-sidebar-item.expanded .pin-details { display: block; }
-  .pin-details { display: none; margin-top: 0.5rem; font-size: 0.75rem; color: var(--color-muted); }
   /* Modal */
   .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 100; padding: 1.5rem; }
   .modal-overlay.active { display: flex; }
@@ -297,6 +308,9 @@
   .server-offline { display: none; padding: 0.75rem 1rem; background: rgba(239,68,68,0.15); border: 1px solid var(--color-danger); border-radius: 8px; margin-bottom: 1rem; color: var(--color-danger); font-size: 0.9rem; }
   .server-offline.show { display: block; }
   .hidden { display: none !important; }
+  .btn-spinner { display: inline-block; margin-left: 0.35rem; animation: spin 0.8s linear infinite; }
+  .btn-primary .btn-spinner { opacity: 0.9; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="h-full">
@@ -322,14 +336,16 @@
             <input type="datetime-local" id="date-start" class="input-field">
           </div>
           <div class="flex items-center gap-2 flex-wrap">
-            <label for="date-end" class="text-xs font-semibold" style="color: var(--color-muted);">End</label>
-            <input type="datetime-local" id="date-end" class="input-field">
-            <label class="flex items-center gap-1.5 cursor-pointer" style="font-size: 0.8125rem;">
-              <input type="checkbox" id="end-now" class="rounded">
+            <div id="end-date-wrap" class="flex items-center gap-2 flex-wrap">
+              <label for="date-end" class="text-xs font-semibold" style="color: var(--color-muted);">End</label>
+              <input type="datetime-local" id="date-end" class="input-field">
+            </div>
+            <label class="flex items-center gap-1.5 cursor-pointer" style="font-size: 1rem; font-weight: 500;">
+              <input type="checkbox" id="end-now" class="rounded" checked>
               <span style="color: var(--color-text);">Now</span>
             </label>
           </div>
-          <button class="btn-primary btn-mini" id="apply-filter" type="button">Apply Filter</button>
+          <button class="btn-primary btn-mini" id="apply-filter" type="button"><span class="btn-text">Apply Filter</span><span class="btn-spinner hidden" aria-hidden="true">⟳</span></button>
           <span class="text-muted text-xs">Next update: <span id="timeline-next-update">60s</span></span>
         </div>
       </div>
@@ -380,15 +396,13 @@
         <div class="etf-header" style="margin-bottom: 0.75rem;">
           <input type="text" id="etf-filter" class="etf-filter" placeholder="Filter SN, MAC, IP...">
           <label class="etf-mac-key-label">BMC key:
-            <input type="text" id="etf-mac-key-bmc" class="etf-mac-key-input" list="etf-mac-key-options" placeholder="e.g. BMC MAC">
+            <span class="mac-key-wrap"><input type="text" id="etf-mac-key-bmc" class="etf-mac-key-input" readonly title="Key in SFC AssyInfo (all_keys) used to get BMC MAC for comparison with DHCP. Belongs to fields returned from Verify MAC."><button type="button" class="mac-key-lock" data-target="etf-mac-key-bmc" title="Click to unlock/edit">🔒</button></span>
           </label>
           <label class="etf-mac-key-label">SYS key:
-            <input type="text" id="etf-mac-key-sys" class="etf-mac-key-input" list="etf-mac-key-options" placeholder="e.g. SYS MAC">
+            <span class="mac-key-wrap"><input type="text" id="etf-mac-key-sys" class="etf-mac-key-input" readonly title="Key in SFC AssyInfo (all_keys) used to get SYS MAC for comparison with DHCP. Belongs to fields returned from Verify MAC."><button type="button" class="mac-key-lock" data-target="etf-mac-key-sys" title="Click to unlock/edit">🔒</button></span>
           </label>
-          <button type="button" id="btn-save-mac-keys" class="btn-save-mac-keys" title="Save key names for MAC compare">Save</button>
-          <datalist id="etf-mac-key-options"></datalist>
-          <button type="button" id="btn-verify-mac" class="btn-verify-mac" title="Verify MAC with SFC AssyInfo">Verify MAC</button>
-          <button type="button" id="btn-rescan" class="btn-rescan">Rescan</button>
+          <button type="button" id="btn-verify-mac" class="btn-verify-mac" title="Verify MAC with SFC AssyInfo"><span class="btn-text">Verify MAC</span><span class="btn-spinner hidden" aria-hidden="true">⟳</span></button>
+          <button type="button" id="btn-rescan" class="btn-rescan"><span class="btn-text">Rescan</span><span class="btn-spinner hidden" aria-hidden="true">⟳</span></button>
         </div>
         <div class="etf-summary">
           <span>Number of DUT: <strong id="dut-count">0</strong></span>

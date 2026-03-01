@@ -16,19 +16,36 @@
   let lastDisplayRows = [];
   let sfcSnMap = {};
   let assySnMap = {};
-  const MAC_VERIFY_BMC_KEY = "etf_mac_verify_bmc_key";
-  const MAC_VERIFY_SYS_KEY = "etf_mac_verify_sys_key";
-  const ASSY_VERIFY_INTERVAL_MS = 5 * 60 * 1000;
+  let macVerifyKeysCache = { bmc: "", sys: "" };
 
   function getMacVerifyKeys() {
-    try {
-      return {
-        bmc: localStorage.getItem(MAC_VERIFY_BMC_KEY) || "BMC MAC",
-        sys: localStorage.getItem(MAC_VERIFY_SYS_KEY) || "SYS MAC",
-      };
-    } catch (e) {
-      return { bmc: "BMC MAC", sys: "SYS MAC" };
-    }
+    return {
+      bmc: macVerifyKeysCache.bmc || "BMC MAC",
+      sys: macVerifyKeysCache.sys || "SYS MAC",
+    };
+  }
+
+  function fetchMacVerifyKeys() {
+    return fetch("/api/etf/mac-verify-keys")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.ok) {
+          macVerifyKeysCache = {
+            bmc: (data.bmc || "").trim(),
+            sys: (data.sys || "").trim(),
+          };
+        }
+        syncMacKeyInputs();
+      })
+      .catch(() => { syncMacKeyInputs(); });
+  }
+
+  function syncMacKeyInputs() {
+    const keys = getMacVerifyKeys();
+    const bmcEl = document.getElementById("etf-mac-key-bmc");
+    const sysEl = document.getElementById("etf-mac-key-sys");
+    if (bmcEl) bmcEl.value = keys.bmc || "N/A";
+    if (sysEl) sysEl.value = keys.sys || "N/A";
   }
 
   function getAllKeysOptions() {
@@ -41,13 +58,6 @@
     return Array.from(keys).sort();
   }
 
-  function renderMacKeySuggestions() {
-    const dl = document.getElementById("etf-mac-key-options");
-    if (!dl) return;
-    const opts = getAllKeysOptions();
-    dl.innerHTML = opts.map((k) => '<option value="' + escapeHtml(k) + '"></option>').join("");
-  }
-
   const tbody = document.getElementById("etf-tbody");
   const dutCountEl = document.getElementById("dut-count");
   const lastUpdatedEl = document.getElementById("last-updated");
@@ -57,38 +67,90 @@
   const btnVerifyMac = document.getElementById("btn-verify-mac");
   const inputBmcKey = document.getElementById("etf-mac-key-bmc");
   const inputSysKey = document.getElementById("etf-mac-key-sys");
-  const btnSaveMacKeys = document.getElementById("btn-save-mac-keys");
+  const BMC_KEY_TOOLTIP = "Key in SFC AssyInfo (all_keys) used to get BMC MAC for comparison with DHCP. Belongs to fields returned from Verify MAC.";
+  const SYS_KEY_TOOLTIP = "Key in SFC AssyInfo (all_keys) used to get SYS MAC for comparison with DHCP. Belongs to fields returned from Verify MAC.";
 
-  function syncMacKeyInputsFromStorage() {
-    if (!inputBmcKey || !inputSysKey) return;
-    const keys = getMacVerifyKeys();
-    inputBmcKey.value = keys.bmc;
-    inputSysKey.value = keys.sys;
+  function saveAndLock(input, lockBtn) {
+    if (!input || !lockBtn) return;
+    const val = (input.value || "").trim();
+    const displayVal = val || "N/A";
+    const isBmc = input.id === "etf-mac-key-bmc";
+    const payload = isBmc ? { bmc: val } : { sys: val };
+    fetch("/api/etf/mac-verify-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.ok) {
+          macVerifyKeysCache.bmc = (data.bmc || "").trim();
+          macVerifyKeysCache.sys = (data.sys || "").trim();
+        }
+        input.value = displayVal;
+        input.readOnly = true;
+        lockBtn.textContent = "🔒";
+        lockBtn.title = "Click to unlock/edit";
+        syncMacKeyInputs();
+        const displayRows = filterQuery && filterQuery.trim() ? searchRows : allRows.filter(matchFilter);
+        renderTable(displayRows);
+      })
+      .catch(() => {
+        input.value = displayVal;
+        input.readOnly = true;
+        lockBtn.textContent = "🔒";
+        lockBtn.title = "Click to unlock/edit";
+      });
   }
 
-  function saveMacKeysFromInputs() {
-    const bmc = (inputBmcKey?.value || "").trim() || "BMC MAC";
-    const sys = (inputSysKey?.value || "").trim() || "SYS MAC";
-    try {
-      localStorage.setItem(MAC_VERIFY_BMC_KEY, bmc);
-      localStorage.setItem(MAC_VERIFY_SYS_KEY, sys);
-    } catch (e) {}
-    if (inputBmcKey) inputBmcKey.value = bmc;
-    if (inputSysKey) inputSysKey.value = sys;
-    const displayRows = filterQuery && filterQuery.trim() ? searchRows : allRows.filter(matchFilter);
-    renderTable(displayRows);
-  }
-
-  if (btnSaveMacKeys) btnSaveMacKeys.addEventListener("click", saveMacKeysFromInputs);
+  document.querySelectorAll(".mac-key-lock").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.target;
+      const input = id ? document.getElementById(id) : null;
+      if (!input) return;
+      const isLocked = input.readOnly;
+      if (isLocked) {
+        input.readOnly = false;
+        input.value = input.value === "N/A" ? "" : input.value;
+        btn.textContent = "🔓";
+        btn.title = "Click to lock and save";
+        input.focus();
+      } else {
+        saveAndLock(input, btn);
+      }
+    });
+  });
   if (inputBmcKey && !inputBmcKey.dataset.bound) {
     inputBmcKey.dataset.bound = "1";
-    inputBmcKey.addEventListener("keydown", (e) => { if (e.key === "Enter") saveMacKeysFromInputs(); });
-    inputBmcKey.addEventListener("blur", () => { if ((inputBmcKey.value || "").trim()) saveMacKeysFromInputs(); });
+    inputBmcKey.title = BMC_KEY_TOOLTIP;
+    inputBmcKey.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const lockBtn = document.querySelector('.mac-key-lock[data-target="etf-mac-key-bmc"]');
+        saveAndLock(inputBmcKey, lockBtn);
+      }
+    });
+    inputBmcKey.addEventListener("blur", () => {
+      if (!inputBmcKey.readOnly) {
+        const lockBtn = document.querySelector('.mac-key-lock[data-target="etf-mac-key-bmc"]');
+        saveAndLock(inputBmcKey, lockBtn);
+      }
+    });
   }
   if (inputSysKey && !inputSysKey.dataset.bound) {
     inputSysKey.dataset.bound = "1";
-    inputSysKey.addEventListener("keydown", (e) => { if (e.key === "Enter") saveMacKeysFromInputs(); });
-    inputSysKey.addEventListener("blur", () => { if ((inputSysKey.value || "").trim()) saveMacKeysFromInputs(); });
+    inputSysKey.title = SYS_KEY_TOOLTIP;
+    inputSysKey.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const lockBtn = document.querySelector('.mac-key-lock[data-target="etf-mac-key-sys"]');
+        saveAndLock(inputSysKey, lockBtn);
+      }
+    });
+    inputSysKey.addEventListener("blur", () => {
+      if (!inputSysKey.readOnly) {
+        const lockBtn = document.querySelector('.mac-key-lock[data-target="etf-mac-key-sys"]');
+        saveAndLock(inputSysKey, lockBtn);
+      }
+    });
   }
 
   function escapeHtml(s) {
@@ -199,14 +261,44 @@
     }
     renderTable(allRows);
     if (typeof window.etfUpdatePinnedSns === "function") {
-      window.etfUpdatePinnedSns(Array.from(pinnedSns).map((k) => ({ rowKey: k, sn: lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === k)?.sn || k })));
+      window.etfUpdatePinnedSns(Array.from(pinnedSns).map((k) => ({
+        rowKey: k,
+        sn: lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === k)?.sn || k,
+        room: currentRoom,
+      })));
     }
   }
+
+  window.etfUnpinSn = function (rowKey) {
+    pinnedSns.delete(rowKey);
+    renderTable(allRows);
+    if (typeof window.etfUpdatePinnedSns === "function") {
+      window.etfUpdatePinnedSns(Array.from(pinnedSns).map((k) => ({
+        rowKey: k,
+        sn: lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === k)?.sn || k,
+        room: currentRoom,
+      })));
+    }
+  };
 
   function renderTable(rows) {
     allRows = rows || [];
     const isSearchMode = filterQuery && filterQuery.trim() !== "";
-    const displayRows = isSearchMode ? searchRows : allRows.filter(matchFilter);
+    let displayRows = isSearchMode ? searchRows : allRows.filter(matchFilter);
+    if (currentRoom !== "etf" && ["room6", "room7", "room8"].includes(currentRoom)) {
+      displayRows = [...displayRows].sort((a, b) => {
+        const slotA = (sfcSnMap[a.sn] || {}).slot_no || "";
+        const slotB = (sfcSnMap[b.sn] || {}).slot_no || "";
+        const numA = parseInt(slotA, 10);
+        const numB = parseInt(slotB, 10);
+        const hasA = !isNaN(numA);
+        const hasB = !isNaN(numB);
+        if (!hasA && !hasB) return 0;
+        if (!hasA) return 1;
+        if (!hasB) return -1;
+        return numA - numB;
+      });
+    }
     dutCountEl.textContent = displayRows.length;
 
     if (displayRows.length === 0 && expandedPanels.size === 0) {
@@ -258,18 +350,20 @@
       const sysMatch = sysMacDhcpNA ? null : (sysMacSfc ? normalizeMac(sysMacSfc) === normalizeMac(sysMacDhcp) : null);
       const bmcIcon = bmcMatch === true ? '<span class="mac-icon mac-ok" title="Match">✓</span>' : bmcMatch === false ? '<span class="mac-icon mac-fail" title="Mismatch">✗</span>' : "";
       const sysIcon = sysMatch === true ? '<span class="mac-icon mac-ok" title="Match">✓</span>' : sysMatch === false ? '<span class="mac-icon mac-fail" title="Mismatch">✗</span>' : "";
+      const bmcKeyLabel = macKeys.bmc || "BMC MAC";
       const bmcTitle = bmcMatch === false
-        ? ("SFC(" + macKeys.bmc + "): " + (bmcMacSfc || "-") + " | DHCP: " + (bmcMacDhcp || "-"))
-        : ("SFC(" + macKeys.bmc + "): " + (bmcMacSfc || "-"));
+        ? ("SFC(" + bmcKeyLabel + "): " + (bmcMacSfc || "-") + " | DHCP: " + (bmcMacDhcp || "-"))
+        : ("SFC(" + bmcKeyLabel + "): " + (bmcMacSfc || "-"));
       const bmcDiffInline = bmcMatch === false
         ? '<div class="mac-diff-inline" title="' + escapeHtml(bmcMacSfc + " vs " + bmcMacDhcp) + '">SFC: ' + escapeHtml(bmcMacSfc || "-") + " | DHCP: " + escapeHtml(bmcMacDhcp) + "</div>"
         : "";
       const sysDisplay = sysMacDhcpNA ? escapeHtml(sysMacSfc || "-") : escapeHtml(sysMacDhcp);
+      const sysKeyLabel = macKeys.sys || "SYS MAC";
       const sysTitle = sysMacDhcpNA
-        ? ("DHCP: N/A (showing SFC " + macKeys.sys + "): " + (sysMacSfc || "-"))
+        ? ("DHCP: N/A (showing SFC " + sysKeyLabel + "): " + (sysMacSfc || "-"))
         : (sysMatch === false
-          ? ("SFC(" + macKeys.sys + "): " + (sysMacSfc || "-") + " | DHCP: " + (sysMacDhcp || "-"))
-          : ("SFC(" + macKeys.sys + "): " + (sysMacSfc || "-") + " | DHCP: " + (sysMacDhcp || "-")));
+          ? ("SFC(" + sysKeyLabel + "): " + (sysMacSfc || "-") + " | DHCP: " + (sysMacDhcp || "-"))
+          : ("SFC(" + sysKeyLabel + "): " + (sysMacSfc || "-") + " | DHCP: " + (sysMacDhcp || "-")));
       const sysDiffInline = sysMatch === false
         ? '<div class="mac-diff-inline" title="' + escapeHtml((sysMacSfc || "-") + " vs " + sysMacDhcp) + '">SFC: ' + escapeHtml(sysMacSfc || "-") + " | DHCP: " + escapeHtml(sysMacDhcp) + "</div>"
         : "";
@@ -283,7 +377,7 @@
               <button type="button" data-action="term">Terminal Debug</button>
               <button type="button" data-action="both">Both</button>
             </div>
-            <button type="button" class="pin-btn etf-pin-btn" data-row-key="${escapeHtml(rowKey)}" data-sn="${escapeHtml(r.sn)}" title="Pin">${isPinned ? "📍" : "📌"}</button>
+            <button type="button" class="pin-btn etf-pin-btn pin-icon-btn" data-row-key="${escapeHtml(rowKey)}" data-sn="${escapeHtml(r.sn)}" title="${isPinned ? "Unpin" : "Pin"}"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg></button>
           </div>
         </div></td>
         <td class="etf-td"><div class="etf-cell-inner" title="${escapeHtml(r.pn)}">${escapeHtml(r.pn)}</div></td>
@@ -416,7 +510,11 @@
     });
 
     if (pinnedSns.size > 0 && typeof window.etfUpdatePinnedSns === "function") {
-      window.etfUpdatePinnedSns(Array.from(pinnedSns).map((k) => ({ rowKey: k, sn: lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === k)?.sn || k })));
+      window.etfUpdatePinnedSns(Array.from(pinnedSns).map((k) => ({
+        rowKey: k,
+        sn: lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === k)?.sn || k,
+        room: currentRoom,
+      })));
     }
 
     setupResizeHandles();
@@ -465,8 +563,14 @@
   function fetchData(isRescan) {
     const url = isRescan ? `/api/etf/reset?room=${currentRoom}` : `/api/etf/data?room=${currentRoom}`;
     const opts = isRescan ? { method: "POST" } : {};
-    if (isRescan) btnRescan.disabled = true;
-    Promise.all([
+    if (isRescan) {
+      btnRescan.disabled = true;
+      const rTxt = btnRescan?.querySelector(".btn-text");
+      const rSpin = btnRescan?.querySelector(".btn-spinner");
+      if (rTxt) rTxt.classList.add("hidden");
+      if (rSpin) rSpin.classList.remove("hidden");
+    }
+    return Promise.all([
       fetch(url, opts).then((res) => res.json()),
       fetch("/api/sfc/tray-status")
         .then((res) => res.json().then((data) => ({ ok: data.ok && res.ok, sn_map: data.sn_map || {} })))
@@ -480,14 +584,12 @@
           const lastKey = "_etfLastRowsJson_" + currentRoom;
           if (rowsJson !== (window[lastKey] || "")) {
             window[lastKey] = rowsJson;
-            // restore cached assy map for this room if present
-            assySnMap = roomCache[currentRoom]?.assySnMap || assySnMap || {};
-            renderMacKeySuggestions();
             renderTable(data.rows);
           } else {
             allRows = data.rows || [];
             dutCountEl.textContent = (allRows.filter(matchFilter)).length;
           }
+          verifyMacForRows(data.rows || []);
           lastUpdatedEl.textContent = data.last_updated || "-";
           nextUpdateSec = POLL_INTERVAL_MS / 1000;
           if (countdownInterval) clearInterval(countdownInterval);
@@ -505,7 +607,13 @@
         tbody.innerHTML = '<tr><td colspan="13" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
       })
       .finally(() => {
-        if (isRescan) btnRescan.disabled = false;
+        if (isRescan) {
+          btnRescan.disabled = false;
+          const rTxt = btnRescan?.querySelector(".btn-text");
+          const rSpin = btnRescan?.querySelector(".btn-spinner");
+          if (rTxt) rTxt.classList.remove("hidden");
+          if (rSpin) rSpin.classList.add("hidden");
+        }
       });
   }
 
@@ -517,7 +625,11 @@
     if (!uniq.length) return Promise.resolve(false);
     verifyInFlight = true;
     btnVerifyMac.disabled = true;
-    btnVerifyMac.textContent = "Verifying...";
+    const vTxt = btnVerifyMac?.querySelector(".btn-text");
+    const vSpin = btnVerifyMac?.querySelector(".btn-spinner");
+    if (vTxt) vTxt.textContent = "Verifying...";
+    if (vTxt) vTxt.classList.add("hidden");
+    if (vSpin) vSpin.classList.remove("hidden");
     return fetch("/api/sfc/assy-info", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -526,10 +638,6 @@
       .then((res) => res.json())
       .then((data) => {
         assySnMap = data.sn_map || {};
-        roomCache[currentRoom] = roomCache[currentRoom] || {};
-        roomCache[currentRoom].assySnMap = assySnMap;
-        roomCache[currentRoom].assy_last_updated = Date.now();
-        renderMacKeySuggestions();
         renderTable(allRows);
         return true;
       })
@@ -537,7 +645,10 @@
       .finally(() => {
         verifyInFlight = false;
         btnVerifyMac.disabled = false;
-        btnVerifyMac.textContent = "Verify MAC";
+        const vTxt = btnVerifyMac?.querySelector(".btn-text");
+        const vSpin = btnVerifyMac?.querySelector(".btn-spinner");
+        if (vTxt) { vTxt.textContent = "Verify MAC"; vTxt.classList.remove("hidden"); }
+        if (vSpin) vSpin.classList.add("hidden");
       });
   }
 
@@ -592,10 +703,6 @@
 
   btnRescan.addEventListener("click", () => {
     // full rescan; clear cached assy map for current room then refetch + verify
-    if (roomCache[currentRoom]) {
-      roomCache[currentRoom].assySnMap = {};
-      roomCache[currentRoom].assy_last_updated = 0;
-    }
     assySnMap = {};
     fetchData(true);
     schedulePoll();
@@ -624,14 +731,20 @@
     });
   });
 
-  fetchData(false);
+  fetchData(false).then(() => {
+    fetch(`/api/etf/reset?room=${currentRoom}`, { method: "POST" }).catch(() => {});
+  });
   schedulePoll();
-  syncMacKeyInputsFromStorage();
-  renderMacKeySuggestions();
-  setInterval(() => {
-    // auto-verify every 5 minutes; store with room cache
-    verifyMacForRows(allRows);
-  }, ASSY_VERIFY_INTERVAL_MS);
+  function initMacKeyInputs() {
+    syncMacKeyInputs();
+    fetchMacVerifyKeys();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initMacKeyInputs);
+  } else {
+    initMacKeyInputs();
+  }
+  setTimeout(syncMacKeyInputs, 100);
 
   updateLastEndDurations();
   setInterval(updateLastEndDurations, 1000);
