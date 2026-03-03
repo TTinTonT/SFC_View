@@ -728,17 +728,54 @@
     }
   }
 
-  window.etfCreateSnTerminals = function(sn, rowKey, action, { aiEl, sshEl, row }) {
+  function createSshTerminalWithTypeTarget(rowKey, containerEl, wsType, targetIp, jumpHost) {
+    const TerminalCls = typeof Terminal !== 'undefined' ? Terminal : (typeof window.Terminal !== 'undefined' ? window.Terminal : null);
+    if (!containerEl || !TerminalCls || !targetIp) return null;
+    let fitAddon = null;
+    try {
+      containerEl.innerHTML = '';
+      containerEl.style.minHeight = '120px';
+      const term = new TerminalCls({ cursorBlink: false, theme: { background: '#1e1e1e', foreground: '#d4d4d4' } });
+      fitAddon = initFitAddonAndOpen(term, containerEl);
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      let url = proto + '//' + location.host + '/ws/ssh?type=' + encodeURIComponent(wsType) + '&target=' + encodeURIComponent(targetIp);
+      if (jumpHost) url += '&jump_host=' + encodeURIComponent(jumpHost);
+      const ws = new WebSocket(url);
+      ws.onopen = () => {};
+      ws.onmessage = (e) => {
+        decodeMsgAsPromise(e.data).then((txt) => {
+          try { if (term && containerEl?.isConnected) term.write(txt); } catch (_) {}
+          scrollTerminalToBottomDebounced(containerEl);
+        }).catch(() => {});
+      };
+      ws.onerror = () => {};
+      ws.onclose = () => {};
+      term.onData((data) => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(data); });
+      return { term, ws, fitAddon };
+    } catch (err) {
+      console.error('SSH Terminal error:', err);
+      containerEl.innerHTML = '<span style="color:#fca5a5;font-size:12px;">SSH error: ' + (err?.message || 'Unknown') + '</span>';
+      return null;
+    }
+  }
+
+  window.etfCreateSnTerminals = function(sn, rowKey, actionOrPayload, opts) {
     let panel = snDebugPanels.get(rowKey);
     if (!panel) {
-      panel = { ai: null, ssh: null };
+      panel = { ai: null, ssh: null, bmc: null, host: null };
       snDebugPanels.set(rowKey, panel);
     }
-    const sshHost = (row && row.ssh_host) ? row.ssh_host : undefined;
-    const showAi = (action === 'ai' || action === 'both') && aiEl;
-    const showSsh = (action === 'term' || action === 'both') && sshEl;
+    const isPayload = typeof actionOrPayload === 'object' && actionOrPayload !== null && (actionOrPayload.aiEl != null || actionOrPayload.sshEl != null || actionOrPayload.bmcEl != null || actionOrPayload.hostEl != null);
+    const payload = isPayload ? actionOrPayload : (opts || {});
+    const action = isPayload ? null : actionOrPayload;
+    const aiEl = isPayload ? (payload.aiEl || null) : ((action === 'ai' || action === 'both') && payload.aiEl) ? payload.aiEl : null;
+    const sshEl = isPayload ? (payload.sshEl || null) : ((action === 'term' || action === 'both') && payload.sshEl) ? payload.sshEl : null;
+    const bmcEl = isPayload ? (payload.bmcEl || null) : (action === 'bmc' && payload.bmcEl) ? payload.bmcEl : null;
+    const hostEl = isPayload ? (payload.hostEl || null) : (action === 'host' && payload.hostEl) ? payload.hostEl : null;
+    const row = payload.row;
+
     const run = () => {
-      if (showAi && aiEl) {
+      if (aiEl) {
         if (panel.ai) {
           try { panel.ai.ws?.close(); } catch (_) {}
           try { panel.ai.term?.dispose(); } catch (_) {}
@@ -746,13 +783,33 @@
         }
         panel.ai = createAiTerminalForSn(rowKey, aiEl);
       }
-      if (showSsh && sshEl) {
+      if (sshEl) {
+        const sshHost = (row && row.ssh_host) ? row.ssh_host : undefined;
         if (panel.ssh) {
           try { panel.ssh.ws?.close(); } catch (_) {}
           try { panel.ssh.term?.dispose(); } catch (_) {}
           panel.ssh = null;
         }
         panel.ssh = createSshTerminalForSn(rowKey, sshEl, sshHost);
+      }
+      if (bmcEl && row?.bmc_ip) {
+        if (panel.bmc) {
+          try { panel.bmc.ws?.close(); } catch (_) {}
+          try { panel.bmc.term?.dispose(); } catch (_) {}
+          panel.bmc = null;
+        }
+        panel.bmc = createSshTerminalWithTypeTarget(rowKey, bmcEl, 'bmc', row.bmc_ip, row.ssh_host);
+      }
+      if (hostEl && row?.sys_ip) {
+        const sysIp = String(row.sys_ip || '').trim();
+        if (sysIp && sysIp.toUpperCase() !== 'N/A' && sysIp !== '-') {
+          if (panel.host) {
+            try { panel.host.ws?.close(); } catch (_) {}
+            try { panel.host.term?.dispose(); } catch (_) {}
+            panel.host = null;
+          }
+          panel.host = createSshTerminalWithTypeTarget(rowKey, hostEl, 'host', sysIp, row.ssh_host);
+        }
       }
     };
     requestAnimationFrame(() => requestAnimationFrame(run));
@@ -876,6 +933,39 @@
       .catch(() => {});
   };
 
+  window.etfDestroySnTerminal = function(rowKey, type) {
+    const panel = snDebugPanels.get(rowKey);
+    if (!panel) return;
+    if (type === 'ai' && panel.ai) {
+      try { panel.ai.ws?.close(); } catch (_) {}
+      try { panel.ai.term?.dispose(); } catch (_) {}
+      const container = panel.ai.term?.element?.closest?.('.sn-debug-ai-container');
+      if (container?._fitObserver) { try { container._fitObserver.disconnect(); } catch (_) {} }
+      panel.ai = null;
+    }
+    if ((type === 'ssh' || type === 'term') && panel.ssh) {
+      try { panel.ssh.ws?.close(); } catch (_) {}
+      try { panel.ssh.term?.dispose(); } catch (_) {}
+      const container = panel.ssh.term?.element?.closest?.('.sn-debug-ssh-container');
+      if (container?._fitObserver) { try { container._fitObserver.disconnect(); } catch (_) {} }
+      panel.ssh = null;
+    }
+    if (type === 'bmc' && panel.bmc) {
+      try { panel.bmc.ws?.close(); } catch (_) {}
+      try { panel.bmc.term?.dispose(); } catch (_) {}
+      const container = panel.bmc.term?.element?.closest?.('.sn-debug-bmc-container');
+      if (container?._fitObserver) { try { container._fitObserver.disconnect(); } catch (_) {} }
+      panel.bmc = null;
+    }
+    if (type === 'host' && panel.host) {
+      try { panel.host.ws?.close(); } catch (_) {}
+      try { panel.host.term?.dispose(); } catch (_) {}
+      const container = panel.host.term?.element?.closest?.('.sn-debug-host-container');
+      if (container?._fitObserver) { try { container._fitObserver.disconnect(); } catch (_) {} }
+      panel.host = null;
+    }
+  };
+
   window.etfCloseSnPanel = function(rowKey) {
     const panel = snDebugPanels.get(rowKey);
     if (!panel) return;
@@ -891,13 +981,25 @@
       const container = panel.ssh.term?.element?.closest?.('.sn-debug-ssh-container');
       if (container?._fitObserver) { try { container._fitObserver.disconnect(); } catch (_) {} }
     }
+    if (panel.bmc) {
+      try { panel.bmc.ws?.close(); } catch (_) {}
+      try { panel.bmc.term?.dispose(); } catch (_) {}
+      const container = panel.bmc.term?.element?.closest?.('.sn-debug-bmc-container');
+      if (container?._fitObserver) { try { container._fitObserver.disconnect(); } catch (_) {} }
+    }
+    if (panel.host) {
+      try { panel.host.ws?.close(); } catch (_) {}
+      try { panel.host.term?.dispose(); } catch (_) {}
+      const container = panel.host.term?.element?.closest?.('.sn-debug-host-container');
+      if (container?._fitObserver) { try { container._fitObserver.disconnect(); } catch (_) {} }
+    }
     snDebugPanels.delete(rowKey);
   };
 
   window.etfFitTerminals = function(rowKey) {
     const panel = snDebugPanels.get(rowKey);
     if (!panel) return;
-    [panel.ai, panel.ssh].forEach((x) => {
+    [panel.ai, panel.ssh, panel.bmc, panel.host].forEach((x) => {
       const el = x?.term?.element;
       if (x?.fitAddon && el?.isConnected) { try { x.fitAddon.fit(); } catch (_) {} }
     });

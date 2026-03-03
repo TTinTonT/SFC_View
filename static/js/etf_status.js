@@ -9,8 +9,48 @@
   let pollTimer = null;
   let nextUpdateSec = 0;
   let countdownInterval = null;
-  const expandedPanels = new Map();
+  const expandedPanels = new Map(); // value: { ai, term, bmc, host } or legacy "ai"|"term"|"both"
   const panelRowKeyToSn = new Map();
+
+  function getPanelFlags(rowKey) {
+    const v = expandedPanels.get(rowKey);
+    if (!v) return { ai: false, term: false, bmc: false, host: false };
+    if (typeof v === "object" && v !== null) return { ai: !!v.ai, term: !!v.term, bmc: !!v.bmc, host: !!v.host };
+    if (v === "ai") return { ai: true, term: false, bmc: false, host: false };
+    if (v === "term") return { ai: false, term: true, bmc: false, host: false };
+    if (v === "both") return { ai: true, term: true, bmc: false, host: false };
+    return { ai: false, term: false, bmc: false, host: false };
+  }
+
+  function actionFromFlags(flags) {
+    if (flags.ai && flags.term) return "both";
+    if (flags.ai) return "ai";
+    if (flags.term) return "term";
+    return null;
+  }
+
+  function setPanelFlags(rowKey, flags) {
+    if (flags.ai || flags.term || flags.bmc || flags.host) {
+      expandedPanels.set(rowKey, { ai: !!flags.ai, term: !!flags.term, bmc: !!flags.bmc, host: !!flags.host });
+    } else {
+      if (typeof window.etfCloseSnPanel === "function") window.etfCloseSnPanel(rowKey);
+      expandedPanels.delete(rowKey);
+    }
+  }
+
+  function titleLabelFromFlags(flags) {
+    const parts = [];
+    if (flags.ai) parts.push("AI Debug");
+    if (flags.term) parts.push("Terminal Debug");
+    if (flags.bmc) parts.push("BMC Terminal");
+    if (flags.host) parts.push("Host Terminal");
+    return parts.length ? parts.join(" + ") : "";
+  }
+
+  function terminalHeightFromFlags(flags) {
+    const n = [flags.ai, flags.term, flags.bmc, flags.host].filter(Boolean).length;
+    return n ? Math.min(Math.max(225 * n, 450), 900) : 450;
+  }
   const pinnedSns = new Set();
   const roomCache = {};
   let lastDisplayRows = [];
@@ -231,20 +271,143 @@
     document.querySelectorAll(".sn-menu").forEach((m) => m.classList.remove("open"));
   }
 
-  function onSnMenuAction(rowKey, sn, action) {
-    closeAllMenus();
-    expandedPanels.set(rowKey, action);
+  function onSnMenuToggle(rowKey, sn, mode) {
+    const flags = getPanelFlags(rowKey);
+    const next = !flags[mode];
+    if (mode === "ai" && !next) {
+      if (typeof window.etfAiEndSession === "function") window.etfAiEndSession(rowKey);
+    }
+    setPanelFlags(rowKey, { ...flags, [mode]: next });
     renderTable(allRows);
-    if (typeof window.etfCreateSnTerminals === "function") {
-      const panel = document.querySelector(`.sn-debug-panel[data-row-key="${escapeHtml(rowKey)}"]`);
-      if (panel) {
-        const aiEl = panel.querySelector(".sn-debug-ai-container");
-        const sshEl = panel.querySelector(".sn-debug-ssh-container");
-        const row = lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === rowKey);
-        window.etfCreateSnTerminals(sn, rowKey, action, { aiEl, sshEl, row });
+    const menu = [...document.querySelectorAll(".sn-menu")].find((m) => m.dataset.rowKey === rowKey);
+    if (menu) menu.classList.add("open");
+  }
+
+  function bindSnDebugButtons(tr) {
+    tr.querySelectorAll(".sn-debug-btn[data-action='start-session']").forEach((btn) => {
+      btn.addEventListener("click", () => { if (typeof window.etfAiStartSession === "function") window.etfAiStartSession(btn.dataset.rowKey || ""); });
+    });
+    tr.querySelectorAll(".sn-debug-btn[data-action='end-session']").forEach((btn) => {
+      btn.addEventListener("click", () => { if (typeof window.etfAiEndSession === "function") window.etfAiEndSession(btn.dataset.rowKey || ""); });
+    });
+    tr.querySelectorAll(".sn-debug-btn[data-action='upload']").forEach((btn) => {
+      btn.addEventListener("click", () => { if (typeof window.etfAiUpload === "function") window.etfAiUpload(btn.dataset.rowKey || ""); });
+    });
+  }
+
+  function syncPanelToFlags(tr, rowKey) {
+    const flags = getPanelFlags(rowKey);
+    const terminalsWrap = tr.querySelector(".sn-debug-terminals");
+    const header = tr.querySelector(".sn-debug-header");
+    const titleEl = header?.querySelector(".sn-debug-title");
+    let aiControls = header?.querySelector(".sn-debug-ai-controls");
+    const row = lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === rowKey);
+    const snDisplay = panelRowKeyToSn.get(rowKey) || rowKey;
+    const _sysIpVal = String(row?.sys_ip || "").trim().toUpperCase();
+    const sysIpNA = !_sysIpVal || _sysIpVal === "N/A" || _sysIpVal === "NA" || _sysIpVal === "-";
+    const flagsHost = flags.host && !sysIpNA;
+
+    let hasAi = tr.querySelector(".sn-debug-ai-container") !== null;
+    let hasSsh = tr.querySelector(".sn-debug-ssh-container") !== null;
+    let hasBmc = tr.querySelector(".sn-debug-bmc-container") !== null;
+    let hasHost = tr.querySelector(".sn-debug-host-container") !== null;
+
+    if (hasAi && !flags.ai) {
+      if (typeof window.etfAiEndSession === "function") window.etfAiEndSession(rowKey);
+      if (typeof window.etfDestroySnTerminal === "function") window.etfDestroySnTerminal(rowKey, "ai");
+      const el = tr.querySelector(".sn-debug-ai-container");
+      if (el) el.remove();
+      hasAi = false;
+    }
+    if (!hasAi && flags.ai && terminalsWrap) {
+      const aiContainer = document.createElement("div");
+      aiContainer.className = "sn-debug-terminal sn-debug-ai-container";
+      aiContainer.style.cssText = "min-height:150px;flex:1";
+      terminalsWrap.appendChild(aiContainer);
+      if (typeof window.etfCreateSnTerminals === "function") {
+        window.etfCreateSnTerminals(row?.sn || rowKey, rowKey, "ai", { aiEl: aiContainer, sshEl: null, bmcEl: null, hostEl: null, row });
         setTimeout(() => { if (typeof window.etfFitTerminals === "function") window.etfFitTerminals(rowKey); }, 150);
       }
+      if (!aiControls && header) {
+        aiControls = document.createElement("div");
+        aiControls.className = "sn-debug-ai-controls";
+        header.insertBefore(aiControls, header.querySelector(".sn-debug-hide"));
+      }
+      if (aiControls) {
+        aiControls.innerHTML = "<button type=\"button\" class=\"sn-debug-btn\" data-row-key=\"" + escapeHtml(rowKey) + "\" data-action=\"start-session\">Start Session</button><button type=\"button\" class=\"sn-debug-btn\" data-row-key=\"" + escapeHtml(rowKey) + "\" data-action=\"end-session\">End Session</button><button type=\"button\" class=\"sn-debug-btn\" data-row-key=\"" + escapeHtml(rowKey) + "\" data-action=\"upload\">Upload</button>";
+        aiControls.style.display = "";
+        bindSnDebugButtons(tr);
+      }
+      hasAi = true;
     }
+
+    if (hasSsh && !flags.term) {
+      if (typeof window.etfDestroySnTerminal === "function") window.etfDestroySnTerminal(rowKey, "ssh");
+      const el = tr.querySelector(".sn-debug-ssh-container");
+      if (el) el.remove();
+      hasSsh = false;
+    }
+    if (!hasSsh && flags.term && terminalsWrap) {
+      const sshContainer = document.createElement("div");
+      sshContainer.className = "sn-debug-terminal sn-debug-ssh-container";
+      sshContainer.style.cssText = "min-height:150px;flex:1";
+      terminalsWrap.appendChild(sshContainer);
+      if (typeof window.etfCreateSnTerminals === "function") {
+        window.etfCreateSnTerminals(row?.sn || rowKey, rowKey, "term", { aiEl: null, sshEl: sshContainer, bmcEl: null, hostEl: null, row });
+        setTimeout(() => { if (typeof window.etfFitTerminals === "function") window.etfFitTerminals(rowKey); }, 150);
+      }
+      hasSsh = true;
+    }
+
+    if (hasBmc && !flags.bmc) {
+      if (typeof window.etfDestroySnTerminal === "function") window.etfDestroySnTerminal(rowKey, "bmc");
+      const el = tr.querySelector(".sn-debug-bmc-container");
+      if (el) el.remove();
+      hasBmc = false;
+    }
+    if (!hasBmc && flags.bmc && terminalsWrap && row?.bmc_ip) {
+      const bmcContainer = document.createElement("div");
+      bmcContainer.className = "sn-debug-terminal sn-debug-bmc-container";
+      bmcContainer.style.cssText = "min-height:150px;flex:1";
+      terminalsWrap.appendChild(bmcContainer);
+      if (typeof window.etfCreateSnTerminals === "function") {
+        window.etfCreateSnTerminals(row?.sn || rowKey, rowKey, "bmc", { aiEl: null, sshEl: null, bmcEl: bmcContainer, hostEl: null, row });
+        setTimeout(() => { if (typeof window.etfFitTerminals === "function") window.etfFitTerminals(rowKey); }, 150);
+      }
+      hasBmc = true;
+    }
+
+    if (hasHost && !flagsHost) {
+      if (typeof window.etfDestroySnTerminal === "function") window.etfDestroySnTerminal(rowKey, "host");
+      const note = tr.querySelector(".sn-debug-host-note");
+      if (note) note.remove();
+      const el = tr.querySelector(".sn-debug-host-container");
+      if (el) el.remove();
+      hasHost = false;
+    }
+    if (!hasHost && flagsHost && terminalsWrap && row?.sys_ip) {
+      const hostNote = document.createElement("div");
+      hostNote.className = "sn-debug-host-note";
+      hostNote.style.cssText = "font-size:0.75rem;color:var(--color-muted);padding:0.25rem 0.5rem;background:var(--bg-card);";
+      hostNote.textContent = "Note: After power-on, host may take 4–5 minutes to boot; SSH will work once OS is up.";
+      terminalsWrap.appendChild(hostNote);
+      const hostContainer = document.createElement("div");
+      hostContainer.className = "sn-debug-terminal sn-debug-host-container";
+      hostContainer.style.cssText = "min-height:150px;flex:1";
+      terminalsWrap.appendChild(hostContainer);
+      if (typeof window.etfCreateSnTerminals === "function") {
+        window.etfCreateSnTerminals(row?.sn || rowKey, rowKey, "host", { aiEl: null, sshEl: null, bmcEl: null, hostEl: hostContainer, row });
+        setTimeout(() => { if (typeof window.etfFitTerminals === "function") window.etfFitTerminals(rowKey); }, 150);
+      }
+      hasHost = true;
+    }
+
+    const effectiveFlags = { ...flags, host: flags.host && !sysIpNA };
+    const titleLabel = titleLabelFromFlags(effectiveFlags);
+    if (titleEl) titleEl.textContent = snDisplay + " – " + titleLabel;
+    const ac = tr.querySelector(".sn-debug-ai-controls");
+    if (ac) ac.style.display = flags.ai ? "" : "none";
+    if (terminalsWrap) terminalsWrap.style.height = terminalHeightFromFlags(effectiveFlags) + "px";
   }
 
   function onHidePanel(rowKey) {
@@ -329,7 +492,7 @@
     displayRows.forEach((r) => {
       const rowKey = r.sn || r.pn || r.bmc_ip || "";
       const snDisplay = r.sn || "-";
-      const action = expandedPanels.get(rowKey);
+      const flags = getPanelFlags(rowKey);
       const isPinned = pinnedSns.has(rowKey);
       const sfc = sfcSnMap[r.sn] || {};
       const sfcSlot = escapeHtml(sfc.slot_no || "-");
@@ -367,15 +530,18 @@
       const sysDiffInline = sysMatch === false
         ? '<div class="mac-diff-inline" title="' + escapeHtml((sysMacSfc || "-") + " vs " + sysMacDhcp) + '">SFC: ' + escapeHtml(sysMacSfc || "-") + " | DHCP: " + escapeHtml(sysMacDhcp) + "</div>"
         : "";
+      const sysIpVal = String(r.sys_ip || "").trim().toUpperCase();
+      const sysIpNA = !sysIpVal || sysIpVal === "N/A" || sysIpVal === "NA" || sysIpVal === "-";
 
       htmlParts.push(`<tr data-sn="${escapeHtml(r.sn)}" data-row-key="${escapeHtml(rowKey)}">
         <td class="etf-td"><div class="etf-cell-inner etf-cell-inner--sn">
           <div class="sn-cell">
             <button type="button" class="sn-btn" data-sn="${escapeHtml(r.sn)}" data-row-key="${escapeHtml(rowKey)}" title="Debug options">${escapeHtml(snDisplay)}</button>
             <div class="sn-menu" data-row-key="${escapeHtml(rowKey)}">
-              <button type="button" data-action="ai">AI Debug</button>
-              <button type="button" data-action="term">Terminal Debug</button>
-              <button type="button" data-action="both">Both</button>
+              <label class="sn-menu-item"><input type="checkbox" data-action="ai" ${flags.ai ? "checked" : ""}> AI Debug</label>
+              <label class="sn-menu-item"><input type="checkbox" data-action="term" ${flags.term ? "checked" : ""}> Terminal Debug</label>
+              <label class="sn-menu-item"><input type="checkbox" data-action="bmc" ${flags.bmc ? "checked" : ""}> BMC Terminal</label>
+              ${!sysIpNA ? '<label class="sn-menu-item"><input type="checkbox" data-action="host" ' + (flags.host ? "checked" : "") + '> Host Terminal</label>' : ""}
             </div>
             <button type="button" class="pin-btn etf-pin-btn pin-icon-btn" data-row-key="${escapeHtml(rowKey)}" data-sn="${escapeHtml(r.sn)}" title="${isPinned ? "Unpin" : "Pin"}"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg></button>
           </div>
@@ -390,21 +556,28 @@
         <td class="etf-td"><div class="etf-cell-inner" title="${sfcRemarkVal}">${sfcRemarkVal}</div></td>
       </tr>`);
 
-      if (action && !savedPanels.has(rowKey)) {
-        const showAi = action === "ai" || action === "both";
-        const showSsh = action === "term" || action === "both";
+      if ((flags.ai || flags.term || flags.bmc || flags.host) && !savedPanels.has(rowKey)) {
+        const showAi = flags.ai;
+        const showSsh = flags.term;
+        const showBmc = flags.bmc;
+        const showHost = flags.host && !sysIpNA;
+        const effectiveFlags = { ...flags, host: showHost };
+        const titleLabel = titleLabelFromFlags(effectiveFlags);
+        const termHeight = terminalHeightFromFlags(effectiveFlags);
         htmlParts.push(`<tr class="sn-debug-row" data-row-key="${escapeHtml(rowKey)}">
           <td colspan="9" class="sn-debug-panel" data-row-key="${escapeHtml(rowKey)}">
             <div class="sn-debug-panel-inner">
               <div class="sn-debug-header">
-                <span class="sn-debug-title">${escapeHtml(snDisplay)} – ${action === "ai" ? "AI Debug" : action === "term" ? "Terminal Debug" : "AI + Terminal"}</span>
+                <span class="sn-debug-title">${escapeHtml(snDisplay)} – ${escapeHtml(titleLabel)}</span>
                 <div class="sn-debug-ai-controls">${showAi ? '<button type="button" class="sn-debug-btn" data-row-key="' + escapeHtml(rowKey) + '" data-action="start-session">Start Session</button><button type="button" class="sn-debug-btn" data-row-key="' + escapeHtml(rowKey) + '" data-action="end-session">End Session</button><button type="button" class="sn-debug-btn" data-row-key="' + escapeHtml(rowKey) + '" data-action="upload">Upload</button>' : ""}</div>
                 <button type="button" class="sn-debug-hide" data-row-key="${escapeHtml(rowKey)}">Hide</button>
               </div>
               <div class="sn-debug-resize" data-row-key="${escapeHtml(rowKey)}" title="Drag to resize"></div>
-              <div class="sn-debug-terminals" style="height: ${(showAi && showSsh ? 900 : 450)}px">
+              <div class="sn-debug-terminals" style="height: ${termHeight}px">
                 ${showAi ? '<div class="sn-debug-terminal sn-debug-ai-container" style="min-height:150px;flex:1"></div>' : ""}
                 ${showSsh ? '<div class="sn-debug-terminal sn-debug-ssh-container" style="min-height:150px;flex:1"></div>' : ""}
+                ${showBmc ? '<div class="sn-debug-terminal sn-debug-bmc-container" style="min-height:150px;flex:1"></div>' : ""}
+                ${showHost ? '<div class="sn-debug-host-note" style="font-size:0.75rem;color:var(--color-muted);padding:0.25rem 0.5rem;background:var(--bg-card);">Note: After power-on, host may take 4–5 minutes to boot; SSH will work once OS is up.</div><div class="sn-debug-terminal sn-debug-host-container" style="min-height:150px;flex:1"></div>' : ""}
               </div>
             </div>
           </td>
@@ -414,7 +587,6 @@
 
     disconnectedRowKeys.forEach((rowKey) => {
       const snDisplay = panelRowKeyToSn.get(rowKey) || rowKey;
-      const action = expandedPanels.get(rowKey);
       htmlParts.push(`<tr class="sn-disconnected-row" data-row-key="${escapeHtml(rowKey)}">
         <td colspan="9" style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; color: var(--color-text); font-size: 0.9rem;">
           <span style="font-weight: 600;">SN: ${escapeHtml(snDisplay)}</span> — Tray disconnected / cannot ping. Terminal output preserved. Close when done.
@@ -431,6 +603,7 @@
       const dataRows = tbody.querySelectorAll("tr:not(.sn-debug-row):not(.sn-disconnected-row)");
       const targetRow = dataRows[i];
       if (targetRow) targetRow.after(saved);
+      syncPanelToFlags(saved, rowKey);
     });
 
     disconnectedRowKeys.forEach((rowKey) => {
@@ -449,6 +622,7 @@
       }
       const placeholderRow = [...tbody.querySelectorAll("tr.sn-disconnected-row")].find((tr) => tr.dataset.rowKey === rowKey);
       if (placeholderRow) placeholderRow.after(saved);
+      syncPanelToFlags(saved, rowKey);
     });
 
     tbody.querySelectorAll(".sn-btn").forEach((btn) => {
@@ -462,15 +636,15 @@
       });
     });
 
-    tbody.querySelectorAll(".sn-menu button").forEach((menuBtn) => {
-      menuBtn.addEventListener("click", (e) => {
+    tbody.querySelectorAll(".sn-menu input[data-action]").forEach((input) => {
+      input.addEventListener("change", (e) => {
         e.stopPropagation();
-        const menu = menuBtn.closest(".sn-menu");
+        const menu = input.closest(".sn-menu");
         const rowKey = menu?.dataset.rowKey || "";
-        const action = menuBtn.dataset.action || "both";
+        const mode = input.dataset.action || "ai";
         const row = lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === rowKey);
-        const sn = (row?.sn || rowKey);
-        onSnMenuAction(rowKey, sn, action);
+        const sn = row?.sn || rowKey;
+        onSnMenuToggle(rowKey, sn, mode);
       });
     });
 
@@ -497,13 +671,18 @@
 
     expandedPanels.forEach((act, rowKey) => {
       if (savedPanels.has(rowKey)) return;
+      const flags = typeof act === "object" && act !== null ? act : getPanelFlags(rowKey);
+      if (!flags.ai && !flags.term && !flags.bmc && !flags.host) return;
       if (typeof window.etfCreateSnTerminals === "function") {
         const panel = tbody.querySelector(`.sn-debug-panel[data-row-key="${escapeHtml(rowKey)}"]`);
         if (panel) {
           const aiEl = panel.querySelector(".sn-debug-ai-container");
           const sshEl = panel.querySelector(".sn-debug-ssh-container");
+          const bmcEl = panel.querySelector(".sn-debug-bmc-container");
+          const hostEl = panel.querySelector(".sn-debug-host-container");
           const row = lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === rowKey);
-          window.etfCreateSnTerminals(row?.sn || rowKey, rowKey, act, { aiEl, sshEl, row });
+          const payload = { aiEl: flags.ai ? aiEl : null, sshEl: flags.term ? sshEl : null, bmcEl: flags.bmc ? bmcEl : null, hostEl: flags.host ? hostEl : null, row };
+          window.etfCreateSnTerminals(row?.sn || rowKey, rowKey, payload);
           setTimeout(() => { if (typeof window.etfFitTerminals === "function") window.etfFitTerminals(rowKey); }, 150);
         }
       }

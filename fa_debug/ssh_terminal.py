@@ -6,7 +6,15 @@ import threading
 
 import paramiko
 
-from config.debug_config import SSH_DHCP_HOST, SSH_DHCP_PASSWORD, SSH_DHCP_USER
+from config.debug_config import (
+    BMC_SSH_PASSWORD,
+    BMC_SSH_USER,
+    HOST_SSH_PASSWORD,
+    HOST_SSH_USER,
+    SSH_DHCP_HOST,
+    SSH_DHCP_PASSWORD,
+    SSH_DHCP_USER,
+)
 from config.etf_config import ROOMS
 
 
@@ -33,6 +41,8 @@ def register_ssh_ws(sock):
         client = None
         chan = None
         stop = threading.Event()
+        password_sent = [False]
+        inner_password = []
 
         def ssh_to_ws():
             try:
@@ -47,6 +57,14 @@ def register_ssh_ws(sock):
                         break
                     if not data:
                         break
+                    if inner_password and not password_sent[0]:
+                        try:
+                            buf = data.decode("utf-8", errors="replace").lower()
+                            if "password" in buf or "passphrase" in buf:
+                                chan.send((inner_password[0] + "\r\n").encode("utf-8"))
+                                password_sent[0] = True
+                        except Exception:
+                            pass
                     try:
                         ws.send(data)
                     except Exception:
@@ -78,8 +96,27 @@ def register_ssh_ws(sock):
 
         try:
             from flask import request
-            host = (request.args.get("host") or "").strip() or SSH_DHCP_HOST
-            user, password = _credentials_for_host(host)
+            ws_type = (request.args.get("type") or "").strip().lower()
+            target = (request.args.get("target") or "").strip()
+            jump_host = (request.args.get("jump_host") or "").strip()
+
+            if ws_type == "bmc" and target and jump_host:
+                host = jump_host
+                user, password = _credentials_for_host(jump_host)
+                inner_password.append(BMC_SSH_PASSWORD)
+            elif ws_type == "host" and target and jump_host:
+                host = jump_host
+                user, password = _credentials_for_host(jump_host)
+                inner_password.append(HOST_SSH_PASSWORD)
+            elif ws_type == "bmc" and target:
+                host = target
+                user, password = BMC_SSH_USER, BMC_SSH_PASSWORD
+            elif ws_type == "host" and target:
+                host = target
+                user, password = HOST_SSH_USER, HOST_SSH_PASSWORD
+            else:
+                host = (request.args.get("host") or "").strip() or SSH_DHCP_HOST
+                user, password = _credentials_for_host(host)
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             client.connect(host, username=user, password=password, timeout=15)
@@ -90,6 +127,13 @@ def register_ssh_ws(sock):
             chan = transport.open_session()
             chan.get_pty()
             chan.invoke_shell()
+
+            if ws_type == "bmc" and target and jump_host:
+                clear_cmd = 'ssh-keygen -f ~/.ssh/known_hosts -R "' + target + '" 2>/dev/null; '
+                chan.send((clear_cmd + "ssh -o StrictHostKeyChecking=no " + BMC_SSH_USER + "@" + target + "\r\n").encode("utf-8"))
+            elif ws_type == "host" and target and jump_host:
+                clear_cmd = 'ssh-keygen -f ~/.ssh/known_hosts -R "' + target + '" 2>/dev/null; '
+                chan.send((clear_cmd + "ssh -o StrictHostKeyChecking=no " + HOST_SSH_USER + "@" + target + "\r\n").encode("utf-8"))
 
             t1 = threading.Thread(target=ssh_to_ws, daemon=True)
             t2 = threading.Thread(target=ws_to_ssh, daemon=True)

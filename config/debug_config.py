@@ -24,6 +24,12 @@ SSH_DHCP_HOST = "10.16.138.67"
 SSH_DHCP_USER = "root"
 SSH_DHCP_PASSWORD = "root"
 
+# SSH to DUT BMC (root@bmc_ip) and Host (nvidia@sys_ip) from SN menu
+BMC_SSH_USER = os.environ.get("BMC_SSH_USER", "root")
+BMC_SSH_PASSWORD = os.environ.get("BMC_SSH_PASSWORD", "0penBmc")
+HOST_SSH_USER = os.environ.get("HOST_SSH_USER", "nvidia")
+HOST_SSH_PASSWORD = os.environ.get("HOST_SSH_PASSWORD", "nvidia")
+
 # Crabber API: search by SN -> node_log_id -> get_node_info -> Log Report File Path
 # search_log_items: GET /api/search_log_items/?sn=XXX
 # get_node_info: GET /api/get_node_info/?node_log_id=XXX

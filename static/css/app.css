@@ -700,3 +700,34 @@ html[data-theme="dark"] *[style*="color:#721c24"]{
   border:1px solid rgba(244,67,54,.35)!important;
 }
 
+/* SN dropdown menu – mỗi item một hàng (vertical) */
+.sn-cell .sn-menu{
+  display:flex !important;
+  flex-direction:column !important;
+  flex-wrap:nowrap !important;
+  align-items:stretch;
+  min-width:10rem;
+}
+.sn-cell .sn-menu .sn-menu-item{
+  display:block !important;
+  width:100% !important;
+  min-height:2rem;
+  padding:6px 12px;
+  cursor:pointer;
+  white-space:nowrap;
+  font-size:13px;
+  box-sizing:border-box;
+  border-bottom:1px solid var(--border-color);
+}
+.sn-cell .sn-menu .sn-menu-item input[type="checkbox"]{
+  margin:0 8px 0 0;
+  vertical-align:middle;
+  cursor:pointer;
+}
+.sn-cell .sn-menu .sn-menu-item:last-child{
+  border-bottom:none;
+}
+.sn-cell .sn-menu .sn-menu-item:hover{
+  background:var(--hover-soft-cell);
+}
+
