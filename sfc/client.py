@@ -22,6 +22,7 @@ from config.app_config import (
 
 LOGIN_URL = f"{SFC_BASE_URL}/System/Login.jsp"
 FAIL_RESULT_URL = f"{SFC_BASE_URL}/L10_Report/Manufacture/fail_result_new.jsp"
+PPID_WIP_TRACKING_URL = f"{SFC_BASE_URL}/L10_Report/PPID_Wip_Tracking.jsp"
 
 _session_lock = threading.Lock()
 _cached_session: Optional[requests.Session] = None
@@ -140,4 +141,29 @@ def request_assy_info(sn: str) -> Tuple[bool, str]:
         sess = _get_session(force_new=True)
         if sess:
             ok, html = _fetch_assy_info_html(sess, sn)
+    return ok, html
+
+
+def _fetch_ppid_wip_tracking_html(session: requests.Session, sn: str) -> Tuple[bool, str]:
+    """POST PPID_Wip_Tracking.jsp with PPID=sn. Returns (success, html_string). Decodes big5."""
+    try:
+        r = session.post(PPID_WIP_TRACKING_URL, data={"PPID": sn}, timeout=30)
+        if r.status_code != 200:
+            return False, ""
+        r.encoding = r.encoding or "big5"
+        return True, r.text
+    except Exception:
+        return False, ""
+
+
+def request_ppid_wip_tracking(sn: str) -> Tuple[bool, str]:
+    """Get session, then fetch PPID_Wip_Tracking HTML for SN. Returns (success, html)."""
+    sess = _get_session()
+    if sess is None:
+        return False, ""
+    ok, html = _fetch_ppid_wip_tracking_html(sess, sn)
+    if not ok:
+        sess = _get_session(force_new=True)
+        if sess:
+            ok, html = _fetch_ppid_wip_tracking_html(sess, sn)
     return ok, html

@@ -33,6 +33,7 @@ SFC_USER = os.environ.get("SFC_USER", "SFC")
 SFC_PWD = os.environ.get("SFC_PWD", "EPD2TJW")
 SFC_GROUP_NAME = os.environ.get("SFC_GROUP_NAME", "'AST','FCT','FLA','FLB','FLC','FTS','IOT','NVL','PRET','RIN'")
 SFC_SESSION_TTL_SECONDS = int(os.environ.get("SFC_SESSION_TTL_SECONDS", str(30 * 60)))
+VALID_LOCATION = os.environ.get("VALID_LOCATION", "San Jose")
 
 EXTEND_HOURS = get_extend_hours()
 CA_TZ = get_ca_tz()

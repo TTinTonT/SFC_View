@@ -307,12 +307,19 @@ def api_sfc_tray_status():
         if not sn:
             continue
         if sn not in sn_map:
+            raw_remark = (item.get("Remark") or "").strip() or None
+            status = (item.get("Status") or "").strip() or ""
+            group_name = (item.get("Group_Name") or "").strip() or ""
+            if raw_remark is None:
+                remark = (status + " at " + group_name).strip() or None
+            else:
+                remark = raw_remark
             sn_map[sn] = {
                 "fixture_no": (item.get("Fixture_No") or "").strip() or None,
                 "slot_no": (item.get("Slot_No") or "").strip() or None,
-                "status": (item.get("Status") or "").strip() or None,
+                "status": status or None,
                 "last_end_time": (item.get("Last_End_Time") or "").strip() or None,
-                "remark": (item.get("Remark") or "").strip() or None,
+                "remark": remark,
             }
     return jsonify({"ok": True, "sn_map": sn_map})
 

@@ -199,6 +199,44 @@ def parse_assy_info_html(html: str) -> Optional[dict]:
     return result if (result["sys_mac"] or result["bmc_mac"]) else None
 
 
+def is_sn_valid_by_location(html: str, required_location: str = "San Jose") -> bool:
+    """
+    Parse PPID_Wip_Tracking HTML: find table with LOCATION header, traverse LOCATION column.
+    If any row contains required_location (substring match), return True; else False.
+    """
+    if BeautifulSoup is None:
+        raise RuntimeError("beautifulsoup4 is required; pip install beautifulsoup4")
+    if not html or not html.strip():
+        return False
+    soup = BeautifulSoup(html, "html.parser")
+    for table in soup.find_all("table"):
+        rows = table.find_all("tr")
+        idx_location = -1
+        header_row_idx = -1
+        for i, tr in enumerate(rows):
+            cells = tr.find_all(["th", "td"])
+            if not cells:
+                continue
+            for j, cell in enumerate(cells):
+                t = _cell_text(cell)
+                if "LOCATION" in (t or "").strip().upper():
+                    idx_location = j
+                    header_row_idx = i
+                    break
+            if idx_location >= 0:
+                break
+        if idx_location < 0 or header_row_idx < 0:
+            continue
+        for tr in rows[header_row_idx + 1 :]:
+            tds = tr.find_all("td")
+            if len(tds) <= idx_location:
+                continue
+            loc = _cell_text(tds[idx_location]).strip()
+            if required_location in loc:
+                return True
+    return False
+
+
 def rows_to_csv(rows: List[dict], include_bp: bool = False) -> str:
     """Convert list of dicts to CSV string (UTF-8). If include_bp, add BP column."""
     if not rows:

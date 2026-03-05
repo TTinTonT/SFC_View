@@ -9,12 +9,31 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sfc.client import request_fail_result
-from sfc.parser import parse_fail_result_html
+from config.app_config import VALID_LOCATION
+from sfc.client import request_fail_result, request_ppid_wip_tracking
+from sfc.parser import is_sn_valid_by_location, parse_fail_result_html
 
 from analytics.compute import compute_all
 from analytics.error_stats import compute_error_stats, compute_error_stats_sn_list
 from analytics.sn_list import compute_sn_list
+
+
+def _filter_rows_by_valid_sns(rows: List[dict]) -> List[dict]:
+    """Keep only rows whose serial_number is valid (LOCATION contains VALID_LOCATION)."""
+    unique_sns = {
+        (r.get("serial_number") or "").strip()
+        for r in rows
+        if (r.get("serial_number") or "").strip()
+    }
+    valid_sns = set()
+    for sn in unique_sns:
+        ok, html = request_ppid_wip_tracking(sn)
+        if ok and is_sn_valid_by_location(html, required_location=VALID_LOCATION):
+            valid_sns.add(sn)
+    return [
+        r for r in rows
+        if (r.get("serial_number") or "").strip() in valid_sns
+    ]
 
 
 def run_fail_result_rows(
@@ -25,7 +44,8 @@ def run_fail_result_rows(
     ok, html = request_fail_result(user_start, user_end)
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
-    return parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+    return _filter_rows_by_valid_sns(rows)
 
 
 def run_analytics_query(
@@ -41,6 +61,7 @@ def run_analytics_query(
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
     rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+    rows = _filter_rows_by_valid_sns(rows)
     return compute_all(rows, aggregation=aggregation)
 
 
@@ -78,6 +99,7 @@ def run_error_stats(
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
     rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+    rows = _filter_rows_by_valid_sns(rows)
     return compute_error_stats(rows, top_k=top_k)
 
 
