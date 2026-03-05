@@ -10,6 +10,8 @@ try:
 except ImportError:
     pytz = None  # type: ignore
 
+from config.site_defaults import get_default
+
 _CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 _CONFIG_PATH = os.path.join(_CONFIG_DIR, "analytics_config.json")
 
@@ -27,7 +29,7 @@ _DEFAULT_CONFIG = {
         "unknown_station": "RIN",
     },
     "stations_order": _DEFAULT_STATIONS_ORDER,
-    "timezone": "America/Los_Angeles",
+    "timezone": get_default("timezone") or "America/Los_Angeles",
     "extend_hours": 2,
     "top_k_errors_default": 5,
     "aggregation_default": "daily",

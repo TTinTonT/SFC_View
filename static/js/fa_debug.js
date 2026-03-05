@@ -590,7 +590,7 @@
   let etfPinnedSns = [];
 
   function getConfig() {
-    return window.FA_DEBUG_CONFIG || { wsUrl: 'ws://10.16.138.80:5111/api/agent/terminal', uploadUrl: 'http://10.16.138.80:5111/api/agent-uploads/upload' };
+    return window.FA_DEBUG_CONFIG || {};
   }
 
   function scrollTerminalToBottom(containerEl) {
@@ -667,9 +667,12 @@
       const term = new TerminalCls({ cursorBlink: false, theme: { background: '#1e1e1e', foreground: '#d4d4d4' } });
       fitAddon = initFitAddonAndOpen(term, containerEl);
       const cfg = getConfig();
-      const url = cfg.wsUrl || 'ws://10.16.138.80:5111/api/agent/terminal';
-      const ws = new WebSocket(url);
+      const url = cfg.wsUrl || '';
+      const ws = url ? new WebSocket(url) : null;
       const ai = { term, ws, fitAddon };
+      if (!ws) {
+        try { if (term && containerEl?.isConnected) term.write('\r\n[AI terminal not configured. Set WS_TERMINAL_URL in config.]\r\n'); } catch (_) {}
+      } else {
       ws.onopen = () => {};
       ws.onmessage = (e) => {
         decodeMsgAsPromise(e.data).then((txt) => {
@@ -689,6 +692,7 @@
       term.onData((data) => {
         try { if (ai.ws && ai.ws.readyState === WebSocket.OPEN) ai.ws.send(data); } catch (_) {}
       });
+      }
       return ai;
     } catch (err) {
       console.error('AI Terminal error:', err);
@@ -824,7 +828,14 @@
       if (ai.ws) ai.ws.close();
     } catch (_) {}
     const cfg = getConfig();
-    const url = cfg.wsUrl || 'ws://10.16.138.80:5111/api/agent/terminal';
+    const url = cfg.wsUrl || '';
+    if (!url) {
+      try {
+        const c = ai.term?.element?.closest?.('.sn-debug-ai-container');
+        if (ai.term && c?.isConnected) ai.term.write('\r\n\r\n\x1b[33m[No WS URL configured. Set FA_DEBUG_CONFIG.wsUrl from backend.]\x1b[0m\r\n');
+      } catch (_) {}
+      return;
+    }
     const ws = new WebSocket(url);
     ws.onopen = () => {};
     ws.onmessage = (e) => {
