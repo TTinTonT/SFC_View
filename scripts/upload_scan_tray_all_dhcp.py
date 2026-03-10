@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload scan_tray_bmc_mpi_new.sh to all DHCP servers (etf, room6 x3, room7, room8)."""
+"""Upload scan_tray_bmc_arp_ssh.sh to all DHCP servers (etf, room6 x3, room7, room8)."""
 import os
 import sys
 
@@ -15,7 +15,7 @@ def _targets_from_rooms():
     for room, cfg in ROOMS.items():
         user = cfg.get("ssh_user", "root")
         password = cfg.get("ssh_pass", "root")
-        remote_path = cfg.get("script_path", "/root/TIN/scan_tray_bmc_mpi_new.sh")
+        remote_path = cfg.get("script_path", "/root/TIN/scan_tray_bmc_arp_ssh.sh")
 
         hosts = cfg.get("ssh_hosts")
         if hosts:
@@ -53,7 +53,7 @@ def upload_to_host(room: str, host: str, user: str, password: str, remote_path: 
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    local_path = os.path.join(script_dir, "scan_tray_bmc_mpi_new.sh")
+    local_path = os.path.join(script_dir, "scan_tray_bmc_arp_ssh.sh")
     with open(local_path, "r", encoding="utf-8") as f:
         content = f.read()
 
