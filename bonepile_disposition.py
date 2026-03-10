@@ -283,7 +283,7 @@ def set_job(job_id: str, **fields: Any) -> None:
 
 
 def _normalize_sn(val: Any) -> Optional[str]:
-    """Normalize SN value to 13-digit string starting with 18, or None."""
+    """Normalize SN value to 13-digit string (prefix 18 or 21), or None."""
     if val is None:
         return None
     s = str(val).strip()
@@ -299,7 +299,7 @@ def _normalize_sn(val: Any) -> Optional[str]:
     if re.fullmatch(r"\d+\.0", s):
         s = s[:-2]
     s = re.sub(r"[^\d]", "", s)
-    if len(s) == 13 and s.startswith("18"):
+    if len(s) == 13 and (s.startswith("18") or s.startswith("21")):
         return s
     return None
 
