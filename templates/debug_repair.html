@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Repair – Debug</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
+  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 600px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
+  .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; }
+  .nav-links a { color: var(--color-primary); text-decoration: none; margin-right: 1rem; }
+  .nav-links a:hover { text-decoration: underline; }
+  .nav-links .btn-logout { background: none; border: none; padding: 0; font-size: inherit; color: var(--color-primary); cursor: pointer; }
+  .nav-links .btn-logout:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="nav-links">
+      <a href="/debug">Debug</a>
+      <a href="/debug/setting">Setting</a>
+      <a href="/">Analytics</a>
+      <form method="post" action="/api/auth/logout" style="display: inline;">
+        <button type="submit" class="btn-logout">Logout</button>
+      </form>
+    </div>
+    <h1>Repair</h1>
+    <p style="color: var(--color-muted);">Coming soon.</p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My settings – Debug</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
+  .nav-links { margin-bottom: 1rem; }
+  .nav-links a { color: var(--color-primary); text-decoration: none; margin-right: 1rem; }
+  .nav-links .btn-logout { background: none; border: none; padding: 0; font-size: inherit; color: var(--color-primary); cursor: pointer; }
+  .nav-links .btn-logout:hover { text-decoration: underline; }
+  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; max-width: 420px; }
+  .panel h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.75rem; }
+  .form-group { margin-bottom: 0.75rem; }
+  .form-group label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--color-muted); margin-bottom: 0.25rem; }
+  .form-group input { width: 100%; padding: 0.5rem 0.75rem; border: 1.5px solid var(--color-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); }
+  .btn { padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; background: var(--color-primary); color: white; }
+  .btn:hover { background: #4F46E5; }
+  .alert { padding: 0.5rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 0.5rem; display: none; }
+  .alert.err { background: rgba(239,68,68,0.12); color: var(--color-danger); }
+  .alert.ok { background: rgba(16,185,129,0.12); color: var(--color-success); }
+  </style>
+</head>
+<body>
+  <div class="nav-links">
+    <a href="/debug">Debug</a>
+    <a href="/debug/repair">Repair</a>
+    <a href="/">Analytics</a>
+    <form method="post" action="/api/auth/logout" style="display: inline;">
+      <button type="submit" class="btn-logout">Logout</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Change password</h2>
+    <div id="pw-alert" class="alert"></div>
+    <div class="form-group">
+      <label for="current_password">Current password</label>
+      <input type="password" id="current_password" autocomplete="current-password">
+    </div>
+    <div class="form-group">
+      <label for="new_password">New password</label>
+      <input type="password" id="new_password" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label for="new_password_confirm">Confirm new password</label>
+      <input type="password" id="new_password_confirm" autocomplete="new-password">
+    </div>
+    <button type="button" class="btn" id="btn-change-pw">Change password</button>
+  </div>
+
+  <div class="panel">
+    <h2>Change username</h2>
+    <p class="text-sm mb-2" style="color: var(--color-muted);">Current: <strong id="current-username">{{ current_user.get('username', '') if current_user else '' }}</strong></p>
+    <div id="un-alert" class="alert"></div>
+    <div class="form-group">
+      <label for="new_username">New username</label>
+      <input type="text" id="new_username" placeholder="New username" autocomplete="username">
+    </div>
+    <button type="button" class="btn" id="btn-change-username">Change username</button>
+  </div>
+
+  <script>
+  (function() {
+    function api(path, body) {
+      return fetch(path, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {})
+      }).then(function(r) { return r.json(); });
+    }
+
+    function show(el, msg, isErr) {
+      el.textContent = msg;
+      el.className = 'alert ' + (isErr ? 'err' : 'ok');
+      el.style.display = 'block';
+    }
+
+    document.getElementById('btn-change-pw').onclick = function() {
+      var el = document.getElementById('pw-alert');
+      var current = document.getElementById('current_password').value;
+      var newPw = document.getElementById('new_password').value;
+      var confirm = document.getElementById('new_password_confirm').value;
+      if (!current || !newPw) { show(el, 'Current and new password required', true); return; }
+      if (newPw !== confirm) { show(el, 'New password and confirm do not match', true); return; }
+      api('/api/auth/change-password', { current_password: current, new_password: newPw, new_password_confirm: confirm }).then(function(d) {
+        if (d.ok) {
+          show(el, 'Password changed.', false);
+          document.getElementById('current_password').value = '';
+          document.getElementById('new_password').value = '';
+          document.getElementById('new_password_confirm').value = '';
+        } else {
+          show(el, d.error || 'Failed', true);
+        }
+      }).catch(function() { show(el, 'Request failed', true); });
+    };
+
+    document.getElementById('btn-change-username').onclick = function() {
+      var el = document.getElementById('un-alert');
+      var newUn = document.getElementById('new_username').value.trim();
+      if (!newUn) { show(el, 'New username required', true); return; }
+      api('/api/auth/change-username', { new_username: newUn }).then(function(d) {
+        if (d.ok) {
+          show(el, 'Username updated.', false);
+          document.getElementById('current-username').textContent = newUn;
+          document.getElementById('new_username').value = '';
+        } else {
+          show(el, d.error || 'Failed', true);
+        }
+      }).catch(function() { show(el, 'Request failed', true); });
+    });
+  })();
+  </script>
+</body>
+</html>

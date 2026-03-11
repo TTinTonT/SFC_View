@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login – Debug</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); display: flex; align-items: center; justify-content: center; }
+  .login-box { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 380px; width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.5rem; color: var(--color-text); }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--color-muted); margin-bottom: 0.35rem; }
+  .form-group input { width: 100%; padding: 0.6rem 0.75rem; border: 1.5px solid var(--color-border); border-radius: 10px; background: var(--color-bg); color: var(--color-text); font-size: 1rem; }
+  .form-group input:focus { outline: none; border-color: var(--color-primary); }
+  .btn-primary { width: 100%; padding: 0.65rem 1.25rem; border-radius: 10px; border: none; background: var(--color-primary); color: white; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 0.5rem; }
+  .btn-primary:hover { background: #4F46E5; }
+  .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
+  .alert { padding: 0.6rem 0.75rem; border-radius: 8px; font-size: 0.875rem; margin-bottom: 1rem; }
+  .alert-error { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: var(--color-danger); }
+  .links { margin-top: 1.25rem; font-size: 0.875rem; }
+  .links a { color: var(--color-primary); text-decoration: none; }
+  .links a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h1>Log in to Debug</h1>
+    <div id="alert" class="alert alert-error" style="display: none;"></div>
+    <form id="loginForm" method="post" action="/api/auth/login">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-primary" id="submitBtn">Log in</button>
+    </form>
+    <div class="links">
+      <a href="/register">Register</a>
+      &nbsp;·&nbsp;
+      <a href="#" id="forgotLink">Forgot password</a>
+    </div>
+  </div>
+  <script>
+  (function() {
+    var form = document.getElementById('loginForm');
+    var alertEl = document.getElementById('alert');
+    var submitBtn = document.getElementById('submitBtn');
+    var forgotLink = document.getElementById('forgotLink');
+
+    function showError(msg) {
+      alertEl.textContent = msg;
+      alertEl.style.display = 'block';
+    }
+    function hideError() {
+      alertEl.style.display = 'none';
+    }
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      hideError();
+      submitBtn.disabled = true;
+      var fd = new FormData(form);
+      fetch('/api/auth/login', {
+        method: 'POST',
+        body: fd,
+        redirect: 'manual'
+      }).then(function(r) {
+        if (r.type === 'opaqueredirect' || r.status === 302) {
+          window.location.href = '/debug';
+          return;
+        }
+        return r.json().then(function(data) {
+          if (data.ok && data.redirect) {
+            window.location.href = data.redirect || '/debug';
+            return;
+          }
+          showError(data.error || 'Login failed');
+          submitBtn.disabled = false;
+        }).catch(function() {
+          showError('Login failed');
+          submitBtn.disabled = false;
+        });
+      }).catch(function() {
+        showError('Network error');
+        submitBtn.disabled = false;
+      });
+    });
+
+    forgotLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      var username = prompt('Enter your username or email:');
+      if (!username) return;
+      hideError();
+      fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim() })
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.ok) alert(data.message || 'If an account with that email exists, a new password was sent.');
+        else showError(data.error || 'Request failed');
+      }).catch(function() { showError('Request failed'); });
+    });
+  })();
+  </script>
+</body>
+</html>

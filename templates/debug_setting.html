@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setting – Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 1.5rem; }
+  .nav-links { margin-bottom: 1rem; }
+  .nav-links a { color: var(--color-primary); text-decoration: none; margin-right: 1rem; }
+  .nav-links a:hover { text-decoration: underline; }
+  .nav-links .btn-logout { background: none; border: none; padding: 0; font-size: inherit; color: var(--color-primary); cursor: pointer; text-decoration: none; }
+  .nav-links .btn-logout:hover { text-decoration: underline; }
+  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
+  .panel h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.75rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--color-border); }
+  th { background: var(--color-bg); color: var(--color-muted); font-weight: 600; }
+  tr:hover { background: var(--color-hover); }
+  .btn-sm { padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); margin-right: 0.25rem; }
+  .btn-sm:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .btn-sm.danger:hover { background: var(--color-danger); border-color: var(--color-danger); }
+  .form-row { margin-bottom: 0.5rem; }
+  .form-row label { display: inline-block; width: 100px; font-size: 0.875rem; }
+  .form-row input, .form-row select { padding: 0.35rem 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); color: var(--color-text); width: 200px; }
+  .alert { padding: 0.5rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 0.5rem; }
+  .alert.err { background: rgba(239,68,68,0.12); color: var(--color-danger); }
+  .alert.ok { background: rgba(16,185,129,0.12); color: var(--color-success); }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.25rem; min-width: 280px; }
+  .modal-box h3 { font-size: 1rem; margin-bottom: 0.75rem; }
+  .modal-box .form-row { margin-bottom: 0.5rem; }
+  .modal-box .form-row label { display: inline-block; width: 80px; }
+  .modal-box input[type="time"] { padding: 0.35rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); color: var(--color-text); }
+  .modal-box .hint { font-size: 0.75rem; color: var(--color-muted); margin-top: 0.5rem; }
+  tr.different-device { background: rgba(251, 191, 36, 0.2); border-left: 3px solid #F59E0B; }
+  .badge-new-device { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; background: #F59E0B; color: #1E293B; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="nav-links">
+    <a href="/debug">Debug</a>
+    <a href="/debug/repair">Repair</a>
+    <a href="/">Analytics</a>
+    <form method="post" action="/api/auth/logout" style="display: inline;">
+      <button type="submit" class="btn-logout">Logout</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Users</h2>
+    <p class="text-sm mb-2" style="color: var(--color-muted);">Count: <span id="user-count">0</span></p>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Full name</th>
+            <th>Dept</th>
+            <th>Role</th>
+            <th>Time window</th>
+            <th>Allowed IP</th>
+            <th>Locked</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Create user</h2>
+    <div id="create-user-err" class="alert err" style="display: none;"></div>
+    <div class="form-row"><label>Username</label><input type="text" id="cu-username" placeholder="username"></div>
+    <div class="form-row"><label>Password</label><input type="password" id="cu-password" placeholder="password"></div>
+    <div class="form-row"><label>Full name</label><input type="text" id="cu-full_name" placeholder="Full name"></div>
+    <div class="form-row"><label>Department</label><select id="cu-department"><option value="TE">TE</option><option value="FA">FA</option><option value="OTHER">OTHER</option></select></div>
+    <div class="form-row"><label>Employee ID</label><input type="text" id="cu-employee_id" placeholder="ID"></div>
+    <div class="form-row"><label>Role</label><select id="cu-role"><option value="user">user</option><option value="vip">vip</option><option value="admin">admin</option></select></div>
+    <div class="form-row"><label>Email</label><input type="email" id="cu-email" placeholder="optional"></div>
+    <div class="form-row"><label>Allow all IP</label><input type="checkbox" id="cu-allow_all_ip"></div>
+    <div class="form-row"><label>Initial IP</label><input type="text" id="cu-initial_ip" placeholder="optional"></div>
+    <button type="button" class="btn-sm" id="btn-create-user">Create user</button>
+  </div>
+
+  <div class="panel">
+    <h2>Pending registrations</h2>
+    <table>
+      <thead>
+        <tr><th>Username</th><th>Full name</th><th>Dept</th><th>Reason</th><th>Created</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="reg-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Familiar IPs</h2>
+    <div class="form-row">
+      <label>Name</label><input type="text" id="fi-name" placeholder="Label">
+      <label style="width: auto; margin-left: 0.5rem;">IP</label><input type="text" id="fi-ip" placeholder="1.2.3.4">
+      <button type="button" class="btn-sm" id="btn-add-fi">Add</button>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>IP</th><th></th></tr></thead>
+      <tbody id="fi-tbody"></tbody>
+    </table>
+  </div>
+
+  <div id="time-window-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Time window</h3>
+      <p class="hint">0:00 – 0:00 = 24/7. Leave empty for no restriction.</p>
+      <div class="form-row"><label>Start</label><input type="time" id="tw-start" value="00:00"></div>
+      <div class="form-row"><label>End</label><input type="time" id="tw-end" value="00:00"></div>
+      <div style="margin-top: 0.75rem;">
+        <button type="button" class="btn-sm" id="tw-save">Save</button>
+        <button type="button" class="btn-sm" id="tw-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Login history</h2>
+    <p class="text-sm mb-2" style="color: var(--color-muted);">Last 7 days only. 10 rows per page. Rows in yellow = login from different device.</p>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr><th>User</th><th>IP</th><th>Time</th><th>Success</th><th></th></tr>
+        </thead>
+        <tbody id="login-history-tbody"></tbody>
+      </table>
+    </div>
+    <div id="login-history-pager" style="margin-top: 0.5rem; font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Recent logins from unknown IPs</h2>
+    <p class="text-sm mb-2" style="color: var(--color-muted);">IP not in user’s allowed list. Approve = set that IP as user’s only allowed IP.</p>
+    <table>
+      <thead>
+        <tr><th>Time</th><th>IP</th><th>Username</th><th>Success</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="unknown-ip-tbody"></tbody>
+    </table>
+  </div>
+
+  <script>
+  (function() {
+    function api(path, opts) {
+      opts = opts || {};
+      var url = path;
+      var options = { credentials: 'same-origin', headers: opts.headers || {} };
+      if (opts.method) options.method = opts.method;
+      if (opts.body) options.body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
+      if (opts.body && !opts.headers) options.headers['Content-Type'] = 'application/json';
+      return fetch(url, options).then(function(r) { return r.json(); });
+    }
+
+    function loadUsers() {
+      api('/api/debug/setting/users').then(function(data) {
+        if (!data.ok) return;
+        var users = data.users || [];
+        document.getElementById('user-count').textContent = users.length;
+        var tbody = document.getElementById('users-tbody');
+        tbody.innerHTML = users.map(function(u) {
+          var startT = u.allowed_login_start_time || '';
+          var endT = u.allowed_login_end_time || '';
+          var timeWin = (!startT && !endT) || (startT === '0:00' && endT === '0:00') ? '24/7' : (startT + ' – ' + endT || '-');
+          var allowedIp = u.allow_all_ip ? 'All' : ((u.allowed_ips && u.allowed_ips[0]) ? u.allowed_ips[0] : '-');
+          var locked = u.locked ? 'Yes' : '';
+          return '<tr data-user-id="' + u.id + '">' +
+            '<td>' + (u.username || '') + '</td>' +
+            '<td>' + (u.full_name || '') + '</td>' +
+            '<td>' + (u.department || '') + '</td>' +
+            '<td>' + (u.role || '') + '</td>' +
+            '<td>' + timeWin + '</td>' +
+            '<td>' + allowedIp + '</td>' +
+            '<td>' + locked + '</td>' +
+            '<td>' +
+              '<button type="button" class="btn-sm btn-reset-pw" data-id="' + u.id + '">Reset PW</button>' +
+              '<button type="button" class="btn-sm btn-modify-ip" data-id="' + u.id + '" data-ip="' + (allowedIp !== 'All' && allowedIp !== '-' ? allowedIp : '') + '">Modify IP</button>' +
+              '<button type="button" class="btn-sm btn-allow-all" data-id="' + u.id + '" data-allow="' + (u.allow_all_ip ? '1' : '0') + '">' + (u.allow_all_ip ? 'Disallow all IP' : 'Allow all IP') + '</button>' +
+              '<button type="button" class="btn-sm btn-time-window" data-id="' + u.id + '" data-start="' + (startT || '00:00') + '" data-end="' + (endT || '00:00') + '">Time window</button>' +
+              (u.locked ? '<button type="button" class="btn-sm btn-unlock" data-id="' + u.id + '">Unlock</button>' : '') +
+              '<button type="button" class="btn-sm danger btn-delete" data-id="' + u.id + '">Delete</button>' +
+            '</td></tr>';
+        }).join('');
+        bindUserActions();
+      });
+    }
+
+    function bindUserActions() {
+      document.querySelectorAll('.btn-reset-pw').forEach(function(btn) {
+        btn.onclick = function() {
+          if (!confirm('Reset password to 123?')) return;
+          api('/api/debug/setting/user/reset-password', { method: 'POST', body: { user_id: parseInt(btn.dataset.id, 10) } }).then(function(d) { if (d.ok) loadUsers(); else alert(d.error); });
+        };
+      });
+      document.querySelectorAll('.btn-modify-ip').forEach(function(btn) {
+        btn.onclick = function() {
+          var cur = (btn.dataset.ip || '').trim();
+          var ip = prompt('Allowed IP (1 IP per user, replaces current):', cur);
+          if (ip === null) return;
+          ip = ip.trim();
+          if (!ip) { alert('IP required'); return; }
+          api('/api/debug/setting/user/add-ip', { method: 'POST', body: { user_id: parseInt(btn.dataset.id, 10), ip: ip } }).then(function(d) { if (d.ok) loadUsers(); else alert(d.error); });
+        };
+      });
+      document.querySelectorAll('.btn-allow-all').forEach(function(btn) {
+        btn.onclick = function() {
+          var allow = btn.dataset.allow !== '1';
+          api('/api/debug/setting/user/allow-all-ip', { method: 'POST', body: { user_id: parseInt(btn.dataset.id, 10), allow: allow } }).then(function(d) { if (d.ok) loadUsers(); else alert(d.error); });
+        };
+      });
+      document.querySelectorAll('.btn-time-window').forEach(function(btn) {
+        btn.onclick = function() {
+          var uid = parseInt(btn.dataset.id, 10);
+          var start = (btn.dataset.start || '00:00').replace(/^(\d):/, '0$1:');
+          var end = (btn.dataset.end || '00:00').replace(/^(\d):/, '0$1:');
+          document.getElementById('tw-start').value = start.length >= 5 ? start.slice(0, 5) : '00:00';
+          document.getElementById('tw-end').value = end.length >= 5 ? end.slice(0, 5) : '00:00';
+          document.getElementById('time-window-modal').dataset.userId = uid;
+          document.getElementById('time-window-modal').classList.add('show');
+        };
+      });
+      document.querySelectorAll('.btn-unlock').forEach(function(btn) {
+        btn.onclick = function() {
+          api('/api/debug/setting/user/unlock', { method: 'POST', body: { user_id: parseInt(btn.dataset.id, 10) } }).then(function(d) { if (d.ok) loadUsers(); else alert(d.error); });
+        };
+      });
+      document.querySelectorAll('.btn-delete').forEach(function(btn) {
+        btn.onclick = function() {
+          if (!confirm('Delete this user?')) return;
+          api('/api/debug/setting/user/delete', { method: 'POST', body: { user_id: parseInt(btn.dataset.id, 10) } }).then(function(d) { if (d.ok) loadUsers(); else alert(d.error); });
+        };
+      });
+    }
+
+    function loadRegistrations() {
+      api('/api/debug/setting/registrations').then(function(data) {
+        if (!data.ok) return;
+        var rows = data.registrations || [];
+        var tbody = document.getElementById('reg-tbody');
+        tbody.innerHTML = rows.map(function(r) {
+          var created = r.created_at_ts ? new Date(r.created_at_ts * 1000).toLocaleString() : '';
+          return '<tr><td>' + (r.username || '') + '</td><td>' + (r.full_name || '') + '</td><td>' + (r.department || '') + '</td><td>' + (r.reason || '') + '</td><td>' + created + '</td><td>' +
+            '<button type="button" class="btn-sm btn-approve" data-id="' + r.id + '">Approve</button>' +
+            '<button type="button" class="btn-sm danger btn-reject" data-id="' + r.id + '">Reject</button></td></tr>';
+        }).join('');
+        tbody.querySelectorAll('.btn-approve').forEach(function(btn) {
+          btn.onclick = function() {
+            api('/api/debug/setting/registrations/approve', { method: 'POST', body: { request_id: parseInt(btn.dataset.id, 10) } }).then(function(d) { if (d.ok) { loadRegistrations(); loadUsers(); } else alert(d.error); });
+          };
+        });
+        tbody.querySelectorAll('.btn-reject').forEach(function(btn) {
+          btn.onclick = function() {
+            api('/api/debug/setting/registrations/reject', { method: 'POST', body: { request_id: parseInt(btn.dataset.id, 10) } }).then(function(d) { if (d.ok) loadRegistrations(); else alert(d.error); });
+          };
+        });
+      });
+    }
+
+    function loadFamiliarIps() {
+      api('/api/debug/setting/familiar-ips').then(function(data) {
+        if (!data.ok) return;
+        var rows = data.familiar_ips || [];
+        var tbody = document.getElementById('fi-tbody');
+        tbody.innerHTML = rows.map(function(f) {
+          return '<tr><td>' + (f.name || '') + '</td><td>' + (f.ip || '') + '</td><td><button type="button" class="btn-sm danger btn-remove-fi" data-id="' + f.id + '">Remove</button></td></tr>';
+        }).join('');
+        tbody.querySelectorAll('.btn-remove-fi').forEach(function(btn) {
+          btn.onclick = function() {
+            fetch('/api/debug/setting/familiar-ips/' + btn.dataset.id, { method: 'DELETE', credentials: 'same-origin' }).then(function() { loadFamiliarIps(); });
+          };
+        });
+      });
+    }
+
+    var loginHistoryPage = 1;
+    function loadLoginHistory(page) {
+      page = page || loginHistoryPage;
+      loginHistoryPage = page;
+      api('/api/debug/setting/login-history?page=' + page + '&per_page=10').then(function(data) {
+        if (!data.ok) return;
+        var rows = data.entries || [];
+        var total = data.total || 0;
+        var totalPages = data.total_pages || 0;
+        var tbody = document.getElementById('login-history-tbody');
+        tbody.innerHTML = rows.map(function(e) {
+          var time = e.created_at_ts ? new Date(e.created_at_ts * 1000).toLocaleString() : '';
+          var diff = e.is_different_device ? ' <span class="badge-new-device">Thiết bị khác</span>' : '';
+          var rowClass = e.is_different_device ? ' class="different-device"' : '';
+          return '<tr' + rowClass + '><td>' + (e.username || '-') + '</td><td>' + (e.ip || '') + '</td><td>' + time + '</td><td>' + (e.success ? 'Yes' : 'No') + '</td><td>' + diff + '</td></tr>';
+        }).join('');
+        var pager = document.getElementById('login-history-pager');
+        if (totalPages <= 1) {
+          pager.innerHTML = total ? 'Total: ' + total + ' (1 page)' : 'No logins in last 7 days.';
+        } else {
+          var prev = page > 1 ? '<button type="button" class="btn-sm" id="lh-prev">Prev</button>' : '';
+          var next = page < totalPages ? '<button type="button" class="btn-sm" id="lh-next">Next</button>' : '';
+          pager.innerHTML = prev + ' <span>Page ' + page + ' / ' + totalPages + ' (total ' + total + ')</span> ' + next;
+          if (page > 1) document.getElementById('lh-prev').onclick = function() { loadLoginHistory(page - 1); };
+          if (page < totalPages) document.getElementById('lh-next').onclick = function() { loadLoginHistory(page + 1); };
+        }
+      });
+    }
+
+    function loadUnknownIpLog() {
+      api('/api/debug/setting/unknown-ip-log').then(function(data) {
+        if (!data.ok) return;
+        var rows = data.entries || [];
+        var tbody = document.getElementById('unknown-ip-tbody');
+        tbody.innerHTML = rows.map(function(e) {
+          var time = e.created_at_ts ? new Date(e.created_at_ts * 1000).toLocaleString() : '';
+          var ipVal = (e.ip || '').replace(/"/g, '&quot;');
+          var act = e.user_id ? '<button type="button" class="btn-sm btn-approve-ip" data-user-id="' + e.user_id + '" data-ip="' + ipVal + '">Approve</button>' : '-';
+          return '<tr><td>' + time + '</td><td>' + (e.ip || '') + '</td><td>' + (e.username || '') + '</td><td>' + (e.success ? 'Yes' : 'No') + '</td><td>' + act + '</td></tr>';
+        }).join('');
+        tbody.querySelectorAll('.btn-approve-ip').forEach(function(btn) {
+          btn.onclick = function() {
+            var uid = parseInt(btn.dataset.userId, 10);
+            var ip = (btn.dataset.ip || '').trim();
+            if (!ip) return;
+            api('/api/debug/setting/user/add-ip', { method: 'POST', body: { user_id: uid, ip: ip } }).then(function(d) {
+              if (d.ok) { loadUnknownIpLog(); loadUsers(); loadLoginHistory(); }
+              else alert(d.error || 'Failed');
+            });
+          };
+        });
+      });
+    }
+
+    document.getElementById('btn-create-user').onclick = function() {
+      var payload = {
+        username: document.getElementById('cu-username').value.trim(),
+        password: document.getElementById('cu-password').value,
+        full_name: document.getElementById('cu-full_name').value.trim(),
+        department: document.getElementById('cu-department').value,
+        employee_id: document.getElementById('cu-employee_id').value.trim(),
+        role: document.getElementById('cu-role').value,
+        email: document.getElementById('cu-email').value.trim() || null,
+        allow_all_ip: document.getElementById('cu-allow_all_ip').checked,
+        initial_ip: document.getElementById('cu-initial_ip').value.trim() || null
+      };
+      if (!payload.username || !payload.password || !payload.full_name || !payload.employee_id) {
+        var el = document.getElementById('create-user-err');
+        el.textContent = 'Username, password, full name, employee ID required';
+        el.style.display = 'block';
+        return;
+      }
+      document.getElementById('create-user-err').style.display = 'none';
+      api('/api/debug/setting/user/create', { method: 'POST', body: payload }).then(function(d) {
+        if (d.ok) { loadUsers(); document.getElementById('cu-username').value = ''; document.getElementById('cu-password').value = ''; document.getElementById('cu-full_name').value = ''; document.getElementById('cu-employee_id').value = ''; }
+        else { document.getElementById('create-user-err').textContent = d.error || 'Failed'; document.getElementById('create-user-err').style.display = 'block'; }
+      });
+    };
+
+    document.getElementById('tw-cancel').onclick = function() {
+      document.getElementById('time-window-modal').classList.remove('show');
+    };
+    document.getElementById('time-window-modal').onclick = function(e) {
+      if (e.target === this) this.classList.remove('show');
+    };
+    document.getElementById('tw-save').onclick = function() {
+      var uid = document.getElementById('time-window-modal').dataset.userId;
+      if (!uid) return;
+      var start = document.getElementById('tw-start').value || '';
+      var end = document.getElementById('tw-end').value || '';
+      if (start.length >= 5) start = start.slice(0, 5).replace(/^(\d):/, '0$1:');
+      if (end.length >= 5) end = end.slice(0, 5).replace(/^(\d):/, '0$1:');
+      api('/api/debug/setting/user/time-window', { method: 'POST', body: { user_id: parseInt(uid, 10), start_time: start || '0:00', end_time: end || '0:00' } }).then(function(d) {
+        if (d.ok) { document.getElementById('time-window-modal').classList.remove('show'); loadUsers(); }
+        else alert(d.error || 'Failed');
+      });
+    };
+
+    document.getElementById('btn-add-fi').onclick = function() {
+      var name = document.getElementById('fi-name').value.trim();
+      var ip = document.getElementById('fi-ip').value.trim();
+      if (!name || !ip) return;
+      api('/api/debug/setting/familiar-ips', { method: 'POST', body: { name: name, ip: ip } }).then(function(d) {
+        if (d.ok) { loadFamiliarIps(); document.getElementById('fi-name').value = ''; document.getElementById('fi-ip').value = ''; }
+        else alert(d.error);
+      });
+    };
+
+    loadUsers();
+    loadRegistrations();
+    loadFamiliarIps();
+    loadLoginHistory();
+    loadUnknownIpLog();
+  })();
+  </script>
+</body>
+</html>

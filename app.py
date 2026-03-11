@@ -40,6 +40,8 @@ from analytics.bp_check import add_bp_to_rows
 from config.analytics_config import get_pass_rules, set_pass_rules
 from fa_debug import bp as fa_debug_bp
 from fa_debug.ssh_terminal import register_ssh_ws
+from fa_debug.auth import get_current_user, login_flow, create_session, delete_session
+from fa_debug.auth_db import ensure_auth_db, connect_auth_db
 from etf import bp as etf_bp
 
 from bonepile_disposition import (
@@ -416,6 +418,222 @@ def _build_dispo_sn_list_xlsx(
     start_s = start_ca.strftime("%Y%m%d_%H%M")
     end_s = end_ca.strftime("%Y%m%d_%H%M")
     return buf.read(), f"Disposition_SN_List_{start_s}_to_{end_s}.xlsx"
+
+
+@app.route("/login")
+def login_page():
+    """Serve login page (public)."""
+    return render_template("login.html")
+
+
+@app.route("/register")
+def register_page():
+    """Serve registration page (public)."""
+    return render_template("register.html")
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    """Validate credentials, create session, set auth_token cookie, return JSON or redirect."""
+    from flask import make_response
+    ensure_auth_db()
+    username = (request.form.get("username") or request.json.get("username") if request.is_json else request.form.get("username") or "").strip()
+    password = (request.form.get("password") or request.json.get("password") if request.is_json else request.form.get("password") or "")
+    if not username:
+        return jsonify({"ok": False, "error": "Username required"}), 400
+    ip = request.remote_addr or ""
+    success, err_msg, user = login_flow(username, password, ip)
+    if not success:
+        return jsonify({"ok": False, "error": err_msg}), 401
+    conn = connect_auth_db()
+    try:
+        token = create_session(conn, user["id"])
+    finally:
+        conn.close()
+    resp = jsonify({"ok": True, "redirect": "/debug"})
+    secure = not FLASK_DEBUG
+    resp.set_cookie(
+        "auth_token",
+        token,
+        max_age=30 * 60,
+        httponly=True,
+        samesite="Lax",
+        secure=secure,
+        path="/",
+    )
+    return resp
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    """Delete session, clear cookie, return redirect to /login."""
+    from flask import redirect
+    token = request.cookies.get("auth_token")
+    if token:
+        conn = connect_auth_db()
+        try:
+            delete_session(conn, token)
+        finally:
+            conn.close()
+    resp = redirect("/login")
+    resp.delete_cookie("auth_token", path="/")
+    return resp
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def api_auth_register():
+    """Create a registration request (pending). Admin approves in Setting."""
+    from fa_debug.auth import hash_password
+    ensure_auth_db()
+    data = request.get_json() or {}
+    full_name = (data.get("full_name") or "").strip()
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    department = (data.get("department") or "").strip().upper()
+    employee_id = (data.get("employee_id") or "").strip()
+    reason = (data.get("reason") or "").strip()
+    email = (data.get("email") or "").strip() or None
+    if not all([full_name, username, password, department, employee_id, reason]):
+        return jsonify({"ok": False, "error": "full_name, username, password, department, employee_id, reason required"}), 400
+    if department not in ("TE", "FA", "OTHER"):
+        return jsonify({"ok": False, "error": "department must be TE, FA, or OTHER"}), 400
+    conn = connect_auth_db()
+    try:
+        cur = conn.execute("SELECT id FROM users WHERE LOWER(TRIM(username)) = LOWER(?)", (username,))
+        if cur.fetchone():
+            return jsonify({"ok": False, "error": "Username already taken"}), 400
+        cur = conn.execute("SELECT id FROM registration_requests WHERE LOWER(TRIM(username)) = LOWER(?) AND status = 'pending'", (username,))
+        if cur.fetchone():
+            return jsonify({"ok": False, "error": "A pending request for this username already exists"}), 400
+        import time
+        now = int(time.time())
+        pw_hash = hash_password(password)
+        conn.execute(
+            """INSERT INTO registration_requests (full_name, username, password_hash, department, employee_id, reason, email, status, created_at_ts)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+            (full_name, username, pw_hash, department, employee_id, reason, email, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "message": "Request submitted. An admin will review it."})
+
+
+def _send_password_email(to_email: str, new_password: str) -> bool:
+    """Send password reset email via SMTP. Returns True on success."""
+    from config.app_config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_USE_TLS
+    if not SMTP_HOST or not SMTP_USER:
+        return False
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.utils import formataddr
+    msg = MIMEText(f"Your debug area password has been reset to: {new_password}\n\nPlease change it after logging in.")
+    msg["Subject"] = "Debug area – password reset"
+    msg["From"] = formataddr(("SFC View Debug", SMTP_USER))
+    msg["To"] = to_email
+    try:
+        if SMTP_USE_TLS:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+                s.starttls()
+                if SMTP_PASSWORD:
+                    s.login(SMTP_USER, SMTP_PASSWORD)
+                s.sendmail(SMTP_USER, [to_email], msg.as_string())
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+                if SMTP_PASSWORD:
+                    s.login(SMTP_USER, SMTP_PASSWORD)
+                s.sendmail(SMTP_USER, [to_email], msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+@app.route("/api/auth/change-password", methods=["POST"])
+def api_auth_change_password():
+    """Change password for current user (current + new + confirm)."""
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"ok": False, "error": "Authentication required"}), 401
+    data = request.get_json() or {}
+    current = data.get("current_password") or ""
+    new_pw = data.get("new_password") or ""
+    confirm = data.get("new_password_confirm") or ""
+    if not current or not new_pw:
+        return jsonify({"ok": False, "error": "current_password and new_password required"}), 400
+    if new_pw != confirm:
+        return jsonify({"ok": False, "error": "New password and confirm do not match"}), 400
+    from fa_debug.auth import check_password, hash_password
+    from fa_debug.auth_db import connect_auth_db
+    conn = connect_auth_db()
+    try:
+        cur = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],))
+        row = cur.fetchone()
+        if not row or not check_password(dict(row), current):
+            return jsonify({"ok": False, "error": "Current password is wrong"}), 401
+        pw_hash = hash_password(new_pw)
+        conn.execute("UPDATE users SET password_hash = ?, updated_at_ts = ? WHERE id = ?", (pw_hash, int(__import__("time").time()), user["id"]))
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+@app.route("/api/auth/change-username", methods=["POST"])
+def api_auth_change_username():
+    """Change username for current user (must be unique)."""
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"ok": False, "error": "Authentication required"}), 401
+    data = request.get_json() or {}
+    new_username = (data.get("new_username") or "").strip()
+    if not new_username:
+        return jsonify({"ok": False, "error": "new_username required"}), 400
+    from fa_debug.auth_db import connect_auth_db
+    conn = connect_auth_db()
+    try:
+        cur = conn.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?", (new_username, user["id"]))
+        if cur.fetchone():
+            return jsonify({"ok": False, "error": "Username already taken"}), 400
+        conn.execute("UPDATE users SET username = ?, updated_at_ts = ? WHERE id = ?", (new_username, int(__import__("time").time()), user["id"]))
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+@app.route("/api/auth/forgot-password", methods=["POST"])
+def api_auth_forgot_password():
+    """Forgot password: if user has email, set 8-char password and send email; else tell to contact admin."""
+    from fa_debug.auth import hash_password
+    import random
+    import string
+    ensure_auth_db()
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip()
+    if not username:
+        return jsonify({"ok": False, "error": "Username or email required"}), 400
+    conn = connect_auth_db()
+    try:
+        cur = conn.execute(
+            "SELECT id, username, email FROM users WHERE LOWER(TRIM(username)) = LOWER(?) OR (email IS NOT NULL AND LOWER(TRIM(email)) = LOWER(?))",
+            (username, username),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"ok": True, "message": "If an account exists with that username or email, you will receive instructions."})
+        user_id = row["id"]
+        email = (row["email"] or "").strip() or None
+        if not email:
+            return jsonify({"ok": True, "message": "Contact admin to reset your password."})
+        new_password = "".join(random.choices(string.ascii_letters + string.digits, k=8))
+        pw_hash = hash_password(new_password)
+        conn.execute("UPDATE users SET password_hash = ?, updated_at_ts = ? WHERE id = ?", (pw_hash, int(__import__("time").time()), user_id))
+        conn.commit()
+        if _send_password_email(email, new_password):
+            return jsonify({"ok": True, "message": "A new password has been sent to your email."})
+        return jsonify({"ok": False, "error": "Failed to send email. Contact admin."}), 500
+    finally:
+        conn.close()
 
 
 @app.route("/")

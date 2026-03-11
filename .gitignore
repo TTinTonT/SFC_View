@@ -8,6 +8,9 @@ venv/
 .venv/
 env/
 
+# Debug session logs (Cursor debug mode)
+debug-*.log
+
 # Cache & data
 analytics_cache/
 *.db

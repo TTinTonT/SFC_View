@@ -61,6 +61,13 @@ DEFAULT = {
     "ROOM8_STATE_DIR": "/root/TIN/scan_state",
     # Analytics
     "timezone": "America/Los_Angeles",
+    # Auth (debug area): SMTP send-only, session TTL
+    "AUTH_SESSION_TTL_MINUTES": "30",
+    "SMTP_HOST": "",
+    "SMTP_PORT": "587",
+    "SMTP_USER": "",
+    "SMTP_PASSWORD": "",
+    "SMTP_USE_TLS": "true",
 }
 
 # Optional per-site overrides. Set SITE=taiwan (etc.) to use. Add new sites here.

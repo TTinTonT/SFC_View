@@ -247,25 +247,25 @@
   .sn-debug-terminal { min-height: 200px; height: 380px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
   .sn-debug-terminal .xterm { width: 100% !important; flex: 1 !important; min-height: 0; }
   .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; }
-  /* Pin bar - right side, compact */
-  .pin-sidebar { position: fixed; top: 0; bottom: 0; right: 0; left: auto; width: 90px; min-width: 90px; background: var(--color-surface); border-left: 1px solid var(--color-border); border-right: none; z-index: 90; overflow-y: auto; box-shadow: -2px 0 8px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
-  .pin-sidebar-header { padding: 0.4rem 0.5rem; font-weight: 700; font-size: 0.75rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0; }
-  .pin-sidebar-body { padding: 0.25rem 0.35rem; display: flex; flex-direction: column; gap: 0.25rem; flex: 1; min-height: 0; overflow-y: auto; }
-  .pin-sidebar-item { padding: 0.35rem 0.4rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; min-height: 28px; }
-  .pin-sidebar-item:hover { background: var(--color-hover); }
-  .pin-sidebar-item.expanded { flex-wrap: wrap; }
-  .pin-sidebar-item .pin-icon { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  /* Pin bar - right side, below header, horizontal pill bars overlay (no frame) */
+  .pin-sidebar { position: fixed; top: 72px; right: 12px; left: auto; bottom: auto; z-index: 90; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; pointer-events: none; }
+  .pin-sidebar .pin-sidebar-body { pointer-events: auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .pin-sidebar-item { display: flex; flex-direction: row; align-items: center; gap: 0; border-radius: 999px; background: #424242; color: #E0E0E0; padding: 0.35rem 0.5rem; font-size: 0.75rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); transition: max-width 0.25s ease, padding 0.2s ease; max-width: 420px; overflow: hidden; }
+  .pin-sidebar-item:hover { background: #4D4D4D; }
+  .pin-sidebar-item .pin-icon { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-right: 0.4rem; }
   .pin-icon.pass { background: var(--color-success); }
   .pin-icon.fail { background: var(--color-danger); }
-  .pin-icon.unknown { background: var(--color-muted); }
-  .pin-icon.pass.blink { animation: blink-green 0.6s ease 4; }
+  .pin-icon.unknown { background: #9ca3af; }
+  .pin-icon.pass.blink { animation: blink-green 0.6s ease infinite; }
+  .pin-icon.fail.blink { animation: blink-red 0.6s ease infinite; }
   @keyframes blink-green { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--color-success); } 50% { opacity: 0.6; box-shadow: 0 0 6px 2px var(--color-success); } }
-  .pin-sidebar-item .pin-sn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-  .pin-sidebar-item .unpin { margin-left: auto; background: transparent; border: none; cursor: pointer; padding: 0 0.2rem; font-size: 0.9rem; color: var(--color-muted); flex-shrink: 0; }
-  .pin-sidebar-item .unpin:hover { color: var(--color-danger); }
-  .pin-sidebar-item:not(.expanded) .unpin { display: none; }
-  .pin-details { display: none; width: 100%; font-size: 0.65rem; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.2rem; line-height: 1.3; }
-  .pin-sidebar-item.expanded .pin-details { display: block; }
+  @keyframes blink-red { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--color-danger); } 50% { opacity: 0.6; box-shadow: 0 0 6px 2px var(--color-danger); } }
+  .pin-sidebar-item .pin-sn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; flex-shrink: 0; }
+  .pin-sidebar-item .pin-details { display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 0.5rem; padding-left: 0.5rem; border-left: 1px solid rgba(255,255,255,0.2); font-size: 0.7rem; color: #D3D3D3; flex: 1; min-width: 0; }
+  .pin-sidebar-item.collapsed .pin-details { display: none; margin: 0; padding: 0; border: none; max-width: 0; overflow: hidden; }
+  .pin-sidebar-item .unpin { margin-left: 0.35rem; padding-left: 0.35rem; border-left: 1px solid rgba(255,255,255,0.2); background: transparent; border: none; cursor: pointer; font-size: 1rem; color: #D3D3D3; flex-shrink: 0; line-height: 1; }
+  .pin-sidebar-item .unpin:hover { color: #fff; }
+  .pin-sidebar-header { display: none; }
   .pin-icon-btn { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; color: var(--color-muted); border-radius: 4px; }
   .pin-icon-btn:hover { color: var(--color-primary); background: var(--color-hover); }
   /* Notepad sidebar */
@@ -328,6 +328,13 @@
           <h1>FA Debug Place</h1>
           <div class="header-actions">
             <a href="/" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Analytics</a>
+            <a href="/debug/repair" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Repair</a>
+            {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Setting</a>{% endif %}
+            <a href="/debug/my-settings" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">My settings</a>
+            <form method="post" action="/api/auth/logout" style="display: inline;" onsubmit="return confirm('Log out?');">
+              <input type="hidden" name="csrf" value="">
+              <button type="submit" class="btn-ghost btn-mini">Logout</button>
+            </form>
             <button class="icon-btn" id="theme-toggle" title="Toggle theme">
               <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
               <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>

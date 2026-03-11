@@ -292,9 +292,22 @@
     } else {
       const res = (row?.result || '').toUpperCase();
       const lastResult = res === 'PASS' ? 'PASS' : res === 'FAIL' ? 'FAIL' : 'unknown';
-      pinned.set(sn, { sn, row, lastData: JSON.stringify(row), lastResult, blink: false, expanded: false });
+      pinned.set(sn, { sn, row, lastData: JSON.stringify(row), lastResult, blink: false, expanded: false, pinnedAt: Date.now(), room: row?.room || '–' });
     }
     renderPinPanel();
+  }
+
+  function parseTestTime(row) {
+    if (!row) return null;
+    const dt = row.test_time_dt;
+    if (dt) {
+      const t = typeof dt === 'string' ? new Date(dt) : dt;
+      return isFinite(t) ? t.getTime() : null;
+    }
+    const s = (row.test_time || '').trim();
+    if (!s) return null;
+    const d = new Date(s.replace(/\//g, '-'));
+    return isFinite(d) ? d.getTime() : null;
   }
 
   function checkPinnedUpdates(newRows) {
@@ -305,6 +318,7 @@
       if (!bySn[s]) bySn[s] = [];
       bySn[s].push(r);
     });
+    const now = Date.now();
     pinned.forEach((p) => {
       const list = bySn[p.sn] || [];
       const latest = list[0];
@@ -312,14 +326,15 @@
       const newData = JSON.stringify(latest);
       const newRes = (latest.result || '').toUpperCase();
       const newResult = newRes === 'PASS' ? 'PASS' : newRes === 'FAIL' ? 'FAIL' : 'unknown';
-      const prevResult = p.lastResult || 'unknown';
+      const pinTime = p.pinnedAt != null ? p.pinnedAt : now;
       if (newData !== p.lastData) {
         p.lastData = newData;
         p.row = latest;
         p.lastResult = newResult;
-        if (newResult === 'PASS' && prevResult !== 'PASS') {
-          p.blink = true;
-          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const testTime = parseTestTime(latest);
+        if (testTime != null && testTime > pinTime && (newResult === 'PASS' || newResult === 'FAIL')) {
+          p.blink = newResult === 'PASS' ? 'pass' : 'fail';
+          if (newResult === 'PASS' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             new Notification('FA Debug: ' + p.sn, { body: 'Test PASS' });
           }
         }
@@ -338,8 +353,7 @@
     const notepadEl = $('notepad-sidebar');
     const pinEl = $('pin-sidebar');
     const app = document.getElementById('app-wrapper') || document.querySelector('.app-wrapper');
-    const pinW = pinEl ? 90 : 0;
-    if (pinEl) pinEl.style.right = '0px';
+    const pinW = 0;
     if (app) app.style.marginRight = pinW ? pinW + 'px' : '';
   }
 
@@ -412,63 +426,70 @@
       sidebar = el('div', { id: 'pin-sidebar', className: 'pin-sidebar' });
       document.body.appendChild(sidebar);
     }
-    const header = el('div', { className: 'pin-sidebar-header' });
-    const toggleBtn = el('button', { type: 'button' });
-    toggleBtn.textContent = pinPanelExpanded ? '−' : '+';
-    header.appendChild(document.createTextNode('Pin'));
-    header.appendChild(toggleBtn);
-    toggleBtn.addEventListener('click', () => {
-      pinPanelExpanded = !pinPanelExpanded;
-      toggleBtn.textContent = pinPanelExpanded ? '−' : '+';
-      const b = sidebar.querySelector('.pin-sidebar-body');
-      if (b) b.style.display = pinPanelExpanded ? 'flex' : 'none';
-    });
     sidebar.innerHTML = '';
-    sidebar.appendChild(header);
     const body = el('div', { className: 'pin-sidebar-body' });
-    body.style.display = pinPanelExpanded ? 'flex' : 'none';
     pinned.forEach((p) => {
       const res = (p.row?.result || '').toUpperCase();
-      const status = res === 'PASS' ? 'pass' : res === 'FAIL' ? 'fail' : 'unknown';
-      const div = el('div', { className: 'pin-sidebar-item ' + (p.expanded ? 'expanded' : '') });
+      const testTime = parseTestTime(p.row);
+      const pinTime = p.pinnedAt != null ? p.pinnedAt : 0;
+      const afterPin = testTime != null && pinTime > 0 && testTime > pinTime;
+      const status = afterPin && res === 'PASS' ? 'pass' : afterPin && res === 'FAIL' ? 'fail' : 'unknown';
+      const expanded = p.expanded;
+      const div = el('div', { className: 'pin-sidebar-item' + (expanded ? '' : ' collapsed') });
       const iconSpan = document.createElement('span');
-      iconSpan.className = 'pin-icon ' + status + (p.blink ? ' blink' : '');
-      if (p.blink) {
-        p.blink = false;
-        setTimeout(() => iconSpan.classList.remove('blink'), 2400);
-      }
+      const blinkClass = (p.blink === 'pass' || p.blink === 'fail') ? ' blink' : '';
+      iconSpan.className = 'pin-icon ' + status + blinkClass;
+      /* blink stays until user clicks (see click handler: p.blink = false) */
+      const snSpan = el('span', { className: 'pin-sn' });
+      snSpan.textContent = p.sn || '–';
+      snSpan.title = p.sn || '';
+      const room = p.room != null ? p.room : (p.row?.room || '–');
+      const err = res === 'FAIL' ? (p.row?.failure_msg || p.row?.error_code || '') : '';
+      const statusRemark = (res || '–') + (err ? ' | ' + err : '');
+      const pinTimeStr = p.pinnedAt != null ? (function () {
+        const d = new Date(p.pinnedAt);
+        return 'Pinned ' + d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+      }()) : '';
+      const detailsText = room + ' | ' + statusRemark + (pinTimeStr ? ' | ' + pinTimeStr : '');
+      const details = el('div', { className: 'pin-details' });
+      details.textContent = detailsText;
+      details.title = detailsText;
       const unpinBtn = el('button', { type: 'button', className: 'unpin' });
       unpinBtn.textContent = '×';
       unpinBtn.title = 'Unpin';
       div.appendChild(iconSpan);
-      div.appendChild(unpinBtn);
-      const room = p.row?.room || '–';
-      const err = res === 'FAIL' ? (p.row?.failure_msg || p.row?.error_code || '') : '';
-      const detailsText = room + ' | ' + (p.sn || '') + ' | ' + (res || '–') + (err ? ' | ' + err : '');
-      const details = el('div', { className: 'pin-details' });
-      details.textContent = detailsText;
-      details.title = detailsText;
-      details.style.display = p.expanded ? 'block' : 'none';
+      div.appendChild(snSpan);
       div.appendChild(details);
+      div.appendChild(unpinBtn);
       unpinBtn.addEventListener('click', (e) => { e.stopPropagation(); pinned.delete(p.sn); renderPinSidebar(); });
       div.addEventListener('click', (e) => {
         if (!e.target.classList.contains('unpin')) {
           p.expanded = !p.expanded;
-          div.classList.toggle('expanded', p.expanded);
-          details.style.display = p.expanded ? 'block' : 'none';
+          p.blink = false;
+          div.classList.toggle('collapsed', !p.expanded);
+          renderPinSidebar();
         }
       });
+      div.title = expanded ? 'Click to collapse' : 'Click to expand';
       body.appendChild(div);
     });
     etfPinnedSns.forEach(({ rowKey, sn, room }) => {
-      const div = el('div', { className: 'pin-sidebar-item' });
-      div.innerHTML = `<span class="pin-icon unknown"></span><button type="button" class="unpin">×</button>`;
+      const div = el('div', { className: 'pin-sidebar-item collapsed' });
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'pin-icon unknown';
+      const snSpan = el('span', { className: 'pin-sn' });
+      snSpan.textContent = sn || rowKey || '–';
       const details = el('div', { className: 'pin-details' });
-      details.textContent = (room || 'ETF') + ' | ' + (sn || rowKey) + ' | –';
-      details.style.display = 'none';
+      details.textContent = (room || 'ETF') + ' | –';
+      const unpinBtn = el('button', { type: 'button', className: 'unpin' });
+      unpinBtn.textContent = '×';
+      unpinBtn.title = 'Unpin';
+      div.appendChild(iconSpan);
+      div.appendChild(snSpan);
       div.appendChild(details);
-      div.title = 'ETF | ' + (sn || rowKey) + ' – click to expand';
-      div.querySelector('.unpin')?.addEventListener('click', (e) => {
+      div.appendChild(unpinBtn);
+      let etfExpanded = false;
+      unpinBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (typeof window.etfUnpinSn === 'function') window.etfUnpinSn(rowKey);
         else {
@@ -478,8 +499,8 @@
       });
       div.addEventListener('click', (e) => {
         if (!e.target.classList.contains('unpin')) {
-          div.classList.toggle('expanded');
-          details.style.display = div.classList.contains('expanded') ? 'block' : 'none';
+          etfExpanded = !etfExpanded;
+          div.classList.toggle('collapsed', !etfExpanded);
         }
       });
       body.appendChild(div);
