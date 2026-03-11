@@ -10,13 +10,25 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
   body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
-  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 600px; margin: 0 auto; }
+  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 100%; width: 100%; margin: 0 auto; }
   h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
   .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; }
   .nav-links a { color: var(--color-primary); text-decoration: none; margin-right: 1rem; }
   .nav-links a:hover { text-decoration: underline; }
   .nav-links .btn-logout { background: none; border: none; padding: 0; font-size: inherit; color: var(--color-primary); cursor: pointer; }
   .nav-links .btn-logout:hover { text-decoration: underline; }
+  .tree-row-flag-n { background: rgba(220, 38, 38, 0.15); }
+  .tree-row-flag-n td { border-color: var(--color-border); }
+  .msg-error { color: #dc2626; }
+  .msg-ok { color: #16a34a; }
+  .current-station-box { margin-top: 0.75rem; padding: 1rem 1.25rem; border: 2px solid var(--color-border); border-radius: 12px; background: var(--color-bg); }
+  .current-station-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted); margin-bottom: 0.25rem; }
+  .current-station-value { font-size: 1.5rem; font-weight: 700; color: var(--color-text); }
+  .next-station-hint { font-size: 0.875rem; color: var(--color-muted); margin-top: 0.35rem; }
+  .tree-td-num { white-space: nowrap; position: relative; vertical-align: middle; }
+  .tree-td-num.has-depth { }
+  .tree-hbar { position: absolute; top: 50%; height: 2px; background: var(--color-border); display: block; }
+  .tree-new-sn-input { min-width: 28ch; width: 28ch; max-width: 80ch; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); font: inherit; box-sizing: border-box; font-size: 0.9375rem; }
   </style>
 </head>
 <body>
@@ -24,13 +36,303 @@
     <div class="nav-links">
       <a href="/debug">Debug</a>
       <a href="/debug/setting">Setting</a>
+      <a href="/debug/repair">Repair</a>
       <a href="/">Analytics</a>
       <form method="post" action="/api/auth/logout" style="display: inline;">
         <button type="submit" class="btn-logout">Logout</button>
       </form>
     </div>
     <h1>Repair</h1>
-    <p style="color: var(--color-muted);">Coming soon.</p>
+
+    <div class="flex gap-3 mb-6">
+      <button type="button" id="btn-repair" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50" disabled>Repair</button>
+      <button type="button" id="btn-jump" class="px-4 py-2 rounded-lg font-medium border border-[var(--color-border)] bg-[var(--color-surface)] disabled:opacity-60" disabled title="Coming soon">Jump Station (Coming soon)</button>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium mb-1">Serial Number</label>
+      <div class="flex gap-2">
+        <input type="text" id="input-sn" class="flex-1 max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter SN">
+        <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
+      </div>
+      <p id="sn-error" class="mt-1 text-sm msg-error hidden"></p>
+      <div id="current-station-box" class="current-station-box hidden">
+        <div class="current-station-label">Current station (where SN is)</div>
+        <div id="current-station-value" class="current-station-value"></div>
+        <div id="next-station-hint" class="next-station-hint"></div>
+      </div>
+    </div>
+
+    <div id="form-section" class="hidden mb-4 space-y-4">
+      <div class="mb-4">
+        <label class="block text-sm font-medium mb-1">Repairer (Employee ID)</label>
+        <input type="text" id="input-repairer" class="w-full max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" value="SJOP" placeholder="Employee ID">
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Reason Code</label>
+          <select id="sel-reason" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Remark</label>
+          <input type="text" id="input-remark" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" value="retest">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Repair Action</label>
+          <select id="sel-action" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Duty Type</label>
+          <select id="sel-duty" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
+        </div>
+      </div>
+    </div>
+
+    <div id="tree-section" class="hidden mb-4 overflow-x-auto w-full">
+      <p class="text-sm font-medium mb-2">Vendor SN tree (optional kitting: fill New SN)</p>
+      <table class="w-full border-collapse text-sm table-auto" style="min-width: 100%;">
+        <thead>
+          <tr class="border-b border-[var(--color-border)]">
+            <th class="text-left py-2 pr-2 w-12">#</th>
+            <th class="text-left py-2 pr-2">Vendor SN</th>
+            <th class="text-left py-2 pr-2">Description</th>
+            <th class="text-left py-2" style="min-width: 32rem;">New SN</th>
+          </tr>
+        </thead>
+        <tbody id="tree-tbody"></tbody>
+      </table>
+    </div>
+
+    <p id="result-msg" class="text-sm hidden mb-2"></p>
+    <p id="result-station" class="text-sm text-[var(--color-muted)] hidden"></p>
   </div>
+
+  <script>
+(function () {
+  const inputSn = document.getElementById('input-sn');
+  const btnSearch = document.getElementById('btn-search');
+  const btnRepair = document.getElementById('btn-repair');
+  const snError = document.getElementById('sn-error');
+  const currentStationBox = document.getElementById('current-station-box');
+  const currentStationValue = document.getElementById('current-station-value');
+  const nextStationHint = document.getElementById('next-station-hint');
+  const formSection = document.getElementById('form-section');
+  const treeSection = document.getElementById('tree-section');
+  const treeTbody = document.getElementById('tree-tbody');
+  const selReason = document.getElementById('sel-reason');
+  const selAction = document.getElementById('sel-action');
+  const selDuty = document.getElementById('sel-duty');
+  const inputRemark = document.getElementById('input-remark');
+  const inputRepairer = document.getElementById('input-repairer');
+  const resultMsg = document.getElementById('result-msg');
+  const resultStation = document.getElementById('result-station');
+
+  let options = { reason_codes: [], repair_actions: [], duty_types: [] };
+  let wip = null;
+  let tree = [];
+
+  function getCookie(name) {
+    const v = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[^$.*+?()[{}|\\^]/g, '\\$&') + '=([^;]*)'));
+    return v ? decodeURIComponent(v[1]) : '';
+  }
+
+  function api(path, opts) {
+    const url = path.startsWith('/') ? path : '/api/debug/repair/' + path;
+    const init = Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }, opts);
+    if (opts && opts.body && typeof opts.body !== 'string') init.body = JSON.stringify(opts.body);
+    return fetch(url, init).then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); });
+  }
+
+  function loadOptions() {
+    return api('options').then(function (res) {
+      if (res.json.ok) {
+        options = { reason_codes: res.json.reason_codes || [], repair_actions: res.json.repair_actions || [], duty_types: res.json.duty_types || [] };
+        selReason.innerHTML = options.reason_codes.map(function (r) { return '<option value="' + (r.code || r) + '">' + (r.label || r.code || r) + '</option>'; }).join('');
+        selAction.innerHTML = options.repair_actions.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
+        selDuty.innerHTML = options.duty_types.map(function (d) { return '<option value="' + d + '">' + d + '</option>'; }).join('');
+        var rc500 = options.reason_codes.find(function (r) { return (r.code || r) === 'RC500'; });
+        if (rc500) { selReason.value = 'RC500'; }
+        if (options.repair_actions.indexOf('RETEST') >= 0) { selAction.value = 'RETEST'; }
+        var tf = options.duty_types.indexOf('TEST FIXTURE') >= 0 ? 'TEST FIXTURE' : (options.duty_types[0] || '');
+        if (tf) selDuty.value = tf;
+      }
+    });
+  }
+
+  function showError(el, msg) {
+    snError.classList.add('hidden');
+    resultMsg.classList.add('hidden');
+    resultStation.classList.add('hidden');
+    if (el === 'sn') { snError.textContent = msg || ''; snError.classList.toggle('hidden', !msg); if (msg) currentStationBox.classList.add('hidden'); }
+    if (el === 'result') { resultMsg.textContent = msg ? 'Error: ' + msg : ''; resultMsg.className = 'text-sm msg-error ' + (msg ? '' : 'hidden'); }
+  }
+  function setCurrentStation(wip, afterRepair) {
+    if (!wip) { currentStationBox.classList.add('hidden'); return; }
+    currentStationValue.textContent = (wip.STATION_NAME || '') + ' / ' + (wip.GROUP_NAME || '');
+    if (afterRepair) {
+      nextStationHint.textContent = 'SN has been moved to the station above (next station after repair).';
+    } else {
+      var next = wip.NEXT_STATION || '';
+      nextStationHint.textContent = next ? 'After repair will move to: ' + next : '';
+    }
+    currentStationBox.classList.remove('hidden');
+  }
+  function showOk(msg, stationText) {
+    resultMsg.textContent = msg || 'Repair successful.';
+    resultMsg.className = 'text-sm msg-ok';
+    resultMsg.classList.remove('hidden');
+    resultStation.textContent = stationText || '';
+    resultStation.classList.toggle('hidden', !stationText);
+  }
+
+  function doSearch() {
+    var sn = (inputSn.value || '').trim();
+    if (!sn) { showError('sn', 'Enter SN'); return; }
+    showError('sn');
+    showError('result');
+    api('wip?sn=' + encodeURIComponent(sn)).then(function (res) {
+      if (!res.json.ok) {
+        showError('sn', res.json.error || 'No WIP for this SN');
+        formSection.classList.add('hidden');
+        treeSection.classList.add('hidden');
+        btnRepair.disabled = true;
+        return;
+      }
+      wip = res.json.wip;
+      setCurrentStation(wip, false);
+      formSection.classList.remove('hidden');
+      treeSection.classList.remove('hidden');
+      btnRepair.disabled = false;
+      return api('assy-tree?sn=' + encodeURIComponent(sn)).then(function (r2) {
+        if (r2.json.ok) tree = r2.json.tree || [];
+        else tree = [];
+        renderTree();
+      });
+    });
+  }
+
+  function renderTree() {
+    var LINE_W = 22;
+    var BAR_W = 11;
+    treeTbody.innerHTML = tree.map(function (node, i) {
+      var desc = (node.cust_pn || '') + (node.cust_rev ? ' Rev:' + node.cust_rev : '') + (node.group_name ? ' (' + node.group_name + ')' : '');
+      var depth = node.depth || 0;
+      var numCellClass = 'tree-td-num py-1 pr-2' + (depth > 0 ? ' has-depth' : '');
+      var shadows = [];
+      for (var k = 0; k < depth; k++) {
+        var pos = BAR_W + k * LINE_W;
+        shadows.push('inset ' + pos + 'px 0 0 ' + (2 - pos) + 'px var(--color-border)');
+      }
+      var numCellStyle = 'padding-left: ' + (8 + depth * LINE_W) + 'px;';
+      if (shadows.length) numCellStyle += ' box-shadow: ' + shadows.join(', ') + ';';
+      var hbarStyle = depth > 0 ? 'left: ' + ((depth - 1) * LINE_W) + 'px; width: ' + BAR_W + 'px;' : '';
+      var hbarHtml = depth > 0 ? '<span class="tree-hbar" style="' + hbarStyle + '"></span>' : '';
+      var rowClass = node.assy_flag === 'N' ? ' tree-row-flag-n' : '';
+      return '<tr class="' + rowClass + '" data-num="' + node.num + '" data-vendor-sn="' + (node.vendor_sn || '') + '" data-father-sn="' + (node.father_sn != null ? node.father_sn : '') + '">' +
+        '<td class="' + numCellClass + '" style="' + numCellStyle + '">' + hbarHtml + node.num + '</td>' +
+        '<td class="py-1 pr-2">' + (node.vendor_sn || '') + '</td>' +
+        '<td class="py-1 pr-2">' + desc + '</td>' +
+        '<td class="py-1"><input type="text" class="tree-new-sn tree-new-sn-input" data-num="' + node.num + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '" placeholder="New SN"></td>' +
+        '</tr>';
+    }).join('');
+    treeTbody.querySelectorAll('.tree-new-sn').forEach(function (input) {
+      function resize() {
+        var len = (input.value || '').length;
+        input.style.width = Math.max(28, len + 2) + 'ch';
+      }
+      input.addEventListener('input', resize);
+      input.addEventListener('change', resize);
+      resize();
+    });
+  }
+
+  function buildKitList() {
+    var numToNode = {};
+    tree.forEach(function (n) { numToNode[n.num] = n; });
+    var list = [];
+    tree.forEach(function (node) {
+      var input = document.querySelector('.tree-new-sn[data-num="' + node.num + '"]');
+      var newSn = (input && input.value) ? input.value.trim() : '';
+      if (!newSn) return;
+      var parentNum = node.parent_num;
+      var newFather = null;
+      if (parentNum != null && numToNode[parentNum]) {
+        var pInput = document.querySelector('.tree-new-sn[data-num="' + parentNum + '"]');
+        if (pInput && pInput.value && pInput.value.trim()) newFather = pInput.value.trim();
+      }
+      list.push({
+        old_vendor_sn: node.vendor_sn,
+        old_father_sn: node.father_sn,
+        new_vendor_sn: newSn,
+        new_father_sn: newFather
+      });
+    });
+    return list;
+  }
+
+  function validateKitList(kitList) {
+    var numToNewSn = {};
+    tree.forEach(function (n) {
+      var input = document.querySelector('.tree-new-sn[data-num="' + n.num + '"]');
+      if (input && input.value && input.value.trim()) numToNewSn[n.num] = input.value.trim();
+    });
+    for (var i = 0; i < tree.length; i++) {
+      var node = tree[i];
+      var newSn = numToNewSn[node.num];
+      if (!newSn) continue;
+      var parentNum = node.parent_num;
+      if (parentNum == null) continue;
+      var parentNew = numToNewSn[parentNum];
+      if (!parentNew) continue;
+      var item = kitList.find(function (k) { return k.old_vendor_sn === node.vendor_sn; });
+      if (item && item.new_father_sn !== parentNew) return 'Enter new SN for parent first (parent #' + parentNum + ' -> ' + parentNew + ')';
+    }
+    return null;
+  }
+
+  function doRepair() {
+    var sn = (inputSn.value || '').trim();
+    if (!sn || !wip) { showError('result', 'Search WIP first.'); return; }
+    showError('result');
+    var kitList = buildKitList();
+    var err = validateKitList(kitList);
+    if (err) { showError('result', err); return; }
+    var emp = (inputRepairer && inputRepairer.value) ? inputRepairer.value.trim() : 'SJOP';
+    if (!emp) emp = 'SJOP';
+    var payload = {
+      sn: sn,
+      emp: emp,
+      reason_code: selReason.value || 'RC500',
+      repair_action: selAction.value || 'RETEST',
+      duty_station: selDuty.value || 'TEST FIXTURE',
+      remark: inputRemark.value || 'retest',
+      kit_list: kitList
+    };
+    btnRepair.disabled = true;
+    api('execute', { method: 'POST', body: payload }).then(function (res) {
+      btnRepair.disabled = false;
+      if (res.json.ok) {
+        showOk(res.json.message || 'Repair successful.', res.json.current_station ? 'SN has been moved to: ' + (res.json.current_station.STATION_NAME || '') + ' / ' + (res.json.current_station.GROUP_NAME || '') : '');
+        if (res.json.current_station) {
+          wip = res.json.current_station;
+          setCurrentStation(wip, true);
+        }
+      } else {
+        showError('result', res.json.error || 'Execute failed');
+      }
+    }).catch(function () {
+      btnRepair.disabled = false;
+      showError('result', 'Network error');
+    });
+  }
+
+  btnSearch.addEventListener('click', doSearch);
+  inputSn.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSearch(); });
+  btnRepair.addEventListener('click', doRepair);
+
+  try { window.__current_user = {{ current_user | tojson if current_user else 'null' }}; } catch (_) {}
+  loadOptions();
+})();
+  </script>
 </body>
 </html>
