@@ -13,15 +13,15 @@ except ImportError:
     BeautifulSoup = None  # type: ignore
 
 IDX_SERIAL = 1
-IDX_MO = 2
-IDX_MODEL = 4
-IDX_STATION = 5
-IDX_TEST_TIME = 7
-IDX_RESULT = 8
-IDX_ERROR_CODE = 9  # optional; fallback to failure_msg hash in error_stats
-IDX_FAILURE_MSG = 10
+IDX_MO = 3
+IDX_PRODUCT = 4
+IDX_MODEL = 5
+IDX_STATION = 7
+IDX_ERROR_CODE = 8  # optional; fallback to failure_msg hash in error_stats
+IDX_FAILURE_MSG = 9
+IDX_TEST_TIME = 10
 IDX_CURRENT_STATION = 18
-IDX_STATION_INSTANCE = 19  # optional; e.g. AST_170, FLB_185
+IDX_REMARK = 19  # optional
 
 
 def _normalize_mo(mo: str) -> str:
@@ -92,11 +92,11 @@ def parse_fail_result_html(
         part_number = _cell_text(tds[IDX_MODEL])
         station = _cell_text(tds[IDX_STATION])
         test_time_str = _cell_text(tds[IDX_TEST_TIME])
-        result = _cell_text(tds[IDX_RESULT])
+        result = "FAIL"  # The new API fail_result_new.jsp only returns fails
         error_code = _cell_text(tds[IDX_ERROR_CODE]) if len(tds) > IDX_ERROR_CODE else ""
         failure_msg = _cell_text(tds[IDX_FAILURE_MSG])
         current_station = _cell_text(tds[IDX_CURRENT_STATION])
-        station_instance = _cell_text(tds[IDX_STATION_INSTANCE]) if len(tds) > IDX_STATION_INSTANCE else ""
+        station_instance = _cell_text(tds[IDX_REMARK]) if len(tds) > IDX_REMARK else ""
 
         test_time_dt = _parse_test_time(test_time_str)
         if user_start is not None and user_end is not None and test_time_dt is not None:
@@ -152,3 +152,46 @@ def rows_to_csv(rows: List[dict], include_bp: bool = False) -> str:
             row.append("Yes" if r.get("is_bonepile") else "No")
         w.writerow(row)
     return buf.getvalue()
+
+def parse_yield_result_html(html: str) -> dict:
+    """
+    Parse YieldRateReport.jsp HTML to extract aggregate PASS/FAIL quantities.
+    Returns: Dict[station_name, {"pass": int, "fail": int}]
+    """
+    if BeautifulSoup is None:
+         raise RuntimeError("beautifulsoup4 is required")
+         
+    soup = BeautifulSoup(html, "html.parser")
+    tables = soup.find_all("table")
+    out = {}
+    
+    # Usually the Yield table is the second table in the doc, but search all to be safe
+    for table in tables:
+        rows = table.find_all("tr")
+        if not rows:
+            continue
+            
+        # Is this the yield data table? Look for GROUP NAME or Pass Qty headers
+        header_text = rows[0].get_text().upper()
+        if "GROUP NAME" in header_text or "YIELD RATE" in header_text:
+            # Skip header rows
+            for tr in rows[2:]: 
+                tds = tr.find_all(["th", "td"])
+                if len(tds) < 5:
+                    continue
+                    
+                group_name = _cell_text(tds[1]).strip().upper()
+                if not group_name:
+                    continue
+                    
+                # In yieldRateReport (counting from 1 due to radio button at index 0):
+                # 1=Group Name, 2=Pass Qty, 3=Fail Qty (Under First Pass Yield Rate)
+                try:
+                    pass_qty = int(_cell_text(tds[2]).replace(',', ''))
+                    num = _cell_text(tds[3])
+                    # Fail Qty could be inside an anchor tag
+                    fail_qty = int(num.replace(',', ''))
+                    out[group_name] = {"pass": pass_qty, "fail": fail_qty}
+                except ValueError:
+                    pass
+    return out

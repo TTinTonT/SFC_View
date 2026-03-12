@@ -60,6 +60,7 @@ def _row_result_to_pf(result: str) -> Optional[str]:
 
 def compute_all(
     rows: List[dict],
+    yield_summary: Optional[Dict[str, dict]] = None,
     aggregation: str = "daily",
 ) -> Dict[str, Any]:
     """
@@ -67,7 +68,7 @@ def compute_all(
     Rows must have: serial_number, part_number, station, result, test_time_dt.
     Adds is_bonepile to each row.
     """
-    if not rows:
+    if not rows and not yield_summary:
         return _empty_result(aggregation)
 
     rows = add_bp_to_rows(rows)
@@ -105,11 +106,11 @@ def compute_all(
     fail_total = tested_total - pass_total
 
     tested_bp = sum(1 for v in sn_is_bp.values() if v)
-    tested_fresh = tested_total - tested_bp
+    tested_fresh = max(0, tested_total - tested_bp)
     pass_bp = sum(1 for sn in sn_tests if sn_is_bp.get(sn) and sn_pass.get(sn))
-    pass_fresh = pass_total - pass_bp
-    fail_bp = tested_bp - pass_bp
-    fail_fresh = tested_fresh - pass_fresh
+    pass_fresh = max(0, pass_total - pass_bp)
+    fail_bp = max(0, tested_bp - pass_bp)
+    fail_fresh = max(0, tested_fresh - pass_fresh)
 
     summary = {"total": tested_total, "pass": pass_total, "fail": fail_total}
 

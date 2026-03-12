@@ -299,7 +299,7 @@ def _normalize_sn(val: Any) -> Optional[str]:
     if re.fullmatch(r"\d+\.0", s):
         s = s[:-2]
     s = re.sub(r"[^\d]", "", s)
-    if len(s) == 13 and s.startswith("18"):
+    if len(s) == 13 and (s.startswith("18") or s.startswith("21") or s.startswith("24")):
         return s
     return None
 
@@ -855,7 +855,10 @@ def compute_disposition_stats(aggregation: str = "daily", start_ca_ms: Optional[
     complete_sns: Dict[str, Dict[str, Any]] = {}
     for sn, data in sn_latest.items():
         rd = data["rd"]
-        if _norm(rd.get("status")) != "FAIL" or _norm(rd.get("pic")) != "IGS":
+        status_val = _norm(rd.get("status"))
+        
+        # Consider any non-PASS status as a failure (e.g. FAIL, OLDERR, etc.)
+        if _is_pass_status(status_val) or _norm(rd.get("pic")) != "IGS":
             continue
         mmdd_nv = _last_mmdd_only(rd.get("nv_disposition"))
         if mmdd_nv is None:
@@ -1109,7 +1112,8 @@ def compute_disposition_sn_list(
     out: List[Dict[str, Any]] = []
     for sn, data in sn_data.items():
         rd = data["rd"]
-        if _norm(rd.get("status")) != "FAIL" or _norm(rd.get("pic")) != "IGS":
+        status_val = _norm(rd.get("status"))
+        if _is_pass_status(status_val) or _norm(rd.get("pic")) != "IGS":
             continue
         mmdd_nv = _last_mmdd_only(rd.get("nv_disposition"))
         if mmdd_nv is None:

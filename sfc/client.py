@@ -38,9 +38,11 @@ def _login(session: Optional[requests.Session] = None) -> Tuple[bool, requests.S
     try:
         r = sess.post(LOGIN_URL, data={"Uname": SFC_USER, "Pwd": SFC_PWD}, timeout=15)
         if r.status_code != 200:
+            print(f"Login failed: status={r.status_code}, body={r.text[:500]}")
             return False, sess
         return True, sess
-    except Exception:
+    except Exception as e:
+        print(f"Login exception: {e}")
         return False, sess
 
 
@@ -114,3 +116,46 @@ def request_fail_result(
         if sess:
             ok, html = _fetch_fail_result_html(sess, from_dt, to_dt)
     return ok, html
+
+
+def request_yield_result(
+    user_start: datetime,
+    user_end: datetime,
+) -> Tuple[bool, str]:
+    """
+    Get session, switch customer to NVIDIA via Top.jsp, then fetch yieldRateReport.jsp.
+    Returns (success, html).
+    """
+    sess = _get_session()
+    if sess is None:
+        return False, ""
+        
+    # Switch customer (no-op if already set, but safe to repeat)
+    try:
+        sess.get(f"{SFC_BASE_URL}/System/Top.jsp", verify=False, timeout=15)
+    except Exception:
+        pass
+        
+    from_date = user_start.strftime("%Y/%m/%d")
+    to_date = user_end.strftime("%Y/%m/%d")
+    
+    data = {
+        "FromDate": from_date,
+        "FromTime": "00",
+        "ToDate": to_date,
+        "ToTime": "23",
+        "MOType": "NORMAL",
+        "LineName": "ALL",
+        "ModelName": "ALL",
+        "MONumber": "",
+        "GroupName": SFC_GROUP_NAME
+    }
+    
+    url = f"{SFC_BASE_URL}/L10_Report/Manufacture/yieldRateReport.jsp"
+    try:
+        r = sess.post(url, data=data, timeout=60, verify=False)
+        if r.status_code != 200:
+            return False, ""
+        return True, r.text
+    except Exception:
+        return False, ""

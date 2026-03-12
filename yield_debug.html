@@ -1,0 +1,519 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<HTML>
+<HEAD>
+<link rel="stylesheet" href="../../Function/Global.css" type="text/css">
+<title></title>
+</HEAD>
+
+<BODY topmargin="0" leftmargin="0" bgcolor="#f3f3e4">
+<form name="main" method="post" action="Show_Fail_PPID.jsp" target="FailFrame">
+<table  border="0" cellpadding="0" cellspacing="0" width="95%" aligen="center" class="font9v" >
+	<tr> 
+		<td height="24">Yield Rate - Group &amp; Tracking(20260304-20260311
+) </td>                                                                 
+	</tr>   
+</table>
+<table style="border-collapse:collapse" bordercolor="333333" border="1" cellpadding="0" cellspacing="0" width="98%" align="center" class="font9v">
+	<tr bgcolor="#EBEBEB">    
+		<td rowspan="2" colspan="2" align="center">GROUP NAME</td>
+		<td colspan="4" align="center" height="26">First Pass Yield Rate </td>
+		<td colspan="4" align="center" height="26">FPY+PY(Include RMA) </td>  <!--20150521 by Li Yue  -->
+		<td colspan="2" align="center">Process Yield Rate</td>
+		<td colspan="2" align="center">After Repair</td>
+		<td colspan="2" align="center">Sum Times</td>
+	</tr> 
+	<tr bgcolor="#EBEBEB">    
+		<td align="center" height="26">Pass Qty</td>
+		<td align="center">Fail Qty</td>
+		<td align="center">Total Qty</td>
+		<td align="center">Yield Rate</td>
+		<td align="center">Pass Qty</td>  <!--20150521 by Li Yue-->
+		<td align="center">Fail Qty</td>
+		<td align="center">Total Qty</td>
+		<td align="center">Yield Rate</td>  <!--20150521 by Li Yue-->
+		<td align="center">NDF</td>
+		<td align="center">Yield Rate</td>
+		<td align="center">Repair Pass Times</td>
+		<td align="center">Repair Fail Times</td>
+		<td align="center">Sum(Fail Times)</td>
+		<td align="center">Sum(Test Times)</td>
+	</tr>
+	<tr>
+<td height=24 align=center><input type="radio" value=KITTING1  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>KITTING1</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=KITTING1"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>15</td>
+<td align=center>0</td>
+<td align=center>15</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>1</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>15</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=KITTING2  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>KITTING2</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=KITTING2"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>15</td>
+<td align=center>0</td>
+<td align=center>15</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>1</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>15</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=KITTING3  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>KITTING3</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=KITTING3"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>15</td>
+<td align=center>0</td>
+<td align=center>15</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>1</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>15</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=KITTING4  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>KITTING4</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=KITTING4"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>15</td>
+<td align=center>0</td>
+<td align=center>15</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>1</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>15</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=KITTING5  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>KITTING5</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=KITTING5"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>15</td>
+<td align=center>0</td>
+<td align=center>15</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>1</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>15</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=KITTING6  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>KITTING6</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=KITTING6"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>15</td>
+<td align=center>0</td>
+<td align=center>15</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>1</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>15</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=KITTING7  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>KITTING7</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=KITTING7"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>14</td>
+<td align=center>0</td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>14</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=VI-I  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>VI-I</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=VI-I"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>16</td>
+<td align=center>0</td>
+<td align=center>16</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>2</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>16</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=VI-II  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>VI-II</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=VI-II"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>14</td>
+<td align=center>0</td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>14</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=FILL_COOLANT  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>FILL_COOLANT</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=FILL_COOLANT"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>16</td>
+<td align=center>0</td>
+<td align=center>16</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>2</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>16</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=INIT_TEST  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>INIT_TEST</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=INIT_TEST"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>16</td>
+<td align=center>0</td>
+<td align=center>16</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>2</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>16</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=SYS_FLUSH  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>SYS_FLUSH</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=SYS_FLUSH"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>14</td>
+<td align=center>0</td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>14</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=SYS_FILL_N2  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>SYS_FILL_N2</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=SYS_FILL_N2"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>14</td>
+<td align=center>0</td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>14</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=VISUAL$INSPECT  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>VISUAL INSPECT</td>
+<td align=center>1</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=VISUAL$INSPECT"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>1</td>
+<td align=center> 100.00%</td>
+<td align=center>1</td>
+<td align=center>0</td>
+<td align=center>1</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>1</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=OOBA  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>OOBA</td>
+<td align=center>18</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=OOBA"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>18</td>
+<td align=center> 100.00%</td>
+<td align=center>18</td>
+<td align=center>0</td>
+<td align=center>18</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>18</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=PACKING  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>PACKING</td>
+<td align=center>4</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=PACKING"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>4</td>
+<td align=center> 100.00%</td>
+<td align=center>4</td>
+<td align=center>0</td>
+<td align=center>4</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>4</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=LABEL_PRINT  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>LABEL_PRINT</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=LABEL_PRINT"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>14</td>
+<td align=center>0</td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>14</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=PT1  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>PT1</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=PT1"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>16</td>
+<td align=center>0</td>
+<td align=center>16</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>2</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>16</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=PT2  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>PT2</td>
+<td align=center>14</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=PT2"  target="_blank"><font color="blue">0</font></a></td>
+<td align=center>14</td>
+<td align=center> 100.00%</td>
+<td align=center>16</td>
+<td align=center>0</td>
+<td align=center>16</td>
+<td align=center> 100.00%</td>
+<td align=center>0</td>
+<td align=center>100.00%</td>
+<td align=center>2</td>
+<td align=center>0</td>
+<td align=center>0</td>
+<td align=center>16</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=SYS_TEST  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>SYS_TEST</td>
+<td align=center>10</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=SYS_TEST"  target="_blank"><font color="blue">4</font></a></td>
+<td align=center>14</td>
+<td align=center>  71.43%</td>
+<td align=center>14</td>
+<td align=center>9</td>
+<td align=center>23</td>
+<td align=center>  60.87%</td>
+<td align=center>0</td>
+<td align=center>71.43%</td>
+<td align=center>4</td>
+<td align=center>5</td>
+<td align=center>9</td>
+<td align=center>23</td>
+</tr>
+<tr>
+<td height=24 align=center><input type="radio" value=SYS_TEST$DI  name="GroupName" onclick="javascript:main.action='Show_Fail_PPID.jsp'; main.target='FailFrame'; main.submit();"></td>
+<td align=center>SYS_TEST DI</td>
+<td align=center>0</td>
+<td align=center ><a href="Show_First_Fail_PPID3.jsp?FromDate=20260304&ToDate=20260311&FromTime=00&ToTime=23&LineName=ALL&MONumber=&MOType=NORMAL&GroupName=SYS_TEST$DI"  target="_blank"><font color="blue">4</font></a></td>
+<td align=center>4</td>
+<td align=center>   0.00%</td>
+<td align=center>0</td>
+<td align=center>9</td>
+<td align=center>9</td>
+<td align=center>   0.00%</td>
+<td align=center>0</td>
+<td align=center>0.00%</td>
+<td align=center>0</td>
+<td align=center>5</td>
+<td align=center>9</td>
+<td align=center>9</td>
+</tr>
+
+
+</table>
+<input type="hidden" name="FromDate" value="20260304">
+<input type="hidden" name="ToDate" value="20260311">
+<input type="hidden" name="FromTime" value="00">
+<input type="hidden" name="ToTime" value="23">
+<input type="hidden" name="LineName" value="ALL">
+<input type="hidden" name="ModelName" value="ALL">
+<input type="hidden" name="MONumber" value="">
+<input type="hidden" name="MOType" value="NORMAL">
+
+</form>
+</body>   
+</html>
+
+
+                      

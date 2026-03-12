@@ -88,18 +88,40 @@ def compute_sn_list(
 
     def make_sn_item(sn: str) -> Dict[str, Any]:
         latest = sn_latest_row.get(sn) or {}
+        st = "PASS" if sn_pass.get(sn) else "FAIL"
+        lst = (latest.get("station") or "").strip()
+        ltt = (latest.get("test_time") or "").strip()
+
+        if metric == "test_flow" and station:
+            st_target = _norm(station)
+            want_pf = "P" if outcome == "pass" else "F" if outcome == "fail" else None
+            tests = sn_tests.get(sn) or []
+            matching_rows = []
+            for r in tests:
+                if _norm(r.get("station")) == st_target:
+                    res = _norm(r.get("result"))
+                    if want_pf:
+                        if (want_pf == "P" and res == "PASS") or (want_pf == "F" and res == "FAIL"):
+                            matching_rows.append(r)
+                    else:
+                        matching_rows.append(r)
+            if matching_rows:
+                latest_match = max(matching_rows, key=lambda x: x.get("test_time_dt") or datetime.min)
+                st = "PASS" if _norm(latest_match.get("result")) == "PASS" else "FAIL"
+                ltt = (latest_match.get("test_time") or "").strip()
+
         return {
             "sn": sn,
             "part_number": sn_latest_part.get(sn, "Unknown") or "Unknown",
-            "status": "PASS" if sn_pass.get(sn) else "FAIL",
-            "last_station": (latest.get("station") or "").strip(),
-            "last_test_time": (latest.get("test_time") or "").strip(),
+            "status": st,
+            "last_station": lst,
+            "last_test_time": ltt,
             "is_bonepile": bool(sn_is_bp.get(sn)),
             "last_failure_msg": get_last_failure_msg(sn),
         }
 
-    # Metric: total, pass, fail, test_flow
-    if metric in ("total", "tested"):
+    # Metric: total, pass, fail, test_flow, breakdown_*
+    if metric in ("total", "tested", "breakdown_bonepile", "breakdown_fresh"):
         candidates = list(sn_tests.keys())
     elif metric == "pass":
         candidates = [sn for sn in sn_tests if sn_pass.get(sn)]

@@ -25,11 +25,15 @@ FLASK_DEBUG = os.environ.get("FLASK_DEBUG", "true").lower() in ("1", "true", "ye
 DISPO_XLSX_HEADER_FILL = os.environ.get("DISPO_XLSX_HEADER_FILL", "E8D5B7")
 DISPO_XLSX_DATA_FILL = os.environ.get("DISPO_XLSX_DATA_FILL", "FFF8E7")
 
-SFC_BASE_URL = os.environ.get("SFC_BASE_URL", "http://10.16.137.110").rstrip("/")
+SFC_BASE_URL = os.environ.get("SFC_BASE_URL", "https://sfcweb.nanqing.cloud").rstrip("/")
 SFC_USER = os.environ.get("SFC_USER", "SFC")
 SFC_PWD = os.environ.get("SFC_PWD", "EPD2TJW")
 SFC_GROUP_NAME = os.environ.get("SFC_GROUP_NAME", "'AST','FCT','FLA','FLB','FLC','FTS','IOT','NVL','PRET','RIN'")
 SFC_SESSION_TTL_SECONDS = int(os.environ.get("SFC_SESSION_TTL_SECONDS", str(30 * 60)))
+
+LOG_SERVER_IP = os.environ.get("LOG_SERVER_IP", "10.73.199.19")
+LOG_SERVER_USER = os.environ.get("LOG_SERVER_USER", "root")
+LOG_SERVER_PWD = os.environ.get("LOG_SERVER_PWD", "root")
 
 EXTEND_HOURS = get_extend_hours()
 CA_TZ = get_ca_tz()

@@ -34,14 +34,25 @@ def run_analytics_query(
     aggregation: str = "daily",
 ) -> Dict[str, Any]:
     """
-    Fetch SFC fail result, parse HTML, compute analytics.
+    Fetch SFC fail result and yield summary, parse HTML, compute analytics.
     Returns computed dict (summary, tray_summary, sku_rows, breakdown_rows, test_flow, rows, etc.).
     """
     ok, html = request_fail_result(user_start, user_end)
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
     rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    return compute_all(rows, aggregation=aggregation)
+    
+    ssh_rows = []
+    try:
+        from sfc.log_parser import fetch_ssh_logs
+        ssh_rows = fetch_ssh_logs(user_start, user_end)
+    except Exception as e:
+        print(f"Warning: Failed to fetch SSH logs: {e}")
+        
+    # Combine the SFC web portal failures with the SSH log results
+    combined_rows = rows + ssh_rows
+    
+    return compute_all(combined_rows, aggregation=aggregation)
 
 
 def get_sn_list(

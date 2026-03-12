@@ -1058,8 +1058,8 @@
               </div>
             </div>
           </div>
-          <p class="text-xs mt-4" style="color: var(--color-muted);">
-            <strong>Note:</strong> Only SNs with Status = Fail and PIC = IGS. 
+          <p class="text-xs mb-2 mt-4" style="color: var(--color-muted);">
+            <b>Note:</b> Only SNs with Status not PASS and PIC = IGS. 
             Waiting = IGS Action empty or last IGS date &lt; last NV Disposition date. 
             Complete = last IGS Action date &gt;= last NV Disposition date. 
             Total = Waiting + Complete.
@@ -2922,10 +2922,11 @@
          <tr><td colspan="7" class="font-bold pt-4 pb-1" style="color: var(--color-muted);">${label} (${rows.length})</td></tr>
          ${rows.map(r => {
            const result = (r.status || r.result || '-').toUpperCase();
+           const actualBadgeClass = (result === 'PASS') ? 'status-success' : 'status-danger';
            const bp = r.is_bonepile ? 'Yes' : 'No';
            return `<tr>
              <td class="font-mono font-semibold">${r.sn}</td>
-             <td><span class="status-badge ${badgeClass}">${result}</span></td>
+             <td><span class="status-badge ${actualBadgeClass}">${result}</span></td>
              <td class="font-mono font-semibold">${(r.part_number || r.last_part_number || 'Unknown')}</td>
              <td class="font-mono">${(r.last_station || '-')}</td>
              <td class="font-mono">${(r.last_test_time || fmtMaybe(r.pass_ca_ms) || '-')}</td>
