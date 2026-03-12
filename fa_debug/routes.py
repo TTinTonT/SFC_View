@@ -104,10 +104,99 @@ def debug_repair():
     return render_template("debug_repair.html", current_user=getattr(request, "current_user", None))
 
 
-# --- Repair (SFIS) APIs ---
+@bp.route("/debug/jump-station")
+def debug_jump_station():
+    """IT Jump page: move station flow UI."""
+    return render_template("debug_jump_station.html", current_user=getattr(request, "current_user", None))
+
+
+# --- IT Jump (Jump Station) APIs ---
 _WIP_KEYS = ["SERIAL_NUMBER", "MO_NUMBER", "MODEL_NAME", "STATION_NAME", "LINE_NAME", "GROUP_NAME", "NEXT_STATION"]
 
 
+@bp.route("/api/debug/jump-station/wip", methods=["GET"])
+def api_jump_station_wip():
+    """Get WIP and route list for SN. Same current-station logic as Repair (get_station_and_next)."""
+    sn = (request.args.get("sn") or "").strip().upper()
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.jump_route import get_route_list
+        conn = get_conn()
+        try:
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."})
+            wip = dict(zip(_WIP_KEYS, row))
+            current_group = (wip.get("GROUP_NAME") or "")
+            if current_group in ("PACKING", "SHIPPING"):
+                return jsonify({"ok": False, "error": "SN is at PACKING/SHIPPING; jump not allowed."})
+            route_cols, route_rows = get_route_list(conn, sn)
+            route = []
+            for r in route_rows or []:
+                d = dict(zip(route_cols, r))
+                route.append({
+                    "step": d.get("STEP"),
+                    "group_name": d.get("GROUP_NAME") or "",
+                    "group_next": d.get("GROUP_NEXT") or "",
+                })
+            wip_serial = {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in wip.items()}
+            return jsonify({"ok": True, "wip": wip_serial, "route": route})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/jump-station/execute", methods=["POST"])
+def api_jump_station_execute():
+    """Execute jump: target_group, reason, emp_no?, check_jump_station."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    target_group = (data.get("target_group") or "").strip()
+    if not target_group:
+        return jsonify({"ok": False, "error": "target_group required"}), 400
+    reason = (data.get("reason") or "").strip()
+    if not reason:
+        return jsonify({"ok": False, "error": "Jump reason is required."}), 400
+    emp_no = (data.get("emp_no") or "").strip() or (getattr(request, "current_user", None) or {}).get("username") or "WEB"
+    check_jump_station = data.get("check_jump_station") is True
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.jump_route import check_jump_station as do_check_jump_station
+        from sfis_tool.repair_ok import get_group_info, jump_routing
+        conn = get_conn()
+        try:
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."})
+            wip = dict(zip(_WIP_KEYS, row))
+            v_line = wip.get("LINE_NAME") or ""
+            if check_jump_station and not do_check_jump_station(conn, target_group, sn):
+                return jsonify({"ok": False, "error": "CheckJumpStation: not allowed (kitting/assy)."})
+            info = get_group_info(conn, v_line, target_group)
+            if not info:
+                return jsonify({"ok": False, "error": "GetGroupInfo returned no target; cannot jump."})
+            ok = jump_routing(
+                conn, sn,
+                info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
+                emp_no, in_station_time=None
+            )
+            if not ok:
+                return jsonify({"ok": False, "error": "UPDATE affected no rows."})
+            return jsonify({"ok": True})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# --- Repair (SFIS) APIs ---
 @bp.route("/api/debug/repair/options", methods=["GET"])
 def api_repair_options():
     """Return reason_codes, repair_actions, duty_types for dropdowns."""
@@ -160,7 +249,7 @@ def api_repair_assy_tree():
         return jsonify({"ok": False, "error": "sn required"}), 400
     try:
         from sfis_tool.db import get_conn
-        from sfis_tool.change_ok import fetch_assy_tree, build_numbered_tree
+        from sfis_tool.change_ok import fetch_assy_tree, build_numbered_tree_preserve_order
         conn = get_conn()
         try:
             cols_y, rows_y = fetch_assy_tree(conn, sn, "Y")
@@ -168,18 +257,16 @@ def api_repair_assy_tree():
             combined = list(rows_y) + list(rows_n)
             if not combined:
                 return jsonify({"ok": True, "tree": []})
-            numbered_list, _ = build_numbered_tree(cols_y, combined)
-            parent_num_by_key = {}
+            numbered_list, _ = build_numbered_tree_preserve_order(cols_y, combined)
             tree = []
             for t in numbered_list:
-                num, node_key, row, is_father, parent_node_key, depth = t
+                num, node_key, row, is_father, parent_num, depth = t
                 vendor_sn = node_key[0]
                 father_sn = node_key[1]
                 assy_flag = (row.get("ASSY_FLAG") or "Y")
                 group_name = (row.get("GROUP_NAME") or "")
                 cust_pn = (row.get("CUST_PN") or row.get("SUB_MODEL_NAME") or "")
                 cust_rev = (row.get("CUST_REV") or row.get("SUB_REV") or "N/A")
-                parent_num = parent_num_by_key.get(parent_node_key) if parent_node_key else None
                 tree.append({
                     "num": num,
                     "vendor_sn": vendor_sn,
@@ -192,7 +279,6 @@ def api_repair_assy_tree():
                     "is_father": is_father,
                     "parent_num": parent_num,
                 })
-                parent_num_by_key[node_key] = num
             return jsonify({"ok": True, "tree": tree})
         finally:
             conn.close()
@@ -215,6 +301,7 @@ def api_repair_execute():
     duty_station = (data.get("duty_station") or "TEST FIXTURE").strip()
     remark = (data.get("remark") or "retest").strip()
     kit_list = data.get("kit_list") or []
+    force_continue = data.get("force_continue") is True
 
     try:
         from sfis_tool.db import get_conn
@@ -265,6 +352,24 @@ def api_repair_execute():
                         nf = (item.get("new_father_sn") or "").strip()
                         if nf != parent_new:
                             return jsonify({"ok": False, "error": f"Parent must be kitted before child: parent SN {of_str} -> new {parent_new}, child has new_father_sn {nf!r}"})
+                if not force_continue:
+                    from sfis_tool.qa_lock import check_ppid_lock
+                    vendor_sns = list(dict.fromkeys([(item.get("old_vendor_sn") or "").strip() for item in kit_list if (item.get("old_vendor_sn") or "").strip()]))
+                    locked_sns = []
+                    lock_msg = ""
+                    for vsn in vendor_sns:
+                        is_locked, msg = check_ppid_lock(conn, vsn)
+                        if is_locked:
+                            locked_sns.append(vsn)
+                            if msg:
+                                lock_msg = msg
+                    if locked_sns:
+                        return jsonify({
+                            "ok": False,
+                            "qa_locked": True,
+                            "locked_sns": locked_sns,
+                            "error": lock_msg or "Part(s) bị QA lock (PPID lock). Chưa được unlock."
+                        })
                 node_keys = [(item.get("old_vendor_sn"), item.get("old_father_sn")) for item in kit_list if (item.get("old_vendor_sn") or "").strip()]
                 total, err = dekit_nodes(conn, sn, [(k[0], k[1]) for k in node_keys if k[0]], emp)
                 if err:
@@ -336,7 +441,8 @@ def api_setting_users():
     try:
         cur = conn.execute(
             """SELECT id, username, full_name, department, employee_id, email, role,
-                      allowed_login_start_time, allowed_login_end_time, allow_all_ip, locked_until_ts, created_at_ts
+                      allowed_login_start_time, allowed_login_end_time, allow_all_ip, locked_until_ts,
+                      session_ttl_minutes, created_at_ts
                FROM users ORDER BY username"""
         )
         users = [dict(r) for r in cur.fetchall()]
@@ -405,6 +511,41 @@ def api_setting_allow_all_ip():
     conn = connect_auth_db()
     try:
         conn.execute("UPDATE users SET allow_all_ip = ?, updated_at_ts = ? WHERE id = ?", (1 if allow else 0, int(__import__("time").time()), user_id))
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+@bp.route("/api/debug/setting/user/session-ttl", methods=["POST"])
+def api_setting_user_session_ttl():
+    """Set per-user token expiry: { user_id, minutes: 30 } or { user_id, unlimited: true } or { user_id, use_global: true } (admin only)."""
+    if _setting_admin() is None:
+        return jsonify({"error": "Forbidden"}), 403
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+    if user_id is None:
+        return jsonify({"error": "user_id required"}), 400
+    from fa_debug.auth_db import connect_auth_db
+    conn = connect_auth_db()
+    try:
+        if data.get("use_global"):
+            conn.execute("UPDATE users SET session_ttl_minutes = NULL, updated_at_ts = ? WHERE id = ?", (int(__import__("time").time()), user_id))
+        elif data.get("unlimited"):
+            conn.execute("UPDATE users SET session_ttl_minutes = ?, updated_at_ts = ? WHERE id = ?", ("unlimited", int(__import__("time").time()), user_id))
+        else:
+            minutes = data.get("minutes")
+            if minutes is not None:
+                try:
+                    m = int(minutes)
+                    m = max(1, min(m, 10080))
+                except (TypeError, ValueError):
+                    conn.close()
+                    return jsonify({"error": "minutes must be 1–10080"}), 400
+                conn.execute("UPDATE users SET session_ttl_minutes = ?, updated_at_ts = ? WHERE id = ?", (str(m), int(__import__("time").time()), user_id))
+            else:
+                conn.close()
+                return jsonify({"error": "Send minutes, unlimited, or use_global"}), 400
         conn.commit()
         return jsonify({"ok": True})
     finally:

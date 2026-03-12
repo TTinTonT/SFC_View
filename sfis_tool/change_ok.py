@@ -89,6 +89,67 @@ def build_numbered_tree(cols, rows):
     return [(i, *t) for i, t in enumerate(flat, 1)], vendor_to_row
 
 
+def build_numbered_tree_preserve_order(cols, rows):
+    """
+    Build numbered tree preserving the order of `rows` (SQL order).
+    Returns (numbered_list, vendor_to_row). numbered_list is list of
+    (num, node_key, row, is_father, parent_node_key, depth) in same order as rows.
+    """
+    col_idx = {c.upper(): i for i, c in enumerate(cols)}
+    idx_vendor = col_idx.get("VENDOR_SN", -1)
+    idx_father = col_idx.get("FATHER_SN", -1)
+
+    vendor_to_row = {}
+    rows_in_order = []
+    for r in rows:
+        row_dict = {cols[i]: r[i] for i in range(len(cols))}
+        vsn = r[idx_vendor] if idx_vendor >= 0 else None
+        father = row_dict.get("FATHER_SN") if idx_father >= 0 else None
+        if vsn is not None:
+            node_key = (vsn, father)
+            vendor_to_row[node_key] = row_dict
+            rows_in_order.append((node_key, row_dict))
+
+    vendor_sns_set = set(nk[0] for nk, _ in rows_in_order)
+    children_of = {}
+    for node_key, _ in rows_in_order:
+        vsn, father = node_key
+        if father is not None and father in vendor_sns_set:
+            children_of.setdefault(father, []).append(node_key)
+
+    def parent_node_key_of(node_key):
+        vsn, father = node_key
+        if father is None:
+            return None
+        return next((k for k in vendor_to_row if k[0] == father), None)
+
+    depth_cache = {}
+
+    def get_depth(node_key):
+        if node_key in depth_cache:
+            return depth_cache[node_key]
+        pnk = parent_node_key_of(node_key)
+        d = 0 if pnk is None else 1 + get_depth(pnk)
+        depth_cache[node_key] = d
+        return d
+
+    num_by_key = {}
+    for i, (node_key, _) in enumerate(rows_in_order):
+        num_by_key[node_key] = i + 1
+
+    numbered_list = []
+    for i, (node_key, row) in enumerate(rows_in_order):
+        num = i + 1
+        vsn, father = node_key
+        is_father = vsn in children_of
+        pnk = parent_node_key_of(node_key)
+        parent_num = num_by_key.get(pnk) if pnk else None
+        depth = get_depth(node_key)
+        numbered_list.append((num, node_key, row, is_father, parent_num, depth))
+
+    return numbered_list, vendor_to_row
+
+
 def expand_selection_to_flat(numbered_list, vendor_to_row, selected_numbers):
     """Mở rộng selection: father -> cả cụm. Trả về list (num, node_key, row, is_father, parent_node_key, depth)."""
     selected_set = set(int(str(x).strip()) for x in selected_numbers if str(x).strip().isdigit())

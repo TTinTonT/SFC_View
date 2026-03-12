@@ -46,6 +46,7 @@ def init_auth_db() -> None:
                     allowed_login_end_time TEXT,
                     allow_all_ip INTEGER NOT NULL DEFAULT 0,
                     locked_until_ts INTEGER,
+                    session_ttl_minutes TEXT,
                     created_at_ts INTEGER NOT NULL,
                     updated_at_ts INTEGER NOT NULL
                 )
@@ -99,6 +100,16 @@ def init_auth_db() -> None:
                     ip TEXT NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)",
+                ("session_ttl_minutes", "30"),
+            )
             conn.commit()
 
             import time
@@ -139,5 +150,35 @@ def ensure_auth_db() -> None:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, ("admin", pw_hash, "Administrator", "OTHER", "0", None, "admin", 1, now, now))
                 conn.commit()
+            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='app_settings'")
+            if cur.fetchone() is None:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS app_settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT
+                    )
+                """)
+                conn.execute(
+                    "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)",
+                    ("session_ttl_minutes", "30"),
+                )
+                conn.commit()
+            cur = conn.execute("PRAGMA table_info(users)")
+            cols = [r[1] for r in cur.fetchall()]
+            if "session_ttl_minutes" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN session_ttl_minutes TEXT")
+                conn.commit()
         finally:
             conn.close()
+
+
+def get_app_setting(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    """Return value for key from app_settings, or None if missing."""
+    cur = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
+    row = cur.fetchone()
+    return row["value"] if row and row["value"] is not None else None
+
+
+def set_app_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Set key=value in app_settings (insert or replace). Caller must commit."""
+    conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", (key, value))

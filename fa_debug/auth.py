@@ -10,10 +10,37 @@ from typing import Any, Dict, Optional, Tuple
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from config.app_config import AUTH_SESSION_TTL_MINUTES
-from fa_debug.auth_db import connect_auth_db, ensure_auth_db
+from fa_debug.auth_db import connect_auth_db, ensure_auth_db, get_app_setting
 
 SESSION_TTL_SECONDS = (AUTH_SESSION_TTL_MINUTES or 30) * 60
 LOCKOUT_FAIL_COUNT = 3
+
+
+def _parse_ttl_minutes(val: Optional[str]) -> Optional[int]:
+    """Parse TTL value: None = use default, None return = unlimited, int = seconds."""
+    if val is None:
+        return (AUTH_SESSION_TTL_MINUTES or 30) * 60
+    s = (val or "").strip().lower()
+    if s in ("", "0", "unlimited"):
+        return None
+    try:
+        minutes = int(s)
+        return max(1, min(minutes, 10080)) * 60
+    except ValueError:
+        return (AUTH_SESSION_TTL_MINUTES or 30) * 60
+
+
+def get_session_ttl_seconds(conn, user_id: Optional[int] = None) -> Optional[int]:
+    """Session TTL in seconds. If user_id given, use user's session_ttl_minutes first; else global. None = unlimited."""
+    if user_id is not None:
+        cur = conn.execute("SELECT session_ttl_minutes FROM users WHERE id = ?", (user_id,))
+        row = cur.fetchone()
+        if row is not None and row["session_ttl_minutes"] is not None and str(row["session_ttl_minutes"]).strip():
+            return _parse_ttl_minutes(str(row["session_ttl_minutes"]))
+    val = get_app_setting(conn, "session_ttl_minutes")
+    return _parse_ttl_minutes(val)
+
+
 LOCKOUT_SECONDS = 3600  # 1 hour
 
 
@@ -143,7 +170,8 @@ def get_user_by_token(conn, token: str) -> Optional[Dict]:
     if not row:
         return None
     now = _now_ts()
-    if now - row["last_activity_at_ts"] > SESSION_TTL_SECONDS:
+    ttl_sec = get_session_ttl_seconds(conn, user_id=row["user_id"])
+    if ttl_sec is not None and (now - row["last_activity_at_ts"]) > ttl_sec:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
         conn.commit()
         return None

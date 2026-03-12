@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IT Jump – Debug</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
+  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 100%; margin: 0 auto; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
+  .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .nav-btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; text-decoration: none; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.875rem; }
+  .nav-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .nav-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .nav-links form { display: inline; }
+  .nav-links .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
+  .nav-links .btn-logout:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .current-wip-box { margin-top: 0.75rem; padding: 1rem 1.25rem; border: 2px solid var(--color-border); border-radius: 12px; background: var(--color-bg); }
+  .current-wip-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted); margin-bottom: 0.25rem; }
+  .current-wip-value { font-size: 1.25rem; font-weight: 700; color: var(--color-text); }
+  .flow-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; min-height: 3rem; }
+  .flow-node { display: inline-flex; align-items: center; justify-content: center; min-width: 6rem; padding: 0.5rem 1rem; border-radius: 10px; border: 2px solid var(--color-border); background: var(--color-surface); font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .flow-node:hover { border-color: var(--color-primary); background: var(--color-bg); }
+  .flow-node.current { border-color: var(--color-primary); background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.15); }
+  .flow-node.selected { border-color: var(--color-primary); background: var(--color-primary); color: white; }
+  .flow-node.current.selected { background: var(--color-primary); color: white; }
+  .flow-arrow { color: var(--color-muted); font-size: 1.25rem; user-select: none; }
+  .msg-error { color: #dc2626; }
+  .msg-ok { color: #16a34a; }
+  .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="nav-links">
+      <a href="/debug" class="nav-btn">Debug</a>
+      <a href="/debug/setting" class="nav-btn">Setting</a>
+      <a href="/debug/repair" class="nav-btn">Repair</a>
+      <a href="/debug/jump-station" class="nav-btn active">IT Jump</a>
+      <a href="/" class="nav-btn">Analytics</a>
+      <form method="post" action="/api/auth/logout" style="display: inline;">
+        <button type="submit" class="btn-logout">Logout</button>
+      </form>
+    </div>
+    <h1>IT Jump</h1>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium mb-1">Serial Number</label>
+      <div class="flex gap-2">
+        <input type="text" id="input-sn" class="flex-1 max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter SN">
+        <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
+      </div>
+      <p id="sn-error" class="text-sm msg-error mt-1 hidden"></p>
+    </div>
+
+    <div id="wip-box" class="current-wip-box hidden">
+      <div class="current-wip-label">Current</div>
+      <div class="current-wip-value" id="wip-value"></div>
+      <div class="text-sm mt-1" style="color: var(--color-muted);" id="wip-current-hint"></div>
+    </div>
+
+    <div id="flow-section" class="hidden">
+      <p class="text-sm font-medium mb-1">Move station – click a node to select jump target</p>
+      <div id="flow-row" class="flow-row"></div>
+    </div>
+
+    <div id="form-section" class="hidden mt-4">
+      <div class="mb-3">
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" id="check-jump-station" class="rounded border-[var(--color-border)]">
+          <span class="text-sm">Check Jump Station (ASSY_VIP)</span>
+        </label>
+      </div>
+      <div class="mb-3">
+        <label class="block text-sm font-medium mb-1">Jump reason (required)</label>
+        <input type="text" id="input-reason" class="w-full max-w-md px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter reason">
+      </div>
+      <div class="mb-3">
+        <label class="block text-sm font-medium mb-1">EMP_NO (optional)</label>
+        <input type="text" id="input-emp" class="max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="e.g. A12345">
+      </div>
+      <button type="button" id="btn-execute" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">Execute Jump</button>
+    </div>
+
+    <div id="result-msg" class="mt-3 text-sm hidden"></div>
+  </div>
+
+  <script>
+  (function () {
+    var inputSn = document.getElementById('input-sn');
+    var btnSearch = document.getElementById('btn-search');
+    var snError = document.getElementById('sn-error');
+    var wipBox = document.getElementById('wip-box');
+    var wipValue = document.getElementById('wip-value');
+    var wipCurrentHint = document.getElementById('wip-current-hint');
+    var flowSection = document.getElementById('flow-section');
+    var flowRow = document.getElementById('flow-row');
+    var formSection = document.getElementById('form-section');
+    var checkJumpStation = document.getElementById('check-jump-station');
+    var inputReason = document.getElementById('input-reason');
+    var inputEmp = document.getElementById('input-emp');
+    var btnExecute = document.getElementById('btn-execute');
+    var resultMsg = document.getElementById('result-msg');
+
+    var wip = null;
+    var route = [];
+    var groupsOrdered = [];
+    var selectedTargetGroup = null;
+
+    function getCookie(name) {
+      var v = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[^$.*+?()[{}|\\^]/g, '\\$&') + '=([^;]*)'));
+      return v ? decodeURIComponent(v[1]) : '';
+    }
+    function api(path, opts) {
+      var url = path.startsWith('/') ? path : '/api/debug/jump-station/' + path;
+      var init = { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } };
+      if (opts && opts.body !== undefined) init.body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
+      if (opts && opts.method) init.method = opts.method;
+      return fetch(url, init).then(function (r) { return r.json(); });
+    }
+
+    function buildGroupsOrdered() {
+      groupsOrdered = [];
+      if (!route.length) return;
+      groupsOrdered.push(route[0].group_name);
+      for (var i = 0; i < route.length; i++) {
+        var nxt = route[i].group_next || '';
+        if (nxt && groupsOrdered.indexOf(nxt) === -1) groupsOrdered.push(nxt);
+      }
+    }
+
+    function renderFlow() {
+      flowRow.innerHTML = '';
+      var currentGroup = (wip && (wip.NEXT_STATION || '').trim()) ? (wip.NEXT_STATION || '').trim() : (wip && wip.GROUP_NAME ? wip.GROUP_NAME : '');
+      for (var i = 0; i < groupsOrdered.length; i++) {
+        if (i > 0) {
+          var arr = document.createElement('span');
+          arr.className = 'flow-arrow';
+          arr.textContent = '→';
+          flowRow.appendChild(arr);
+        }
+        var group = groupsOrdered[i];
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'flow-node';
+        btn.textContent = group;
+        btn.dataset.group = group;
+        if (group === currentGroup) btn.classList.add('current');
+        if (group === selectedTargetGroup) btn.classList.add('selected');
+        btn.addEventListener('click', function () {
+          selectedTargetGroup = this.dataset.group;
+          flowRow.querySelectorAll('.flow-node').forEach(function (n) {
+            n.classList.remove('selected');
+            if (n.dataset.group === selectedTargetGroup) n.classList.add('selected');
+          });
+          updateExecuteState();
+        });
+        flowRow.appendChild(btn);
+      }
+    }
+
+    function updateExecuteState() {
+      var hasReason = (inputReason.value || '').trim().length > 0;
+      btnExecute.disabled = !selectedTargetGroup || !hasReason;
+    }
+
+    function showResult(ok, text) {
+      resultMsg.textContent = text || '';
+      resultMsg.className = 'mt-3 text-sm ' + (ok ? 'msg-ok' : 'msg-error');
+      resultMsg.classList.toggle('hidden', !text);
+    }
+
+    btnSearch.addEventListener('click', function () {
+      var sn = (inputSn.value || '').trim();
+      snError.classList.add('hidden');
+      resultMsg.classList.add('hidden');
+      if (!sn) {
+        snError.textContent = 'Enter SN';
+        snError.classList.remove('hidden');
+        wipBox.classList.add('hidden');
+        flowSection.classList.add('hidden');
+        formSection.classList.add('hidden');
+        return;
+      }
+      btnSearch.disabled = true;
+      api('wip?sn=' + encodeURIComponent(sn)).then(function (res) {
+        btnSearch.disabled = false;
+        if (!res.ok) {
+          snError.textContent = res.error || 'Error';
+          snError.classList.remove('hidden');
+          wipBox.classList.add('hidden');
+          flowSection.classList.add('hidden');
+          formSection.classList.add('hidden');
+          return;
+        }
+        wip = res.wip || {};
+        route = res.route || [];
+        selectedTargetGroup = null;
+        buildGroupsOrdered();
+        wipValue.textContent = (wip.NEXT_STATION || '').trim() || ((wip.STATION_NAME || '') + ' / ' + (wip.GROUP_NAME || ''));
+        wipCurrentHint.textContent = (wip.NEXT_STATION || '').trim() ? 'Current: ' + (wip.STATION_NAME || '') + ' / ' + (wip.GROUP_NAME || '') + (wip.LINE_NAME ? ' (Line: ' + wip.LINE_NAME + ')' : '') : '';
+        wipBox.classList.remove('hidden');
+        if (groupsOrdered.length) {
+          flowSection.classList.remove('hidden');
+          formSection.classList.remove('hidden');
+          renderFlow();
+          updateExecuteState();
+        } else {
+          flowSection.classList.add('hidden');
+          formSection.classList.add('hidden');
+          showResult(false, 'No selectable route (FLAG=0).');
+        }
+      }).catch(function () {
+        btnSearch.disabled = false;
+        snError.textContent = 'Request failed';
+        snError.classList.remove('hidden');
+      });
+    });
+
+    inputReason.addEventListener('input', updateExecuteState);
+    inputReason.addEventListener('change', updateExecuteState);
+
+    btnExecute.addEventListener('click', function () {
+      var sn = (inputSn.value || '').trim();
+      if (!sn || !wip || !selectedTargetGroup) return;
+      var reason = (inputReason.value || '').trim();
+      if (!reason) { showResult(false, 'Jump reason is required.'); return; }
+      btnExecute.disabled = true;
+      api('execute', {
+        method: 'POST',
+        body: {
+          sn: sn,
+          target_group: selectedTargetGroup,
+          reason: reason,
+          emp_no: (inputEmp.value || '').trim(),
+          check_jump_station: checkJumpStation.checked
+        }
+      }).then(function (res) {
+        btnExecute.disabled = false;
+        if (res.ok) {
+          showResult(true, 'Jump succeeded.');
+          inputReason.value = '';
+          selectedTargetGroup = null;
+          renderFlow();
+          updateExecuteState();
+        } else {
+          showResult(false, res.error || 'Jump failed.');
+        }
+      }).catch(function () {
+        btnExecute.disabled = false;
+        showResult(false, 'Request failed.');
+      });
+    });
+  })();
+  </script>
+</body>
+</html>

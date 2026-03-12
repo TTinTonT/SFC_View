@@ -63,6 +63,7 @@
             <th>Dept</th>
             <th>Role</th>
             <th>Time window</th>
+            <th>Token expiry</th>
             <th>Allowed IP</th>
             <th>Locked</th>
             <th>Actions</th>
@@ -124,6 +125,28 @@
     </div>
   </div>
 
+  <div id="token-expiry-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Token expiry</h3>
+      <p class="hint">Override global setting for this user. Each request resets expiry (sliding).</p>
+      <div class="form-row">
+        <label>Expiry</label>
+        <select id="te-select">
+          <option value="use_global">Use global</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">60 minutes</option>
+          <option value="120">120 minutes</option>
+          <option value="unlimited">Unlimited</option>
+        </select>
+      </div>
+      <div style="margin-top: 0.75rem;">
+        <button type="button" class="btn-sm" id="te-save">Save</button>
+        <button type="button" class="btn-sm" id="te-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div class="panel">
     <h2>Login history</h2>
     <p class="text-sm mb-2" style="color: var(--color-muted);">Last 7 days only. 10 rows per page. Rows in yellow = login from different device.</p>
@@ -171,6 +194,8 @@
           var startT = u.allowed_login_start_time || '';
           var endT = u.allowed_login_end_time || '';
           var timeWin = (!startT && !endT) || (startT === '0:00' && endT === '0:00') ? '24/7' : (startT + ' – ' + endT || '-');
+          var sttl = (u.session_ttl_minutes || '').toString().trim().toLowerCase();
+          var sttlDisplay = !sttl ? 'Global' : (sttl === 'unlimited' || sttl === '0' ? 'Unlimited' : sttl + ' min');
           var allowedIp = u.allow_all_ip ? 'All' : ((u.allowed_ips && u.allowed_ips[0]) ? u.allowed_ips[0] : '-');
           var locked = u.locked ? 'Yes' : '';
           return '<tr data-user-id="' + u.id + '">' +
@@ -179,6 +204,7 @@
             '<td>' + (u.department || '') + '</td>' +
             '<td>' + (u.role || '') + '</td>' +
             '<td>' + timeWin + '</td>' +
+            '<td>' + sttlDisplay + ' <button type="button" class="btn-sm btn-token-expiry" data-id="' + u.id + '" data-ttl="' + (sttl || 'use_global') + '">Token expiry</button></td>' +
             '<td>' + allowedIp + '</td>' +
             '<td>' + locked + '</td>' +
             '<td>' +
@@ -231,6 +257,16 @@
       document.querySelectorAll('.btn-unlock').forEach(function(btn) {
         btn.onclick = function() {
           api('/api/debug/setting/user/unlock', { method: 'POST', body: { user_id: parseInt(btn.dataset.id, 10) } }).then(function(d) { if (d.ok) loadUsers(); else alert(d.error); });
+        };
+      });
+      document.querySelectorAll('.btn-token-expiry').forEach(function(btn) {
+        btn.onclick = function() {
+          var uid = parseInt(btn.dataset.id, 10);
+          var ttl = (btn.dataset.ttl || 'use_global').toLowerCase();
+          if (ttl === '' || ttl === 'global') ttl = 'use_global';
+          document.getElementById('token-expiry-modal').dataset.userId = uid;
+          document.getElementById('te-select').value = ttl;
+          document.getElementById('token-expiry-modal').classList.add('show');
         };
       });
       document.querySelectorAll('.btn-delete').forEach(function(btn) {
@@ -365,6 +401,25 @@
     };
     document.getElementById('time-window-modal').onclick = function(e) {
       if (e.target === this) this.classList.remove('show');
+    };
+    document.getElementById('te-cancel').onclick = function() {
+      document.getElementById('token-expiry-modal').classList.remove('show');
+    };
+    document.getElementById('token-expiry-modal').onclick = function(e) {
+      if (e.target === this) this.classList.remove('show');
+    };
+    document.getElementById('te-save').onclick = function() {
+      var uid = document.getElementById('token-expiry-modal').dataset.userId;
+      if (!uid) return;
+      var val = document.getElementById('te-select').value;
+      var body = { user_id: parseInt(uid, 10) };
+      if (val === 'use_global') body.use_global = true;
+      else if (val === 'unlimited') body.unlimited = true;
+      else body.minutes = parseInt(val, 10);
+      api('/api/debug/setting/user/session-ttl', { method: 'POST', body: body }).then(function(d) {
+        if (d.ok) { document.getElementById('token-expiry-modal').classList.remove('show'); loadUsers(); }
+        else alert(d.error || 'Failed');
+      });
     };
     document.getElementById('tw-save').onclick = function() {
       var uid = document.getElementById('time-window-modal').dataset.userId;

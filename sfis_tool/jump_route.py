@@ -3,9 +3,9 @@
 """
 Jump Route (T11): nhập SN -> hiển thị route -> chọn route -> nhập lý do -> jump R_WIP_TRACKING_T.
 """
-from db import get_conn
-from repair_ok import get_group_info, jump_routing
-from sql_queries import JUMP_GET_WIP, JUMP_GET_ROUTE_LIST, JUMP_CHECK_JUMP_STATION, JUMP_CHECK_ASSY
+from .db import get_conn
+from .repair_ok import get_group_info, jump_routing
+from .sql_queries import JUMP_GET_WIP, JUMP_GET_ROUTE_LIST, JUMP_CHECK_JUMP_STATION, JUMP_CHECK_ASSY
 
 
 def _run_query(conn, sql, params=None):

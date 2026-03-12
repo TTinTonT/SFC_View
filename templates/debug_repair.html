@@ -12,11 +12,16 @@
   body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
   .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 100%; width: 100%; margin: 0 auto; }
   h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
-  .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; }
-  .nav-links a { color: var(--color-primary); text-decoration: none; margin-right: 1rem; }
-  .nav-links a:hover { text-decoration: underline; }
-  .nav-links .btn-logout { background: none; border: none; padding: 0; font-size: inherit; color: var(--color-primary); cursor: pointer; }
-  .nav-links .btn-logout:hover { text-decoration: underline; }
+  .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .nav-btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; text-decoration: none; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; }
+  .nav-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .nav-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .nav-links form { display: inline; }
+  .nav-links .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
+  .nav-links .btn-logout:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .form-group-compact { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem 1rem; max-width: 520px; font-size: 0.8125rem; }
+  .form-group-compact label { font-weight: 500; }
+  .form-group-compact input, .form-group-compact select { padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg); width: 100%; }
   .tree-row-flag-n { background: rgba(220, 38, 38, 0.15); }
   .tree-row-flag-n td { border-color: var(--color-border); }
   .msg-error { color: #dc2626; }
@@ -27,27 +32,30 @@
   .next-station-hint { font-size: 0.875rem; color: var(--color-muted); margin-top: 0.35rem; }
   .tree-td-num { white-space: nowrap; position: relative; vertical-align: middle; }
   .tree-td-num.has-depth { }
+  .tree-toggle { display: inline-block; width: 1.2em; cursor: pointer; user-select: none; font-size: 0.75em; color: var(--color-text); margin-right: 2px; }
+  .tree-toggle:hover { color: var(--color-primary); }
   .tree-hbar { position: absolute; top: 50%; height: 2px; background: var(--color-border); display: block; }
   .tree-new-sn-input { min-width: 28ch; width: 28ch; max-width: 80ch; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); font: inherit; box-sizing: border-box; font-size: 0.9375rem; }
+  .remark-block { max-width: 100%; }
+  .remark-textarea { width: 100%; min-width: 20rem; max-width: 42rem; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); font: inherit; font-size: 0.9375rem; resize: vertical; min-height: 4.5rem; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal-overlay.hidden { display: none; }
+  .modal-box { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 28rem; width: 90%; }
   </style>
 </head>
 <body>
   <div class="panel">
     <div class="nav-links">
-      <a href="/debug">Debug</a>
-      <a href="/debug/setting">Setting</a>
-      <a href="/debug/repair">Repair</a>
-      <a href="/">Analytics</a>
+      <a href="/debug" class="nav-btn">Debug</a>
+      <a href="/debug/setting" class="nav-btn">Setting</a>
+      <a href="/debug/repair" class="nav-btn active">Repair</a>
+      <a href="/debug/jump-station" class="nav-btn">IT Jump</a>
+      <a href="/" class="nav-btn">Analytics</a>
       <form method="post" action="/api/auth/logout" style="display: inline;">
         <button type="submit" class="btn-logout">Logout</button>
       </form>
     </div>
     <h1>Repair</h1>
-
-    <div class="flex gap-3 mb-6">
-      <button type="button" id="btn-repair" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50" disabled>Repair</button>
-      <button type="button" id="btn-jump" class="px-4 py-2 rounded-lg font-medium border border-[var(--color-border)] bg-[var(--color-surface)] disabled:opacity-60" disabled title="Coming soon">Jump Station (Coming soon)</button>
-    </div>
 
     <div class="mb-4">
       <label class="block text-sm font-medium mb-1">Serial Number</label>
@@ -61,35 +69,34 @@
         <div id="current-station-value" class="current-station-value"></div>
         <div id="next-station-hint" class="next-station-hint"></div>
       </div>
+      <div id="repair-btn-wrap" class="mt-3 hidden">
+        <button type="button" id="btn-repair" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50">Repair</button>
+      </div>
     </div>
 
-    <div id="form-section" class="hidden mb-4 space-y-4">
-      <div class="mb-4">
-        <label class="block text-sm font-medium mb-1">Repairer (Employee ID)</label>
-        <input type="text" id="input-repairer" class="w-full max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" value="SJOP" placeholder="Employee ID">
+    <div id="form-section" class="hidden mb-4">
+      <div class="mb-3 form-group-compact">
+        <label>Repairer (Employee ID)</label>
+        <input type="text" id="input-repairer" value="SJOP" placeholder="Employee ID">
+        <label>Reason Code</label>
+        <select id="sel-reason"></select>
+        <label>Repair Action</label>
+        <select id="sel-action"></select>
+        <label>Duty Type</label>
+        <select id="sel-duty"></select>
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-medium mb-1">Reason Code</label>
-          <select id="sel-reason" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Remark</label>
-          <input type="text" id="input-remark" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" value="retest">
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Repair Action</label>
-          <select id="sel-action" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Duty Type</label>
-          <select id="sel-duty" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
-        </div>
+      <div class="remark-block mt-2">
+        <label class="block text-sm font-medium mb-1">Remark</label>
+        <textarea id="input-remark" class="remark-textarea" rows="3" placeholder="Comment...">Retest</textarea>
       </div>
     </div>
 
     <div id="tree-section" class="hidden mb-4 overflow-x-auto w-full">
-      <p class="text-sm font-medium mb-2">Vendor SN tree (optional kitting: fill New SN)</p>
+      <div class="flex items-center gap-2 mb-2 flex-wrap">
+        <p class="text-sm font-medium mb-0">Vendor SN tree (optional kitting: fill New SN)</p>
+        <button type="button" id="tree-expand-all" class="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]">Expand all</button>
+        <button type="button" id="tree-collapse-all" class="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]">Collapse all</button>
+      </div>
       <table class="w-full border-collapse text-sm table-auto" style="min-width: 100%;">
         <thead>
           <tr class="border-b border-[var(--color-border)]">
@@ -105,6 +112,18 @@
 
     <p id="result-msg" class="text-sm hidden mb-2"></p>
     <p id="result-station" class="text-sm text-[var(--color-muted)] hidden"></p>
+
+    <div id="qa-lock-modal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <p class="font-medium mb-2">Part(s) chưa được unlock (QA lock)</p>
+        <p id="qa-lock-sns" class="text-sm mb-3" style="color: var(--color-muted);"></p>
+        <p class="text-sm mb-3">Bạn có muốn tiếp tục?</p>
+        <div class="flex gap-2">
+          <button type="button" id="qa-lock-continue" class="px-3 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white">Tiếp tục</button>
+          <button type="button" id="qa-lock-cancel" class="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">Hủy</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -117,6 +136,7 @@
   const currentStationValue = document.getElementById('current-station-value');
   const nextStationHint = document.getElementById('next-station-hint');
   const formSection = document.getElementById('form-section');
+  const repairBtnWrap = document.getElementById('repair-btn-wrap');
   const treeSection = document.getElementById('tree-section');
   const treeTbody = document.getElementById('tree-tbody');
   const selReason = document.getElementById('sel-reason');
@@ -130,6 +150,9 @@
   let options = { reason_codes: [], repair_actions: [], duty_types: [] };
   let wip = null;
   let tree = [];
+  var childrenByNum = {};
+  var collapsedSet = new Set();
+  var savedInputValues = {};
 
   function getCookie(name) {
     const v = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[^$.*+?()[{}|\\^]/g, '\\$&') + '=([^;]*)'));
@@ -168,10 +191,11 @@
   }
   function setCurrentStation(wip, afterRepair) {
     if (!wip) { currentStationBox.classList.add('hidden'); return; }
-    currentStationValue.textContent = (wip.STATION_NAME || '') + ' / ' + (wip.GROUP_NAME || '');
-    if (afterRepair) {
-      nextStationHint.textContent = 'SN has been moved to the station above (next station after repair).';
+    if (afterRepair && (wip.NEXT_STATION || '')) {
+      currentStationValue.textContent = wip.NEXT_STATION;
+      nextStationHint.textContent = 'SN has been moved (next station from WIP).';
     } else {
+      currentStationValue.textContent = (wip.STATION_NAME || '') + ' / ' + (wip.GROUP_NAME || '');
       var next = wip.NEXT_STATION || '';
       nextStationHint.textContent = next ? 'After repair will move to: ' + next : '';
     }
@@ -194,6 +218,7 @@
       if (!res.json.ok) {
         showError('sn', res.json.error || 'No WIP for this SN');
         formSection.classList.add('hidden');
+        repairBtnWrap.classList.add('hidden');
         treeSection.classList.add('hidden');
         btnRepair.disabled = true;
         return;
@@ -201,20 +226,69 @@
       wip = res.json.wip;
       setCurrentStation(wip, false);
       formSection.classList.remove('hidden');
+      repairBtnWrap.classList.remove('hidden');
       treeSection.classList.remove('hidden');
       btnRepair.disabled = false;
       return api('assy-tree?sn=' + encodeURIComponent(sn)).then(function (r2) {
         if (r2.json.ok) tree = r2.json.tree || [];
         else tree = [];
+        childrenByNum = {};
+        tree.forEach(function (n) {
+          if (n.parent_num != null) {
+            if (!childrenByNum[n.parent_num]) childrenByNum[n.parent_num] = [];
+            childrenByNum[n.parent_num].push(n.num);
+          }
+        });
+        collapsedSet = new Set();
+        Object.keys(childrenByNum).forEach(function (num) { collapsedSet.add(parseInt(num, 10)); });
         renderTree();
       });
     });
   }
 
+  function hasChildren(num) {
+    var arr = childrenByNum[num];
+    return arr && arr.length > 0;
+  }
+  function isVisible(numToNode, num) {
+    var node = numToNode[num];
+    if (!node) return false;
+    if ((node.depth || 0) === 0) return true;
+    if (collapsedSet.has(node.parent_num)) return false;
+    return isVisible(numToNode, node.parent_num);
+  }
   function renderTree() {
+    var numToNode = {};
+    tree.forEach(function (n) { numToNode[n.num] = n; });
+    if (treeTbody) {
+      treeTbody.querySelectorAll('.tree-new-sn').forEach(function (inp) {
+        var num = inp.getAttribute('data-num');
+        if (num) savedInputValues[num] = inp.value;
+      });
+    }
+    var visible = tree.filter(function (node) { return isVisible(numToNode, node.num); });
+    function preorder(nodes) {
+      var roots = nodes.filter(function (n) { return (n.depth || 0) === 0; }).sort(function (a, b) { return a.num - b.num; });
+      var byParent = {};
+      nodes.forEach(function (n) {
+        var p = n.parent_num != null ? n.parent_num : 0;
+        if (!byParent[p]) byParent[p] = []; byParent[p].push(n);
+      });
+      function sortByNum(a, b) { return a.num - b.num; }
+      function walk(num) {
+        var out = [];
+        var kids = byParent[num];
+        if (kids) { kids.sort(sortByNum); kids.forEach(function (n) { out.push(n); out = out.concat(walk(n.num)); }); }
+        return out;
+      }
+      var out = [];
+      roots.forEach(function (r) { out.push(r); out = out.concat(walk(r.num)); });
+      return out;
+    }
+    visible = preorder(visible);
     var LINE_W = 22;
     var BAR_W = 11;
-    treeTbody.innerHTML = tree.map(function (node, i) {
+    treeTbody.innerHTML = visible.map(function (node) {
       var desc = (node.cust_pn || '') + (node.cust_rev ? ' Rev:' + node.cust_rev : '') + (node.group_name ? ' (' + node.group_name + ')' : '');
       var depth = node.depth || 0;
       var numCellClass = 'tree-td-num py-1 pr-2' + (depth > 0 ? ' has-depth' : '');
@@ -227,14 +301,21 @@
       if (shadows.length) numCellStyle += ' box-shadow: ' + shadows.join(', ') + ';';
       var hbarStyle = depth > 0 ? 'left: ' + ((depth - 1) * LINE_W) + 'px; width: ' + BAR_W + 'px;' : '';
       var hbarHtml = depth > 0 ? '<span class="tree-hbar" style="' + hbarStyle + '"></span>' : '';
+      var toggleHtml = hasChildren(node.num)
+        ? '<span class="tree-toggle" data-num="' + node.num + '" title="Expand/Collapse">' + (collapsedSet.has(node.num) ? '&#9654;' : '&#9660;') + '</span>'
+        : '<span class="tree-toggle" style="visibility:hidden">&#9660;</span>';
       var rowClass = node.assy_flag === 'N' ? ' tree-row-flag-n' : '';
       return '<tr class="' + rowClass + '" data-num="' + node.num + '" data-vendor-sn="' + (node.vendor_sn || '') + '" data-father-sn="' + (node.father_sn != null ? node.father_sn : '') + '">' +
-        '<td class="' + numCellClass + '" style="' + numCellStyle + '">' + hbarHtml + node.num + '</td>' +
+        '<td class="' + numCellClass + '" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + node.num + '</td>' +
         '<td class="py-1 pr-2">' + (node.vendor_sn || '') + '</td>' +
         '<td class="py-1 pr-2">' + desc + '</td>' +
         '<td class="py-1"><input type="text" class="tree-new-sn tree-new-sn-input" data-num="' + node.num + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '" placeholder="New SN"></td>' +
         '</tr>';
     }).join('');
+    Object.keys(savedInputValues).forEach(function (num) {
+      var inp = treeTbody.querySelector('.tree-new-sn[data-num="' + num + '"]');
+      if (inp) inp.value = savedInputValues[num];
+    });
     treeTbody.querySelectorAll('.tree-new-sn').forEach(function (input) {
       function resize() {
         var len = (input.value || '').length;
@@ -245,21 +326,40 @@
       resize();
     });
   }
+  function onTreeToggle(num) {
+    num = parseInt(num, 10);
+    if (collapsedSet.has(num)) collapsedSet.delete(num);
+    else collapsedSet.add(num);
+    renderTree();
+  }
+  treeSection.addEventListener('click', function (e) {
+    var tg = e.target.closest('.tree-toggle[data-num]');
+    if (tg) { e.preventDefault(); onTreeToggle(tg.getAttribute('data-num')); }
+  });
+  document.getElementById('tree-expand-all').addEventListener('click', function () {
+    collapsedSet.clear();
+    renderTree();
+  });
+  document.getElementById('tree-collapse-all').addEventListener('click', function () {
+    Object.keys(childrenByNum).forEach(function (num) { collapsedSet.add(parseInt(num, 10)); });
+    renderTree();
+  });
 
+  function getNewSnForNum(num) {
+    var input = document.querySelector('.tree-new-sn[data-num="' + num + '"]');
+    if (input && input.value && input.value.trim()) return input.value.trim();
+    return (savedInputValues[num] || '').trim();
+  }
   function buildKitList() {
     var numToNode = {};
     tree.forEach(function (n) { numToNode[n.num] = n; });
     var list = [];
     tree.forEach(function (node) {
-      var input = document.querySelector('.tree-new-sn[data-num="' + node.num + '"]');
-      var newSn = (input && input.value) ? input.value.trim() : '';
+      var newSn = getNewSnForNum(node.num);
       if (!newSn) return;
       var parentNum = node.parent_num;
       var newFather = null;
-      if (parentNum != null && numToNode[parentNum]) {
-        var pInput = document.querySelector('.tree-new-sn[data-num="' + parentNum + '"]');
-        if (pInput && pInput.value && pInput.value.trim()) newFather = pInput.value.trim();
-      }
+      if (parentNum != null && numToNode[parentNum]) newFather = getNewSnForNum(parentNum) || null;
       list.push({
         old_vendor_sn: node.vendor_sn,
         old_father_sn: node.father_sn,
@@ -273,8 +373,8 @@
   function validateKitList(kitList) {
     var numToNewSn = {};
     tree.forEach(function (n) {
-      var input = document.querySelector('.tree-new-sn[data-num="' + n.num + '"]');
-      if (input && input.value && input.value.trim()) numToNewSn[n.num] = input.value.trim();
+      var v = getNewSnForNum(n.num);
+      if (v) numToNewSn[n.num] = v;
     });
     for (var i = 0; i < tree.length; i++) {
       var node = tree[i];
@@ -290,7 +390,35 @@
     return null;
   }
 
-  function doRepair() {
+  var qaLockPendingPayload = null;
+  var qaLockModal = document.getElementById('qa-lock-modal');
+  var qaLockSns = document.getElementById('qa-lock-sns');
+  var qaLockContinue = document.getElementById('qa-lock-continue');
+  var qaLockCancel = document.getElementById('qa-lock-cancel');
+
+  function showQaLockModal(lockedSns, payload) {
+    qaLockPendingPayload = payload;
+    qaLockSns.textContent = (lockedSns && lockedSns.length) ? lockedSns.join(', ') : '';
+    qaLockModal.classList.remove('hidden');
+  }
+  function hideQaLockModal() {
+    qaLockModal.classList.add('hidden');
+    qaLockPendingPayload = null;
+  }
+  function applyRepairSuccess(res) {
+    formSection.classList.add('hidden');
+    repairBtnWrap.classList.add('hidden');
+    treeSection.classList.add('hidden');
+    var cs = res.json.current_station;
+    var disp = (cs && cs.NEXT_STATION) ? cs.NEXT_STATION : (cs ? (cs.STATION_NAME || '') + ' / ' + (cs.GROUP_NAME || '') : '');
+    showOk(res.json.message || 'Repair successful.', disp ? 'SN has been moved to: ' + disp : '');
+    if (res.json.current_station) {
+      wip = res.json.current_station;
+      setCurrentStation(wip, true);
+    }
+  }
+
+  function doRepair(forceContinue) {
     var sn = (inputSn.value || '').trim();
     if (!sn || !wip) { showError('result', 'Search WIP first.'); return; }
     showError('result');
@@ -305,18 +433,18 @@
       reason_code: selReason.value || 'RC500',
       repair_action: selAction.value || 'RETEST',
       duty_station: selDuty.value || 'TEST FIXTURE',
-      remark: inputRemark.value || 'retest',
+      remark: inputRemark.value || 'Retest',
       kit_list: kitList
     };
+    if (forceContinue) payload.force_continue = true;
     btnRepair.disabled = true;
     api('execute', { method: 'POST', body: payload }).then(function (res) {
       btnRepair.disabled = false;
       if (res.json.ok) {
-        showOk(res.json.message || 'Repair successful.', res.json.current_station ? 'SN has been moved to: ' + (res.json.current_station.STATION_NAME || '') + ' / ' + (res.json.current_station.GROUP_NAME || '') : '');
-        if (res.json.current_station) {
-          wip = res.json.current_station;
-          setCurrentStation(wip, true);
-        }
+        hideQaLockModal();
+        applyRepairSuccess(res);
+      } else if (res.json.qa_locked === true) {
+        showQaLockModal(res.json.locked_sns || [], payload);
       } else {
         showError('result', res.json.error || 'Execute failed');
       }
@@ -325,6 +453,29 @@
       showError('result', 'Network error');
     });
   }
+
+  qaLockContinue.addEventListener('click', function () {
+    if (!qaLockPendingPayload) return;
+    var payload = Object.assign({}, qaLockPendingPayload, { force_continue: true });
+    hideQaLockModal();
+    btnRepair.disabled = true;
+    api('execute', { method: 'POST', body: payload }).then(function (res) {
+      btnRepair.disabled = false;
+      if (res.json.ok) {
+        applyRepairSuccess(res);
+      } else {
+        showError('result', res.json.error || 'Execute failed');
+      }
+    }).catch(function () {
+      btnRepair.disabled = false;
+      showError('result', 'Network error');
+    });
+  });
+  qaLockCancel.addEventListener('click', function () {
+    var snList = (qaLockSns.textContent || '').trim();
+    hideQaLockModal();
+    showError('result', 'Dekit/Kitting chưa hoàn thành. Vui lòng unlock part' + (snList ? ' (' + snList + ')' : '') + ' trước.');
+  });
 
   btnSearch.addEventListener('click', doSearch);
   inputSn.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSearch(); });
