@@ -697,6 +697,36 @@ def _last_mmdd_only(text: Any) -> Optional[Tuple[int, int]]:
     return None
 
 
+def _all_mmdd_pairs(text: Any) -> List[Tuple[int, int]]:
+    """Return all (month, day) pairs from cell text."""
+    raw = (str(text) if text is not None else "").strip()
+    if not raw:
+        return []
+    out: List[Tuple[int, int]] = []
+    for m in re.finditer(r"\b(\d{1,2})/(\d{1,2})\b", raw):
+        try:
+            mo, d = int(m.group(1)), int(m.group(2))
+            if 1 <= mo <= 12 and 1 <= d <= 31:
+                out.append((mo, d))
+        except (ValueError, TypeError, IndexError):
+            pass
+    return out
+
+
+def _any_mmdd_in_range(text: Any, start_d: date, end_d: date, year: int) -> bool:
+    """True if any mm/dd in text falls within start_d..end_d (year or year+1 for跨年)."""
+    for mo, d in _all_mmdd_pairs(text):
+        try:
+            d_val = date(year, mo, d)
+            if d_val < start_d - timedelta(days=60):
+                d_val = date(year + 1, mo, d)
+            if start_d <= d_val <= end_d:
+                return True
+        except (ValueError, TypeError):
+            pass
+    return False
+
+
 def _disposition_period_from_row(
     row: Dict[str, Any], aggregation: str, fallback_ca_ms: Optional[int] = None
 ) -> str:
@@ -838,17 +868,28 @@ def compute_disposition_stats(aggregation: str = "daily", start_ca_ms: Optional[
             sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
             continue
         existing_ca = existing.get("updated_at_ca_ms") or 0
+        cur_fail_igs = _norm(rd.get("status")) == "FAIL" and _norm(rd.get("pic")) == "IGS"
+        exist_fail_igs = _norm(existing["rd"].get("status")) == "FAIL" and _norm(existing["rd"].get("pic")) == "IGS"
         if (ca_ms or 0) > existing_ca:
             sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
             continue
-        if (ca_ms or 0) == existing_ca and last_mmdd and existing.get("last_mmdd"):
-            try:
-                cur_d = date(year, last_mmdd[0], last_mmdd[1])
-                exist_d = date(year, existing["last_mmdd"][0], existing["last_mmdd"][1])
-                if cur_d > exist_d:
-                    sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
-            except (ValueError, TypeError):
-                pass
+        if (ca_ms or 0) == existing_ca:
+            if cur_fail_igs and not exist_fail_igs:
+                sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+                continue
+            if not cur_fail_igs and exist_fail_igs:
+                continue
+            exist_mmdd = existing.get("last_mmdd")
+            if last_mmdd and not exist_mmdd:
+                sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+            elif last_mmdd and exist_mmdd:
+                try:
+                    cur_d = date(year, last_mmdd[0], last_mmdd[1])
+                    exist_d = date(year, exist_mmdd[0], exist_mmdd[1])
+                    if cur_d > exist_d:
+                        sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+                except (ValueError, TypeError):
+                    pass
 
     # New logic: Only Status=FAIL & PIC=IGS. Waiting = igs empty or igs_date < nv_date; Complete = igs_date >= nv_date
     waiting_sns: Dict[str, Dict[str, Any]] = {}
@@ -860,15 +901,17 @@ def compute_disposition_stats(aggregation: str = "daily", start_ca_ms: Optional[
         mmdd_nv = _last_mmdd_only(rd.get("nv_disposition"))
         if mmdd_nv is None:
             continue
+        if start_d is not None and end_d is not None:
+            nv_in = _any_mmdd_in_range(rd.get("nv_disposition"), start_d, end_d, year)
+            igs_in = _any_mmdd_in_range(rd.get("igs_action"), start_d, end_d, year)
+            if not nv_in and not igs_in:
+                continue
         try:
             nv_date = date(year, mmdd_nv[0], mmdd_nv[1])
             if start_d and nv_date < start_d - timedelta(days=60):
                 nv_date = date(year + 1, mmdd_nv[0], mmdd_nv[1])
         except (ValueError, TypeError):
             continue
-        if start_d is not None and end_d is not None:
-            if not (start_d <= nv_date <= end_d):
-                continue
         sku = (rd.get("nvpn") or "").strip() or "Unknown"
         period_nv = _date_to_period(nv_date)
         mmdd_igs = _last_mmdd_only(rd.get("igs_action"))
@@ -1082,6 +1125,9 @@ def compute_disposition_sn_list(
         start_d = None
         end_d = None
 
+    def _is_fail_igs(rd) -> bool:
+        return _norm(rd.get("status")) == "FAIL" and _norm(rd.get("pic")) == "IGS"
+
     sn_data: Dict[str, Dict[str, Any]] = {}
     for r in rows:
         rd = _row_dict(r)
@@ -1094,17 +1140,29 @@ def compute_disposition_sn_list(
         if existing is None:
             sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
             continue
-        if (ca_ms or 0) > (existing.get("updated_at_ca_ms") or 0):
+        exist_ca = existing.get("updated_at_ca_ms") or 0
+        cur_fail_igs = _is_fail_igs(rd)
+        exist_fail_igs = _is_fail_igs(existing["rd"])
+        if (ca_ms or 0) > exist_ca:
             sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
             continue
-        if (ca_ms or 0) == (existing.get("updated_at_ca_ms") or 0) and last_mmdd and existing.get("last_mmdd"):
-            try:
-                cur_d = date(year, last_mmdd[0], last_mmdd[1])
-                exist_d = date(year, existing["last_mmdd"][0], existing["last_mmdd"][1])
-                if cur_d > exist_d:
-                    sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
-            except (ValueError, TypeError):
-                pass
+        if (ca_ms or 0) == exist_ca:
+            if cur_fail_igs and not exist_fail_igs:
+                sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+                continue
+            if not cur_fail_igs and exist_fail_igs:
+                continue
+            exist_mmdd = existing.get("last_mmdd")
+            if last_mmdd and not exist_mmdd:
+                sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+            elif last_mmdd and exist_mmdd:
+                try:
+                    cur_d = date(year, last_mmdd[0], last_mmdd[1])
+                    exist_d = date(year, exist_mmdd[0], exist_mmdd[1])
+                    if cur_d > exist_d:
+                        sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+                except (ValueError, TypeError):
+                    pass
 
     out: List[Dict[str, Any]] = []
     for sn, data in sn_data.items():
@@ -1114,15 +1172,17 @@ def compute_disposition_sn_list(
         mmdd_nv = _last_mmdd_only(rd.get("nv_disposition"))
         if mmdd_nv is None:
             continue
+        if start_d is not None and end_d is not None:
+            nv_in_range = _any_mmdd_in_range(rd.get("nv_disposition"), start_d, end_d, year)
+            igs_in_range = _any_mmdd_in_range(rd.get("igs_action"), start_d, end_d, year)
+            if not nv_in_range and not igs_in_range:
+                continue
         try:
             nv_date = date(year, mmdd_nv[0], mmdd_nv[1])
             if start_d and nv_date < start_d - timedelta(days=60):
                 nv_date = date(year + 1, mmdd_nv[0], mmdd_nv[1])
         except (ValueError, TypeError):
             continue
-        if start_d is not None and end_d is not None:
-            if not (start_d <= nv_date <= end_d):
-                continue
         row_sku = (rd.get("nvpn") or "").strip() or "Unknown"
         if sku and sku != "__TOTAL__" and row_sku != sku:
             continue
