@@ -17,7 +17,7 @@ DEFAULT = {
     "SFC_BASE_URL": "http://10.16.137.110",
     "SFC_USER": "SFC",
     "SFC_PWD": "EPD2TJW",
-    "SFC_GROUP_NAME": "'AST','FCT','FLA','FLB','FLC','FTS','IOT','NVL','PRET','RIN'",
+    "SFC_GROUP_NAME": "'AST','DCC','FC2','FCT','FLA','FLB','FLC','FLD','FLF','FLT','FPF','FTS','FVI','HPT','IOT','IST','NVL','PRET','RIN','RST'",
     "SFC_SESSION_TTL_SECONDS": "1800",
     "VALID_LOCATION": "San Jose",
     "SFC_INCLUDE_RACK": "L10",

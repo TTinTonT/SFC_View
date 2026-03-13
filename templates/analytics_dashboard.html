@@ -295,6 +295,8 @@
   }
   #test-flow-panel .tf-legend .pass-count{ color: var(--color-success); }
   #test-flow-panel .tf-legend .fail-count{ color: var(--color-danger); }
+
+  /* L11 mode: hide BP/Fresh columns in Summary and Breakdown */
   #test-flow-panel .tf-legend .slash{ color: var(--color-muted); font-weight: 900; padding: 0 0.05rem; }
   #test-flow-panel .tf-range{
     color: var(--color-muted);
@@ -409,6 +411,121 @@
     #test-flow-table th, #test-flow-table td{ padding: 0.625rem 0.5rem; }
     #test-flow-table button[data-flow="1"]{ min-width: 56px; padding: 0.3rem 0.45rem; }
   }
+
+  /* L11 Test Flow – same look as L10 */
+  #l11-test-flow-panel .tf-legend{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    white-space: nowrap;
+    padding-top: 0.15rem;
+  }
+  #l11-test-flow-panel .tf-legend .demo-pill{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg);
+    font-weight: 800;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  #l11-test-flow-panel .tf-legend .pass-count{ color: var(--color-success); }
+  #l11-test-flow-panel .tf-legend .fail-count{ color: var(--color-danger); }
+  #l11-test-flow-panel .tf-legend .slash{ color: var(--color-muted); font-weight: 900; padding: 0 0.05rem; }
+  #l11-test-flow-panel .tf-range{
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  #l11-test-flow-panel .table-container{ overflow-x: auto; background: var(--color-surface); }
+  #l11-test-flow-table{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  #l11-test-flow-table thead{
+    background: linear-gradient(to bottom, var(--color-surface-hover), var(--color-surface));
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+  #l11-test-flow-table th{
+    padding: 1rem 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-text);
+    border-bottom: 2px solid var(--color-border);
+    white-space: nowrap;
+  }
+  #l11-test-flow-table th:nth-child(n+3){ text-align: center; padding: 0.75rem 0.5rem; }
+  #l11-test-flow-table td{ padding: 0.875rem 0.75rem; color: var(--color-text); }
+  #l11-test-flow-table tbody tr{ border-bottom: 1px solid var(--color-border); transition: background-color 0.15s ease; }
+  #l11-test-flow-table tbody tr:hover{ background-color: var(--color-surface-hover); }
+  #l11-test-flow-table tbody tr:first-child{
+    background: linear-gradient(to right, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.02));
+    font-weight: 600;
+    border-bottom: 2px solid var(--color-primary);
+  }
+  #l11-test-flow-table tbody tr:first-child:hover{
+    background: linear-gradient(to right, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.04));
+  }
+  #l11-test-flow-table td[data-station-cell]{ text-align: center; padding: 0.5rem; }
+  #l11-test-flow-table button[data-flow="1"]{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    padding: 0.35rem 0.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 64px;
+    line-height: 1.1;
+  }
+  #l11-test-flow-table button[data-flow="1"]:hover:not(:disabled){
+    background: var(--color-surface-hover);
+    border-color: var(--color-primary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  #l11-test-flow-table button[data-flow="1"]:disabled{ opacity: 0.4; cursor: not-allowed; }
+  #l11-test-flow-table button[data-flow="1"] .pass-count{
+    color: var(--color-success);
+    font-weight: 700;
+    font-size: 1rem;
+    line-height: 1.1;
+  }
+  #l11-test-flow-table button[data-flow="1"] .fail-count{
+    color: var(--color-danger);
+    font-weight: 700;
+    font-size: 1rem;
+    line-height: 1.1;
+  }
+  #l11-test-flow-table button[data-flow="1"] .slash{
+    color: var(--color-muted);
+    font-weight: 800;
+    font-size: 0.95rem;
+    padding: 0 0.05rem;
+  }
+  #l11-test-flow-table td[data-station-cell]:empty::after{
+    content: '—';
+    color: var(--color-muted);
+    font-size: 1.25rem;
+  }
+  @media (max-width: 768px){
+    #l11-test-flow-table{ font-size: 0.8125rem; }
+    #l11-test-flow-table th, #l11-test-flow-table td{ padding: 0.625rem 0.5rem; }
+    #l11-test-flow-table button[data-flow="1"]{ min-width: 56px; padding: 0.3rem 0.45rem; }
+  }
+
   .input-field {
     width: 100%;
     padding: 0.75rem 1rem;
@@ -755,6 +872,7 @@
        <button type="button" class="btn-ghost btn-mini nav-section-btn" data-section="section-test-analysis">Test Analysis</button>
        <button type="button" class="btn-ghost btn-mini nav-section-btn" data-section="section-disposition">Disposition</button>
        <button type="button" class="btn-ghost btn-mini nav-section-btn" data-section="section-error-stats">Error Stats</button>
+       <button type="button" class="btn-ghost btn-mini nav-section-btn" data-section="section-l11">L11</button>
        <button class="icon-btn" id="theme-toggle" title="Toggle theme">
        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewbox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
@@ -995,6 +1113,123 @@
       </div>
     </div>
     </div><!-- /section-test-analysis -->
+
+    <!-- L11 Analytics section (dedicated block, nav "L11" above) -->
+    <div class="panel mb-8" id="section-l11">
+      <h2 class="text-2xl font-bold mb-6" style="color: var(--color-text);">L11 Analytics</h2>
+      <p class="text-sm mb-6" style="color: var(--color-muted);">SFC Fail Result – L11 data from SFC API. Apply filter above with date range, then view L11 metrics here.</p>
+
+      <div class="kpi-grid mb-8" id="l11-kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Tests Conducted</div>
+          <div class="kpi-value">
+            <div id="l11-kpi-tested" class="text-3xl font-extrabold" style="color: var(--color-text);">-</div>
+            <button class="metric-btn" id="l11-kpi-tested-btn" data-metric="tested" data-segment="total">View</button>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Passed Tests</div>
+          <div class="kpi-value">
+            <div id="l11-kpi-pass" class="text-3xl font-extrabold" style="color: var(--color-text);">-</div>
+            <button class="metric-btn" id="l11-kpi-pass-btn" data-metric="pass" data-segment="total">View</button>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Failed Tests</div>
+          <div class="kpi-value">
+            <div id="l11-kpi-fail" class="text-3xl font-extrabold" style="color: var(--color-text);">-</div>
+            <button class="metric-btn" id="l11-kpi-fail-btn" data-metric="fail" data-segment="total">View</button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="text-lg font-semibold mb-4" style="color: var(--color-text);">SKU (Part Number) Summary</h3>
+      <div class="panel mb-8">
+        <div class="overflow-x-auto">
+          <table class="data-table" id="l11-sku-table">
+            <thead>
+              <tr><th>SKU</th><th>Tested</th><th>Pass</th><th>Fail</th></tr>
+            </thead>
+            <tbody id="l11-sku-tbody">
+              <tr><td colspan="4" style="color: var(--color-muted);">No data yet. Apply filter to load L11 data.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <h3 class="text-lg font-semibold mb-4" style="color: var(--color-text);">Time Breakdown</h3>
+      <div class="panel mb-8">
+        <div class="flex items-center justify-between mb-5">
+          <span class="text-sm font-semibold" style="color: var(--color-muted);" id="l11-breakdown-label">-</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table" id="l11-breakdown-table">
+            <thead>
+              <tr><th>Period</th><th>Tested</th><th>Passed</th><th>Pass Rate</th></tr>
+            </thead>
+            <tbody id="l11-breakdown-tbody">
+              <tr><td colspan="4" style="color: var(--color-muted);">No data yet. Apply filter to load L11 data.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel card mb-8 animate-in delay-4" id="l11-test-flow-panel">
+        <div class="card-header">
+          <div class="card-header-row">
+            <div>
+              <h2 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--color-text);">L11 Test Flow Analysis</h2>
+              <p style="margin: 0.5rem 0 0 0; font-size: 0.875rem; color: var(--color-muted);">Station-by-station test results breakdown</p>
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.35rem;">
+              <div class="tf-legend" aria-label="Test Flow legend">
+                <span style="font-weight: 700;">Cell:</span>
+                <span class="demo-pill" title="Cell value format">
+                  <span class="pass-count">PASS</span><span class="slash">/</span><span class="fail-count">FAIL</span>
+                </span>
+              </div>
+              <div class="tf-range" id="l11-range-note-flow">-</div>
+              <button class="btn-ghost btn-mini" id="l11-columns-btn" type="button" title="Show/Hide station columns">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                </svg>
+                Columns
+              </button>
+              <button class="btn-ghost btn-mini" id="export-l11-flow" type="button" title="Export L11 Test Flow to CSV">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0l-3-3m3 3l3-3M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"></path>
+                </svg>
+                Export CSV
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="table-container">
+          <table id="l11-test-flow-table">
+            <thead>
+              <tr id="l11-test-flow-head-row">
+                <th style="min-width: 100px;">TS</th>
+                <th style="min-width: 120px;">SKU</th>
+              </tr>
+            </thead>
+            <tbody id="l11-test-flow-tbody">
+              <tr>
+                <td colspan="100" style="text-align: center; padding: 3rem; color: var(--color-muted);">
+                  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem;">
+                    <svg width="48" height="48" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5;">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                      <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                    </svg>
+                    <span style="font-weight: 500;">No test flow data available</span>
+                    <span style="font-size: 0.875rem;">Apply filters to load L11 station results</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div><!-- /section-l11 -->
 
     <!-- NV Disposition section (loads independently, shown when ready) -->
     <div class="dispo-section-divider" style="margin-top: 2.5rem; margin-bottom: 1.5rem; border-top: 2px solid var(--color-border); padding-top: 1.5rem;"></div>
@@ -1488,6 +1723,44 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-overlay" id="l11-columns-modal">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xl font-bold" style="color: var(--color-text);">Show/Hide stations</h3>
+        <button class="w-9 h-9 rounded-lg flex items-center justify-center transition-colors" style="background: var(--color-bg);" id="close-l11-columns-modal" title="Close">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <p class="text-sm mb-4" style="color: var(--color-muted);">Stations in <strong>Hidden</strong> will not be shown in the L11 Test Flow table. Add a station name below to hide that column.</p>
+      <div class="flex gap-4 mb-4">
+        <div class="flex-1">
+          <label class="text-xs font-semibold mb-2 block" style="color: var(--color-muted);">Add to hidden</label>
+          <div class="flex gap-2">
+            <input type="text" id="l11-add-hidden-input" class="input-field flex-1" placeholder="Station name (e.g. HPT)" autocomplete="off">
+            <button type="button" class="btn-primary btn-mini" id="l11-add-hidden-btn">Add</button>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <h4 class="text-sm font-semibold mb-2" style="color: var(--color-text);">Hidden (not shown)</h4>
+          <ul id="l11-hidden-list" class="border rounded-lg overflow-y-auto max-h-64 p-2 space-y-1" style="background: var(--color-bg); border-color: var(--color-border);">
+            <!-- Populated by JS -->
+          </ul>
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold mb-2" style="color: var(--color-text);">Shown (visible)</h4>
+          <ul id="l11-shown-list" class="border rounded-lg overflow-y-auto max-h-64 p-2 space-y-1" style="background: var(--color-bg); border-color: var(--color-border);">
+            <!-- Populated by JS -->
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
    const defaultConfig = {
      dashboard_title: 'Analytics Dashboard',
@@ -1704,6 +1977,8 @@
 
    // Aggregation toggle
    let aggregation = 'daily';
+   let currentTier = 'L10';
+   let lastL11Data = null;
    function setAgg(a) {
      aggregation = a;
      document.getElementById('agg-daily').classList.toggle('active', a === 'daily');
@@ -2617,14 +2892,15 @@
 
    function renderSummary(tray_summary, summary) {
      const ts = tray_summary || {};
-     setMetricCell('m-tested-bp', ts.tested?.bp, 'tray_tested_bp', 'bp');
-     setMetricCell('m-tested-fresh', ts.tested?.fresh, 'tray_tested_fresh', 'fresh');
+     const l11Mode = (ts.tested && ts.tested.bp === undefined);
+     setMetricCell('m-tested-bp', l11Mode ? '-' : ts.tested?.bp, 'tray_tested_bp', 'bp');
+     setMetricCell('m-tested-fresh', l11Mode ? '-' : ts.tested?.fresh, 'tray_tested_fresh', 'fresh');
      setMetricCell('m-tested-total', ts.tested?.total, 'tested', 'total');
-     setMetricCell('m-pass-bp', ts.pass?.bp, 'tray_pass_bp', 'bp');
-     setMetricCell('m-pass-fresh', ts.pass?.fresh, 'tray_pass_fresh', 'fresh');
+     setMetricCell('m-pass-bp', l11Mode ? '-' : ts.pass?.bp, 'tray_pass_bp', 'bp');
+     setMetricCell('m-pass-fresh', l11Mode ? '-' : ts.pass?.fresh, 'tray_pass_fresh', 'fresh');
      setMetricCell('m-pass-total', ts.pass?.total, 'pass', 'total');
-     setMetricCell('m-fail-bp', ts.fail?.bp, 'tray_fail_bp', 'bp');
-     setMetricCell('m-fail-fresh', ts.fail?.fresh, 'tray_fail_fresh', 'fresh');
+     setMetricCell('m-fail-bp', l11Mode ? '-' : ts.fail?.bp, 'tray_fail_bp', 'bp');
+     setMetricCell('m-fail-fresh', l11Mode ? '-' : ts.fail?.fresh, 'tray_fail_fresh', 'fresh');
      setMetricCell('m-fail-total', ts.fail?.total, 'fail', 'total');
 
      const s = summary || {};
@@ -2632,6 +2908,171 @@
      setText('kpi-pass', s.pass);
      setText('kpi-fail', s.fail);
    }
+
+   function renderL11Summary(tray_summary, summary) {
+     const s = summary || {};
+     setText('l11-kpi-tested', s.total);
+     setText('l11-kpi-pass', s.pass);
+     setText('l11-kpi-fail', s.fail);
+   }
+
+   function renderL11SkuRows(rows) {
+     const tbody = document.getElementById('l11-sku-tbody');
+     if (!tbody) return;
+     if (!rows || !rows.length) {
+       tbody.innerHTML = `<tr><td colspan="4" style="color: var(--color-muted);">No data</td></tr>`;
+       return;
+     }
+     tbody.innerHTML = rows.map(r => {
+       const sku = (r.sku || 'Unknown');
+       const tested = r.tested ?? 0;
+       const pass = r.pass ?? 0;
+       const fail = r.fail ?? 0;
+       const dis = (v) => (v === 0 || v === '0') ? 'disabled' : '';
+       return `
+         <tr>
+           <td class="font-mono font-semibold">${sku}</td>
+           <td class="font-mono font-semibold"><button class="metric-btn" ${dis(tested)} data-sku="${sku}" data-metric="tested">${tested}</button></td>
+           <td class="font-mono"><button class="metric-btn" ${dis(pass)} data-sku="${sku}" data-metric="pass">${pass}</button></td>
+           <td class="font-mono"><button class="metric-btn" ${dis(fail)} data-sku="${sku}" data-metric="fail">${fail}</button></td>
+         </tr>
+       `;
+     }).join('');
+   }
+
+   function renderL11Breakdown(rows) {
+     const tbody = document.getElementById('l11-breakdown-tbody');
+     if (!tbody) return;
+     if (!rows || !rows.length) {
+       tbody.innerHTML = `<tr><td colspan="4" style="color: var(--color-muted);">No data</td></tr>`;
+       return;
+     }
+     tbody.innerHTML = rows.map(r => {
+       const p = r.period;
+       const tested = r.tested ?? 0;
+       const passed = r.passed ?? 0;
+       const dis = (v) => (v === 0 || v === '0') ? 'disabled' : '';
+       return `
+         <tr>
+           <td class="font-mono font-semibold">${p}</td>
+           <td class="font-mono font-semibold"><button class="metric-btn" ${dis(tested)} data-period="${p}" data-metric="total">${tested}</button></td>
+           <td class="font-mono"><button class="metric-btn" ${dis(passed)} data-period="${p}" data-metric="pass">${passed}</button></td>
+           <td><span class="status-badge ${((r.pass_rate || 0) >= 0.5) ? 'status-success' : 'status-warning'}">${fmtPct(r.pass_rate || 0)}</span></td>
+         </tr>
+       `;
+     }).join('');
+   }
+
+   let l11HiddenStations = new Set();
+
+   function applyL11StationVisibility() {
+     const table = document.getElementById('l11-test-flow-table');
+     if (!table) return;
+     table.querySelectorAll('[data-station]').forEach(el => {
+       const station = el.getAttribute('data-station');
+       el.style.display = l11HiddenStations.has(station) ? 'none' : '';
+     });
+   }
+
+   function renderL11TestFlow(flow) {
+     const headRow = document.getElementById('l11-test-flow-head-row');
+     const tbody = document.getElementById('l11-test-flow-tbody');
+     if (!headRow || !tbody) return;
+     if (!flow || !flow.stations || !flow.stations.length) {
+       tbody.innerHTML = `
+         <tr>
+           <td colspan="100" style="text-align: center; padding: 3rem; color: var(--color-muted);">No test flow data. Apply filter to load L11 data.</td>
+         </tr>
+       `;
+       return;
+     }
+     const stations = flow.stations;
+     headRow.innerHTML =
+       `<th style="min-width: 100px;">TS</th><th style="min-width: 120px;">SKU</th>` +
+       stations.map(s => `<th data-station="${s}">${s}</th>`).join('');
+
+     const mkCell = ({sku, station, pass, fail}) => {
+       const p = pass ?? 0;
+       const f = fail ?? 0;
+       if (p === 0 && f === 0) return `<td data-station-cell data-station="${station}"></td>`;
+       const disabled = (p === 0 && f === 0) ? 'disabled' : '';
+       return `
+         <td data-station-cell data-station="${station}">
+           <button class="metric-btn" data-flow="1" data-station="${station}" data-sku="${sku || ''}" ${disabled}>
+             <span class="pass-count">${p}</span><span class="slash">/</span><span class="fail-count">${f}</span>
+           </button>
+         </td>
+       `;
+     };
+
+     const totalRow = `
+       <tr>
+         <td class="font-bold">-</td>
+         <td class="font-bold">TOTAL</td>
+         ${stations.map(st => mkCell({sku: '', station: st, pass: flow.totals?.[st]?.pass ?? 0, fail: flow.totals?.[st]?.fail ?? 0})).join('')}
+       </tr>
+     `;
+
+     const rowsHtml = (flow.rows || []).map(r => {
+       return `
+         <tr>
+           <td class="font-mono font-semibold">${r.ts}</td>
+           <td class="font-mono font-semibold">${r.sku}</td>
+           ${stations.map(st => mkCell({sku: r.sku, station: st, pass: r.stations?.[st]?.pass ?? 0, fail: r.stations?.[st]?.fail ?? 0})).join('')}
+         </tr>
+       `;
+     }).join('');
+
+     tbody.innerHTML = totalRow + rowsHtml;
+     applyL11StationVisibility();
+   }
+
+   function populateL11ColumnsModal() {
+     const hiddenList = document.getElementById('l11-hidden-list');
+     const shownList = document.getElementById('l11-shown-list');
+     if (!hiddenList || !shownList) return;
+     const stations = (lastL11Data && lastL11Data.test_flow && lastL11Data.test_flow.stations) ? lastL11Data.test_flow.stations : [];
+     const hidden = Array.from(l11HiddenStations);
+     const shown = stations.filter(s => !l11HiddenStations.has(s));
+     hiddenList.innerHTML = hidden.length ? hidden.map(s => `
+       <li class="flex items-center justify-between gap-2 py-1 px-2 rounded" style="background: var(--color-surface);">
+         <span class="font-mono text-sm truncate" style="color: var(--color-text);">${s}</span>
+         <button type="button" class="btn-ghost btn-mini l11-show-station" data-station="${s}" title="Show column">Show</button>
+       </li>
+     `).join('') : '<li class="text-sm py-2" style="color: var(--color-muted);">None</li>';
+     shownList.innerHTML = shown.length ? shown.map(s => `
+       <li class="flex items-center justify-between gap-2 py-1 px-2 rounded" style="background: var(--color-surface);">
+         <span class="font-mono text-sm truncate" style="color: var(--color-text);">${s}</span>
+         <button type="button" class="btn-ghost btn-mini l11-hide-station" data-station="${s}" title="Hide column">Hide</button>
+       </li>
+     `).join('') : '<li class="text-sm py-2" style="color: var(--color-muted);">None</li>';
+   }
+
+   function openL11ColumnsModal() {
+     populateL11ColumnsModal();
+     document.getElementById('l11-columns-modal').classList.add('active');
+     document.getElementById('l11-add-hidden-input').value = '';
+   }
+   function closeL11ColumnsModal() {
+     document.getElementById('l11-columns-modal').classList.remove('active');
+   }
+
+   function loadL11HiddenColumns() {
+     fetch('/api/l11/hidden-columns').then(r => r.json()).then(data => {
+       if (data && Array.isArray(data.hidden)) {
+         l11HiddenStations = new Set(data.hidden);
+         applyL11StationVisibility();
+       }
+     }).catch(() => {});
+   }
+   function saveL11HiddenColumns() {
+     fetch('/api/l11/hidden-columns', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ hidden: Array.from(l11HiddenStations) })
+     }).catch(() => {});
+   }
+   loadL11HiddenColumns();
 
    function renderSkuRows(rows) {
      const tbody = document.getElementById('sku-tbody');
@@ -2668,8 +3109,8 @@
       const p = r.period;
       const tested = r.tested ?? 0;
       const passed = r.passed ?? 0;
-      const bonepile = r.bonepile ?? 0;
-      const fresh = r.fresh ?? 0;
+      const bonepile = r.bonepile ?? '-';
+      const fresh = r.fresh ?? '-';
       const dis = (v) => (v === 0 || v === '0') ? 'disabled' : '';
       return `
         <tr>
@@ -2861,31 +3302,42 @@
        payload = getRangePayload();
      }
 
-     setLoading(true, 'Loading data from SFC...');
-     setApiStatus('Querying SFC...', 'busy');
-     const res = await fetch('/api/query', {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify(payload)
-     });
-     let data;
+     setLoading(true, 'Loading L10 & L11 data...');
+     setApiStatus('Querying...', 'busy');
+     const [resL10, resL11] = await Promise.all([
+       fetch('/api/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+       fetch('/api/l11/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+     ]);
+     let dataL10, dataL11;
      try {
-       data = await res.json();
+       dataL10 = await resL10.json();
+       dataL11 = await resL11.json();
      } catch (e) {
-       throw new Error(res.status ? `Server error ${res.status}` : 'Network or invalid response');
+       throw new Error('Network or invalid response');
      }
-     if (!res.ok) {
-       throw new Error(data && data.error ? data.error : (res.statusText || `Error ${res.status}`));
-     }
-     if (data.error) throw new Error(data.error);
+     if (!resL10.ok) throw new Error(dataL10 && dataL10.error ? dataL10.error : resL10.statusText || `Error ${resL10.status}`);
+     if (!resL11.ok) throw new Error(dataL11 && dataL11.error ? dataL11.error : resL11.statusText || `Error ${resL11.status}`);
+     if (dataL10.error) throw new Error(dataL10.error);
+     if (dataL11.error) throw new Error(dataL11.error);
 
-     renderSummary(data.tray_summary, data.summary);
-     renderSkuRows(data.sku_rows);
-     renderBreakdown(data.breakdown_rows);
-     renderTestFlow(data.test_flow);
-     lastUnassignedPartNumbersDetail = data.unassigned_part_numbers_detail || [];
+     renderSummary(dataL10.tray_summary, dataL10.summary);
+     renderSkuRows(dataL10.sku_rows);
+     renderBreakdown(dataL10.breakdown_rows);
+     renderTestFlow(dataL10.test_flow);
+     lastUnassignedPartNumbersDetail = dataL10.unassigned_part_numbers_detail || [];
      lastUnassignedPartNumbers = lastUnassignedPartNumbersDetail.map(d => d.part_number || '');
      showUnassignedPnBanner(lastUnassignedPartNumbers);
+
+     lastL11Data = dataL11;
+     renderL11Summary(dataL11.tray_summary, dataL11.summary);
+     renderL11SkuRows(dataL11.sku_rows);
+     renderL11Breakdown(dataL11.breakdown_rows);
+     renderL11TestFlow(dataL11.test_flow);
+     const rangeText = `${payload.start_datetime} → ${payload.end_datetime} (CA)`;
+     const setL11 = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+     setL11('l11-breakdown-label', rangeText);
+     setL11('l11-range-note-flow', rangeText);
+
      setApiStatus('Ready', 'ok');
      setLoading(false);
    }
@@ -2998,8 +3450,9 @@
      else if (segment && segment !== 'total') apiMetric = 'tray_' + (metric || 'tested') + '_' + segment;
 
      const payload = getRangePayload();
+     const snListUrl = currentTier === 'L11' ? '/api/l11/sn-list' : '/api/sn-list';
      setLoading(true, 'Loading SN list...');
-     const res = await fetch('/api/sn-list', {
+     const res = await fetch(snListUrl, {
        method: 'POST',
        headers: { 'Content-Type': 'application/json' },
        body: JSON.stringify({ ...payload, metric: apiMetric, sku, period, aggregation })
@@ -3038,6 +3491,39 @@
    safeAddListener('close-pass-rules-modal', 'click', closePassRulesModal);
    safeAddListener('pass-rules-modal', 'click', (e) => { if (e.target.id === 'pass-rules-modal') closePassRulesModal(); });
    safeAddListener('pass-rules-cancel', 'click', closePassRulesModal);
+
+   safeAddListener('l11-columns-btn', 'click', openL11ColumnsModal);
+   safeAddListener('close-l11-columns-modal', 'click', closeL11ColumnsModal);
+   safeAddListener('l11-columns-modal', 'click', (e) => { if (e.target.id === 'l11-columns-modal') closeL11ColumnsModal(); });
+   safeAddListener('l11-add-hidden-btn', 'click', () => {
+     const input = document.getElementById('l11-add-hidden-input');
+     const name = (input && input.value || '').trim();
+     if (name) {
+       l11HiddenStations.add(name);
+       applyL11StationVisibility();
+       populateL11ColumnsModal();
+       saveL11HiddenColumns();
+       input.value = '';
+     }
+   });
+   document.getElementById('l11-add-hidden-input')?.addEventListener?.('keydown', (e) => {
+     if (e.key === 'Enter') {
+       e.preventDefault();
+       document.getElementById('l11-add-hidden-btn')?.click();
+     }
+   });
+   safeAddListener('l11-hidden-list', 'click', (e) => {
+     const btn = e.target?.closest?.('button.l11-show-station');
+     if (!btn) return;
+     const station = btn.getAttribute('data-station');
+     if (station) { l11HiddenStations.delete(station); applyL11StationVisibility(); populateL11ColumnsModal(); saveL11HiddenColumns(); }
+   });
+   safeAddListener('l11-shown-list', 'click', (e) => {
+     const btn = e.target?.closest?.('button.l11-hide-station');
+     if (!btn) return;
+     const station = btn.getAttribute('data-station');
+     if (station) { l11HiddenStations.add(station); applyL11StationVisibility(); populateL11ColumnsModal(); saveL11HiddenColumns(); }
+   });
    safeAddListener('pass-rules-apply', 'click', () => applyPassRules().catch(err => alert('Error: ' + (err.message || err))));
    } catch (e) {
      console.error('Error setting main event listeners:', e);
@@ -3133,9 +3619,12 @@
      });
    }
    safeAddListener('apply-filter', 'click', applyFilter);
+
    document.querySelectorAll('.nav-section-btn').forEach(btn => {
      btn.addEventListener('click', () => {
        const id = btn.getAttribute('data-section');
+       if (id === 'section-l11') currentTier = 'L11';
+       else if (id === 'section-test-analysis') currentTier = 'L10';
        if (id) {
          const el = document.getElementById(id);
          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3175,6 +3664,13 @@
     });
   });
   safeAddListener('export-flow', 'click', () => {
+    downloadCsv('test_flow').catch(err => {
+      console.error(err);
+      setLoading(false);
+      alert('Error: ' + err.message);
+    });
+  });
+  safeAddListener('export-l11-flow', 'click', () => {
     downloadCsv('test_flow').catch(err => {
       console.error(err);
       setLoading(false);
@@ -3242,6 +3738,74 @@
        setLoading(false);
        alert('Error: ' + err.message);
      });
+   });
+
+   // L11 section drilldown (use L11 API)
+   safeAddListener('l11-kpi-row', 'click', (e) => {
+     const btn = e.target?.closest?.('button.metric-btn');
+     if (!btn || btn.disabled) return;
+     currentTier = 'L11';
+     const metric = btn.getAttribute('data-metric');
+     const segment = btn.getAttribute('data-segment') || 'total';
+     openSnModal();
+     loadSnList(metric, segment).catch(err => {
+       console.error(err);
+       setLoading(false);
+       alert('Error: ' + err.message);
+     });
+   });
+   safeAddListener('l11-sku-table', 'click', (e) => {
+     const btn = e.target?.closest?.('button[data-sku][data-metric]');
+     if (!btn || btn.disabled) return;
+     currentTier = 'L11';
+     const sku = btn.getAttribute('data-sku');
+     const metric = btn.getAttribute('data-metric');
+     openSnModal();
+     loadSnList(metric, 'total', { sku }).catch(err => {
+       console.error(err);
+       setLoading(false);
+       alert('Error: ' + err.message);
+     });
+   });
+   safeAddListener('l11-breakdown-table', 'click', (e) => {
+     const btn = e.target?.closest?.('button.metric-btn[data-period]');
+     if (!btn || btn.disabled) return;
+     currentTier = 'L11';
+     const period = btn.getAttribute('data-period');
+     const metric = btn.getAttribute('data-metric');
+     openSnModal();
+     loadSnList(metric, null, { period }).catch(err => {
+       console.error(err);
+       setLoading(false);
+       alert('Error: ' + err.message);
+     });
+   });
+   safeAddListener('l11-test-flow-table', 'click', (e) => {
+     const btn = e.target?.closest?.('button[data-flow="1"]');
+     if (!btn || btn.disabled) return;
+     const station = btn.getAttribute('data-station');
+     const sku = (btn.getAttribute('data-sku') || '').trim() || null;
+     const payload = getRangePayload();
+     openSnModal();
+     setLoading(true, 'Loading SN list...');
+     Promise.all([
+       fetch('/api/l11/sn-list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, aggregation, metric: 'test_flow', sku, station, outcome: 'pass' }) }).then(r => r.json()),
+       fetch('/api/l11/sn-list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, aggregation, metric: 'test_flow', sku, station, outcome: 'fail' }) }).then(r => r.json())
+     ])
+       .then(([passData, failData]) => {
+         if (passData.error) throw new Error(passData.error);
+         if (failData.error) throw new Error(failData.error);
+         const title = `L11 Test Flow • ${station}${sku ? (' • ' + sku) : ''}`;
+         document.getElementById('sn-modal-title').textContent = title;
+         document.getElementById('sn-modal-subtitle').textContent = `${payload.start_datetime} → ${payload.end_datetime} (CA) • Pass: ${passData.count || 0} • Fail: ${failData.count || 0}`;
+         renderTestFlowSnModal(passData.rows || [], failData.rows || []);
+         setLoading(false);
+       })
+       .catch(err => {
+         console.error(err);
+         setLoading(false);
+         alert('Error: ' + err.message);
+       });
    });
 
    // SKU drilldown clicks (each number becomes a button)

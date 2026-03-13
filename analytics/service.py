@@ -14,7 +14,9 @@ from sfc.parser import parse_fail_result_html
 
 from crabber.client import get_sn_tier_from_crabber
 from analytics.compute import compute_all
+from analytics.compute_l11 import compute_all_l11
 from analytics.error_stats import compute_error_stats, compute_error_stats_sn_list
+from analytics.l11 import compute_l11_sn_pass_map_and_stations
 from analytics.sn_list import compute_sn_list
 
 
@@ -70,6 +72,36 @@ def run_analytics_query(
     result = compute_all(filtered, aggregation=aggregation)
     result["l11_sns"] = l11
     return result
+
+
+def run_l11_analytics(
+    user_start: datetime,
+    user_end: datetime,
+    aggregation: str = "daily",
+) -> Dict[str, Any]:
+    """
+    L11 analytics: same fail_result fetch, filter to L11 SNs, get pass_station from Jump IT, compute (no BP).
+    """
+    ok, html = request_fail_result(user_start, user_end)
+    if not ok:
+        raise RuntimeError("SFC API request failed (login or fail_result)")
+    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+    _, l11_sns = _filter_rows_by_valid_sns(rows)
+    if not l11_sns:
+        from analytics.compute_l11 import _empty_result_l11
+        return _empty_result_l11(aggregation, [])
+    l11_pass_station, stations_order_l11 = compute_l11_sn_pass_map_and_stations(l11_sns)
+    valid_l11 = set(l11_pass_station.keys())
+    l11_rows = [
+        r for r in rows
+        if (r.get("serial_number") or "").strip().upper() in valid_l11
+    ]
+    return compute_all_l11(
+        l11_rows,
+        l11_pass_station,
+        stations_order_l11,
+        aggregation=aggregation,
+    )
 
 
 def get_sn_list(

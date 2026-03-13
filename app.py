@@ -6,6 +6,7 @@ Port and paths from config.
 from __future__ import annotations
 
 import io
+import json
 import os
 import sqlite3
 import tempfile
@@ -36,6 +37,7 @@ from analytics.service import (
     get_sn_list,
     run_error_stats,
     get_error_stats_sn_list,
+    run_l11_analytics,
 )
 from analytics.bp_check import add_bp_to_rows
 from config.analytics_config import get_pass_rules, set_pass_rules
@@ -84,6 +86,8 @@ register_ssh_ws(sock)
 
 _last_query_lock = threading.Lock()
 _last_query_result: Optional[Dict[str, Any]] = None
+_last_l11_query_lock = threading.Lock()
+_last_l11_query_result: Optional[Dict[str, Any]] = None
 _last_error_stats_lock = threading.Lock()
 _last_error_stats_result: Optional[Dict[str, Any]] = None
 
@@ -767,6 +771,131 @@ def api_sn_list():
         return jsonify({"ok": True, "count": len(rows), "rows": rows})
     except Exception as e:
         return jsonify({"error": str(e), "count": 0, "rows": []}), 500
+
+
+@app.route("/api/l11/query", methods=["POST"])
+def api_l11_query():
+    """
+    L11 analytics. Body { start_datetime, end_datetime, aggregation?: daily|weekly|monthly }.
+    Caches result for /api/l11/sn-list.
+    """
+    global _last_l11_query_result
+    payload = request.json or {}
+    start_s = (payload.get("start_datetime") or "").strip()
+    end_s = (payload.get("end_datetime") or "").strip()
+    aggregation = (payload.get("aggregation") or "daily").strip().lower()
+    if aggregation not in ("daily", "weekly", "monthly"):
+        aggregation = "daily"
+
+    user_start = _parse_datetime(start_s, is_end=False)
+    user_end = _parse_datetime(end_s, is_end=True)
+    if user_start is None or user_end is None:
+        return jsonify({"error": "start_datetime and end_datetime required (YYYY-MM-DD HH:MM)"}), 400
+    if user_end < user_start:
+        return jsonify({"error": "end must be after start"}), 400
+
+    try:
+        computed = run_l11_analytics(user_start, user_end, aggregation=aggregation)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+
+    with _last_l11_query_lock:
+        _last_l11_query_result = computed
+
+    out = {
+        "ok": True,
+        "summary": computed["summary"],
+        "tray_summary": computed["tray_summary"],
+        "sku_rows": computed["sku_rows"],
+        "breakdown_rows": computed["breakdown_rows"],
+        "test_flow": computed["test_flow"],
+        "rows": computed["rows"],
+        "stations_order_l11": computed.get("stations_order_l11", []),
+    }
+    return jsonify(out)
+
+
+@app.route("/api/l11/sn-list", methods=["POST"])
+def api_l11_sn_list():
+    """Drill-down SN list for L11. Uses last L11 query result."""
+    payload = request.json or {}
+    metric = (payload.get("metric") or "total").strip().lower()
+    sku = (payload.get("sku") or "").strip() or None
+    period = (payload.get("period") or "").strip() or None
+    station = (payload.get("station") or "").strip() or None
+    outcome = (payload.get("outcome") or "").strip().lower() or None
+    if outcome and outcome not in ("pass", "fail"):
+        outcome = None
+    aggregation = (payload.get("aggregation") or "daily").strip().lower()
+    if aggregation not in ("daily", "weekly", "monthly"):
+        aggregation = "daily"
+
+    with _last_l11_query_lock:
+        computed = _last_l11_query_result
+
+    if not computed:
+        return jsonify({"error": "Apply L11 filter first", "count": 0, "rows": []}), 400
+
+    try:
+        rows = get_sn_list(
+            computed,
+            metric=metric,
+            sku=sku,
+            period=period,
+            station=station,
+            outcome=outcome,
+            aggregation=aggregation,
+        )
+        return jsonify({"ok": True, "count": len(rows), "rows": rows})
+    except Exception as e:
+        return jsonify({"error": str(e), "count": 0, "rows": []}), 500
+
+
+L11_HIDDEN_COLUMNS_KEY = "l11_hidden_stations"
+
+
+@app.route("/api/l11/hidden-columns", methods=["GET"])
+def api_l11_hidden_columns_get():
+    """Return saved list of L11 station column names to hide. Stored in analytics DB meta table."""
+    try:
+        ensure_db_ready()
+        conn = connect_db()
+        try:
+            cur = conn.execute("SELECT value FROM meta WHERE key = ?", (L11_HIDDEN_COLUMNS_KEY,))
+            row = cur.fetchone()
+            value = row["value"] if row and row["value"] else None
+            hidden = json.loads(value) if value else []
+            if not isinstance(hidden, list):
+                hidden = []
+            return jsonify({"ok": True, "hidden": [str(x) for x in hidden]})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"error": str(e), "hidden": []}), 500
+
+
+@app.route("/api/l11/hidden-columns", methods=["POST"])
+def api_l11_hidden_columns_post():
+    """Save list of L11 station column names to hide. Body: { \"hidden\": [\"HPT\", ...] }."""
+    payload = request.json or {}
+    hidden = payload.get("hidden")
+    if not isinstance(hidden, list):
+        hidden = []
+    hidden = [str(x).strip() for x in hidden if str(x).strip()]
+    try:
+        ensure_db_ready()
+        conn = connect_db()
+        try:
+            conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                (L11_HIDDEN_COLUMNS_KEY, json.dumps(hidden)),
+            )
+            conn.commit()
+            return jsonify({"ok": True, "hidden": hidden})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/error-stats", methods=["POST"])
