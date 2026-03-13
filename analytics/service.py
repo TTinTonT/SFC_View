@@ -7,50 +7,50 @@ Plain functions; no Flask. Used by app routes.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from config.app_config import VALID_LOCATION, SFC_INCLUDE_RACK
-from sfc.client import request_fail_result, request_ppid_wip_tracking
-from sfc.parser import get_sn_rack_from_ppid_html, is_sn_valid_by_location, parse_fail_result_html
+from sfc.client import request_fail_result
+from sfc.parser import parse_fail_result_html
 
+from crabber.client import get_sn_tier_from_crabber
 from analytics.compute import compute_all
 from analytics.error_stats import compute_error_stats, compute_error_stats_sn_list
 from analytics.sn_list import compute_sn_list
 
 
-def _filter_rows_by_valid_sns(rows: List[dict]) -> List[dict]:
-    """Keep only rows whose serial_number is valid (LOCATION contains VALID_LOCATION; rack matches SFC_INCLUDE_RACK if set)."""
+def _filter_rows_by_valid_sns(rows: List[dict]) -> Tuple[List[dict], List[str]]:
+    """Classify SNs via Crabber (station FVT->L11, SYSTEM->L10). Return (filtered_rows, l11_sns)."""
     unique_sns = {
         (r.get("serial_number") or "").strip()
         for r in rows
         if (r.get("serial_number") or "").strip()
     }
     valid_sns = set()
+    l11_sns = set()
     for sn in unique_sns:
-        ok, html = request_ppid_wip_tracking(sn)
-        if not ok or not is_sn_valid_by_location(html, required_location=VALID_LOCATION):
-            continue
-        if SFC_INCLUDE_RACK:
-            rack = get_sn_rack_from_ppid_html(html)
-            if rack and rack.upper() != SFC_INCLUDE_RACK:
-                continue
-        valid_sns.add(sn)
-    return [
+        tier = get_sn_tier_from_crabber(sn)
+        if tier == "L10":
+            valid_sns.add(sn)
+        elif tier == "L11":
+            l11_sns.add(sn)
+    filtered = [
         r for r in rows
         if (r.get("serial_number") or "").strip() in valid_sns
     ]
+    return (filtered, sorted(l11_sns))
 
 
 def run_fail_result_rows(
     user_start: datetime,
     user_end: datetime,
-) -> List[dict]:
-    """Fetch SFC fail result and parse to rows. No BP or analytics computed."""
+) -> Dict[str, Any]:
+    """Fetch SFC fail result and parse to rows. No BP or analytics computed. Returns {"rows": ..., "l11_sns": ...}."""
     ok, html = request_fail_result(user_start, user_end)
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
     rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    return _filter_rows_by_valid_sns(rows)
+    filtered, l11 = _filter_rows_by_valid_sns(rows)
+    return {"rows": filtered, "l11_sns": l11}
 
 
 def run_analytics_query(
@@ -66,8 +66,10 @@ def run_analytics_query(
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
     rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    rows = _filter_rows_by_valid_sns(rows)
-    return compute_all(rows, aggregation=aggregation)
+    filtered, l11 = _filter_rows_by_valid_sns(rows)
+    result = compute_all(filtered, aggregation=aggregation)
+    result["l11_sns"] = l11
+    return result
 
 
 def get_sn_list(
@@ -104,8 +106,10 @@ def run_error_stats(
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
     rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    rows = _filter_rows_by_valid_sns(rows)
-    return compute_error_stats(rows, top_k=top_k)
+    filtered, l11 = _filter_rows_by_valid_sns(rows)
+    result = compute_error_stats(filtered, top_k=top_k)
+    result["l11_sns"] = l11
+    return result
 
 
 def get_error_stats_sn_list(

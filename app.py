@@ -705,6 +705,7 @@ def api_query():
         "rows": computed["rows"],
         "unassigned_part_numbers": computed.get("unassigned_part_numbers", []),
         "unassigned_part_numbers_detail": computed.get("unassigned_part_numbers_detail", []),
+        "l11_sns": computed.get("l11_sns", []),
     }
     return jsonify(out)
 
@@ -835,6 +836,7 @@ def api_error_stats():
         "ttc_overall": result["ttc_overall"],
         "ttc_by_station": result["ttc_by_station"],
         "ttc_by_error": result["ttc_by_error"],
+        "l11_sns": result.get("l11_sns", []),
     }
     return jsonify(out)
 
@@ -889,11 +891,13 @@ def api_fail_result():
         return jsonify({"error": "end must be after start"}), 400
 
     try:
-        rows = run_fail_result_rows(user_start, user_end)
+        data = run_fail_result_rows(user_start, user_end)
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 502
+    rows = data["rows"]
+    l11_sns = data.get("l11_sns", [])
     csv_str = rows_to_csv(rows, include_bp=False)
-    return jsonify({"ok": True, "rows": rows, "csv": csv_str, "count": len(rows)})
+    return jsonify({"ok": True, "rows": rows, "l11_sns": l11_sns, "csv": csv_str, "count": len(rows)})
 
 
 def _error_stats_to_csv(result: Dict[str, Any]) -> str:
@@ -1084,9 +1088,10 @@ def api_export_csv():
         return jsonify({"error": "end must be after start"}), 400
 
     try:
-        rows = run_fail_result_rows(user_start, user_end)
+        data = run_fail_result_rows(user_start, user_end)
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 502
+    rows = data["rows"]
     rows = add_bp_to_rows(rows)
     csv_str = rows_to_csv(rows, include_bp=True)
     filename = f"fail_result_{user_start.strftime('%Y%m%d_%H%M')}_to_{user_end.strftime('%Y%m%d_%H%M')}.csv"

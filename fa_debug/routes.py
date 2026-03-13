@@ -60,7 +60,7 @@ def _fetch_debug_data(user_start, user_end):
     except RuntimeError:
         return None
     prepared = prepare_debug_rows(computed["rows"])
-    return {"summary": computed["summary"], "rows": prepared}
+    return {"summary": computed["summary"], "rows": prepared, "l11_sns": computed.get("l11_sns", [])}
 
 
 def _run_poller():
@@ -72,7 +72,7 @@ def _run_poller():
             data = _fetch_debug_data(start_dt, end_dt)
             if data:
                 with _debug_cache_lock:
-                    _debug_cache = {"summary": data["summary"], "rows": data["rows"], "start": start_dt.isoformat(), "end": end_dt.isoformat()}
+                    _debug_cache = {"summary": data["summary"], "rows": data["rows"], "l11_sns": data.get("l11_sns", []), "start": start_dt.isoformat(), "end": end_dt.isoformat()}
         except Exception:
             pass
         threading.Event().wait(POLL_INTERVAL_SEC)

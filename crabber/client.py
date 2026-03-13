@@ -57,6 +57,51 @@ def _extract_items_list(obj: Any) -> Optional[list]:
     return None
 
 
+def get_sn_tier_from_crabber(sn: str, timeout: int = 15) -> Optional[str]:
+    """
+    GET /api/search_log_items/?sn=XXX; classify SN as L10/L11 from station.
+    - total_logs < 1 or no log_list -> None (invalid).
+    - total_logs == 1 -> check station of log_list[0]: FVT -> L11, SYSTEM -> L10.
+    - total_logs > 1 -> check station of log_list[1]: FVT -> L11, SYSTEM -> L10.
+    Returns "L10" | "L11" | None.
+    """
+    base, token = _get_config()
+    if not base or not (sn or "").strip():
+        return None
+    sn = sn.strip()
+    search_url = (
+        f"{base}/api/search_log_items/"
+        f"?cur_page=1&project=&station=&phase=&precondition=&label_data=&result=All"
+        f"&spid=&machine=&pn=&from_date=&to_date=&sfc=&cal_total=false&is_trial=false"
+        f"&sn={sn}"
+    )
+    try:
+        r = requests.get(search_url, headers=_headers(token), timeout=timeout)
+        if not r.ok:
+            return None
+        search_resp = r.json()
+    except Exception:
+        return None
+    log_list = _extract_items_list(search_resp)
+    if not log_list or not isinstance(log_list, list):
+        return None
+    total_logs = search_resp.get("total_logs") if isinstance(search_resp, dict) else None
+    if total_logs is None:
+        total_logs = len(log_list)
+    if total_logs < 1:
+        return None
+    idx = 1 if total_logs > 1 else 0
+    if idx >= len(log_list):
+        return None
+    log = log_list[idx] if isinstance(log_list[idx], dict) else {}
+    station = (log.get("station") or "").strip()
+    if "FVT" in station:
+        return "L11"
+    if "SYSTEM" in station:
+        return "L10"
+    return None
+
+
 def _looks_like_file_path(s: str) -> bool:
     """Must be actual path, not project name like NVIDIA_NVL144."""
     s = (s or "").strip()
