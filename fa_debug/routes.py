@@ -152,11 +152,12 @@ def api_jump_station_wip():
 
 @bp.route("/api/debug/jump-station/execute", methods=["POST"])
 def api_jump_station_execute():
-    """Execute jump: target_group, reason, emp_no?, check_jump_station."""
+    """Execute jump: current_group (station before target, e.g. FLA) + target_group (e.g. FLB), or target_group only. SQL uses current."""
     data = request.get_json(silent=True) or {}
     sn = (data.get("sn") or "").strip().upper()
     if not sn:
         return jsonify({"ok": False, "error": "sn required"}), 400
+    current_group = (data.get("current_group") or "").strip()
     target_group = (data.get("target_group") or "").strip()
     if not target_group:
         return jsonify({"ok": False, "error": "target_group required"}), 400
@@ -168,7 +169,7 @@ def api_jump_station_execute():
     try:
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next
-        from sfis_tool.jump_route import check_jump_station as do_check_jump_station
+        from sfis_tool.jump_route import get_station_order_and_next, check_jump_station as do_check_jump_station
         from sfis_tool.repair_ok import get_group_info, jump_routing
         conn = get_conn()
         try:
@@ -177,6 +178,14 @@ def api_jump_station_execute():
                 return jsonify({"ok": False, "error": "No WIP for this SN."})
             wip = dict(zip(_WIP_KEYS, row))
             v_line = wip.get("LINE_NAME") or ""
+            if current_group:
+                order, _, _ = get_station_order_and_next(conn, sn)
+                try:
+                    idx = list(order).index(current_group)
+                    if idx + 1 < len(order):
+                        target_group = order[idx + 1]
+                except (ValueError, TypeError):
+                    pass
             if check_jump_station and not do_check_jump_station(conn, target_group, sn):
                 return jsonify({"ok": False, "error": "CheckJumpStation: not allowed (kitting/assy)."})
             info = get_group_info(conn, v_line, target_group)

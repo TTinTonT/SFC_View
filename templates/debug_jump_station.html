@@ -173,7 +173,7 @@
       resultMsg.classList.toggle('hidden', !text);
     }
 
-    btnSearch.addEventListener('click', function () {
+    function doSearch() {
       var sn = (inputSn.value || '').trim();
       snError.classList.add('hidden');
       resultMsg.classList.add('hidden');
@@ -218,6 +218,11 @@
         snError.textContent = 'Request failed';
         snError.classList.remove('hidden');
       });
+    }
+
+    btnSearch.addEventListener('click', doSearch);
+    inputSn.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
     });
 
     inputReason.addEventListener('input', updateExecuteState);
@@ -228,11 +233,14 @@
       if (!sn || !wip || !selectedTargetGroup) return;
       var reason = (inputReason.value || '').trim();
       if (!reason) { showResult(false, 'Jump reason is required.'); return; }
+      var idx = groupsOrdered.indexOf(selectedTargetGroup);
+      var currentGroup = idx > 0 ? groupsOrdered[idx - 1] : ((wip.NEXT_STATION || '').trim() || (wip.GROUP_NAME || '').trim() || groupsOrdered[0] || '');
       btnExecute.disabled = true;
       api('execute', {
         method: 'POST',
         body: {
           sn: sn,
+          current_group: currentGroup,
           target_group: selectedTargetGroup,
           reason: reason,
           emp_no: (inputEmp.value || '').trim(),

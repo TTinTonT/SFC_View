@@ -20,6 +20,7 @@ DEFAULT = {
     "SFC_GROUP_NAME": "'AST','FCT','FLA','FLB','FLC','FTS','IOT','NVL','PRET','RIN'",
     "SFC_SESSION_TTL_SECONDS": "1800",
     "VALID_LOCATION": "San Jose",
+    "SFC_INCLUDE_RACK": "L10",
     # SSH / Debug (DHCP jump host, terminal proxy)
     "SSH_DHCP_HOST": "10.16.138.67",
     "SSH_DHCP_USER": "root",

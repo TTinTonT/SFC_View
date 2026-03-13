@@ -21,6 +21,8 @@ def _ts_group_from_part_number(part_number: str) -> str:
     m = re.search(r"\bTS(\d+)\b", pn)
     if m:
         return f"TS{int(m.group(1))}"
+    if re.search(r"-T2B\b", pn):
+        return "T2B"
     return "TS?"
 
 

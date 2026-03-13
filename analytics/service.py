@@ -9,9 +9,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from config.app_config import VALID_LOCATION
+from config.app_config import VALID_LOCATION, SFC_INCLUDE_RACK
 from sfc.client import request_fail_result, request_ppid_wip_tracking
-from sfc.parser import is_sn_valid_by_location, parse_fail_result_html
+from sfc.parser import get_sn_rack_from_ppid_html, is_sn_valid_by_location, parse_fail_result_html
 
 from analytics.compute import compute_all
 from analytics.error_stats import compute_error_stats, compute_error_stats_sn_list
@@ -19,7 +19,7 @@ from analytics.sn_list import compute_sn_list
 
 
 def _filter_rows_by_valid_sns(rows: List[dict]) -> List[dict]:
-    """Keep only rows whose serial_number is valid (LOCATION contains VALID_LOCATION)."""
+    """Keep only rows whose serial_number is valid (LOCATION contains VALID_LOCATION; rack matches SFC_INCLUDE_RACK if set)."""
     unique_sns = {
         (r.get("serial_number") or "").strip()
         for r in rows
@@ -28,8 +28,13 @@ def _filter_rows_by_valid_sns(rows: List[dict]) -> List[dict]:
     valid_sns = set()
     for sn in unique_sns:
         ok, html = request_ppid_wip_tracking(sn)
-        if ok and is_sn_valid_by_location(html, required_location=VALID_LOCATION):
-            valid_sns.add(sn)
+        if not ok or not is_sn_valid_by_location(html, required_location=VALID_LOCATION):
+            continue
+        if SFC_INCLUDE_RACK:
+            rack = get_sn_rack_from_ppid_html(html)
+            if rack and rack.upper() != SFC_INCLUDE_RACK:
+                continue
+        valid_sns.add(sn)
     return [
         r for r in rows
         if (r.get("serial_number") or "").strip() in valid_sns

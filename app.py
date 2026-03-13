@@ -28,7 +28,8 @@ from config.app_config import (
     TRAY_SUMMARY_TEMPLATE_PATH,
     TOP_K_ERRORS_DEFAULT,
 )
-from sfc.parser import rows_to_csv
+from sfc.client import request_ppid_wip_tracking
+from sfc.parser import parse_ppid_wip_tracking_locations, rows_to_csv
 from analytics.service import (
     run_analytics_query,
     run_fail_result_rows,
@@ -640,6 +641,29 @@ def api_auth_forgot_password():
 def index():
     """Serve analytics dashboard."""
     return render_template("analytics_dashboard.html")
+
+
+@app.route("/api/sfc/ppid-wip")
+def api_sfc_ppid_wip():
+    """Debug: fetch PPID_Wip_Tracking for SN. Query ?sn=... Returns { ok, locations, rack, valid_location }."""
+    sn = (request.args.get("sn") or "").strip()
+    if not sn:
+        return jsonify({"error": "sn query param required"}), 400
+    ok, html = request_ppid_wip_tracking(sn)
+    if not ok:
+        return jsonify({"ok": False, "sn": sn, "error": "SFC PPID_Wip_Tracking request failed"})
+    locations, rack = parse_ppid_wip_tracking_locations(html)
+    from config.app_config import VALID_LOCATION, SFC_INCLUDE_RACK
+    valid_location = any((VALID_LOCATION or "") in loc for loc in locations)
+    return jsonify({
+        "ok": True,
+        "sn": sn,
+        "locations": locations,
+        "rack": rack,
+        "valid_location": valid_location,
+        "sfc_include_rack": SFC_INCLUDE_RACK or None,
+        "included": valid_location and (not SFC_INCLUDE_RACK or (rack and rack.upper() == SFC_INCLUDE_RACK)),
+    })
 
 
 @app.route("/api/query", methods=["POST"])

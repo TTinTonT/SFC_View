@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 try:
     from bs4 import BeautifulSoup
@@ -197,6 +197,57 @@ def parse_assy_info_html(html: str) -> Optional[dict]:
         if result["sys_mac"] or result["bmc_mac"]:
             return result
     return result if (result["sys_mac"] or result["bmc_mac"]) else None
+
+
+def parse_ppid_wip_tracking_locations(html: str) -> Tuple[List[str], Optional[str]]:
+    """
+    Parse PPID_Wip_Tracking HTML: extract all LOCATION cell values.
+    Returns (locations: list of LOCATION strings, rack: L10|L11|None).
+    Rack is derived from LOCATION: if any contains "L11" -> "L11"; elif "L10" -> "L10"; else None.
+    """
+    if BeautifulSoup is None:
+        raise RuntimeError("beautifulsoup4 is required")
+    if not html or not html.strip():
+        return [], None
+    locations: list[str] = []
+    for table in BeautifulSoup(html, "html.parser").find_all("table"):
+        rows = table.find_all("tr")
+        idx_location = -1
+        header_row_idx = -1
+        for i, tr in enumerate(rows):
+            cells = tr.find_all(["th", "td"])
+            for j, cell in enumerate(cells):
+                if "LOCATION" in (_cell_text(cell) or "").strip().upper():
+                    idx_location = j
+                    header_row_idx = i
+                    break
+            if idx_location >= 0:
+                break
+        if idx_location < 0:
+            continue
+        for tr in rows[header_row_idx + 1:]:
+            tds = tr.find_all("td")
+            if len(tds) <= idx_location:
+                continue
+            loc = _cell_text(tds[idx_location]).strip()
+            if loc:
+                locations.append(loc)
+    rack = None
+    for loc in locations:
+        u = loc.upper()
+        if "L11" in u:
+            rack = "L11"
+            break
+        if "L10" in u:
+            rack = "L10"
+            break
+    return locations, rack
+
+
+def get_sn_rack_from_ppid_html(html: str) -> Optional[str]:
+    """Return "L10"|"L11"|None from PPID_Wip_Tracking HTML. Uses parse_ppid_wip_tracking_locations."""
+    _, rack = parse_ppid_wip_tracking_locations(html)
+    return rack
 
 
 def is_sn_valid_by_location(html: str, required_location: str = "San Jose") -> bool:

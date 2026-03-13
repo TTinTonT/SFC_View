@@ -35,6 +35,7 @@ SFC_PWD = os.environ.get("SFC_PWD", get_default("SFC_PWD"))
 SFC_GROUP_NAME = os.environ.get("SFC_GROUP_NAME", get_default("SFC_GROUP_NAME"))
 SFC_SESSION_TTL_SECONDS = int(os.environ.get("SFC_SESSION_TTL_SECONDS", get_default("SFC_SESSION_TTL_SECONDS")))
 VALID_LOCATION = os.environ.get("VALID_LOCATION", get_default("VALID_LOCATION"))
+SFC_INCLUDE_RACK = (os.environ.get("SFC_INCLUDE_RACK", get_default("SFC_INCLUDE_RACK")) or "").strip().upper() or None
 
 EXTEND_HOURS = get_extend_hours()
 CA_TZ = get_ca_tz()
