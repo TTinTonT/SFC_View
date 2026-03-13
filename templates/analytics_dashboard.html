@@ -1030,7 +1030,7 @@
               </div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-label">Waiting IGS</div>
+              <div class="kpi-label">Waiting FA</div>
               <div class="kpi-value">
                 <div id="dispo-sum-waiting" class="text-3xl font-extrabold" style="color: var(--color-text);">-</div>
                 <button class="metric-btn" id="dispo-sum-waiting-btn" data-dispo-metric="waiting_igs" data-dispo-segment="summary">View</button>
@@ -1059,7 +1059,7 @@
             </div>
           </div>
           <p class="text-xs mb-2 mt-4" style="color: var(--color-muted);">
-            <b>Note:</b> Only SNs with Status not PASS and PIC = IGS. 
+            <b>Note:</b> Only SNs with Status not PASS and PIC = FA. 
             Waiting = IGS Action empty or last IGS date &lt; last NV Disposition date. 
             Complete = last IGS Action date &gt;= last NV Disposition date. 
             Total = Waiting + Complete.
@@ -1082,7 +1082,7 @@
                 <tr>
                   <th>SKU</th>
                   <th>Total</th>
-                  <th>Waiting IGS</th>
+                  <th>Waiting FA</th>
                   <th>Complete</th>
                 </tr>
               </thead>
@@ -1126,7 +1126,7 @@
                 <tr>
                   <th>Period</th>
                   <th>Total</th>
-                  <th>Waiting IGS</th>
+                  <th>Waiting FA</th>
                   <th>Complete</th>
                 </tr>
               </thead>
@@ -1782,9 +1782,9 @@
      // Update range notes (Summary and By period)
      const payload = getRangePayload();
      const rangeEl = document.getElementById('range-note-dispo');
-     if (rangeEl) rangeEl.textContent = `${payload.start_datetime} → ${payload.end_datetime} (CA)`;
+     if (rangeEl) rangeEl.textContent = `${payload.start_datetime} → ${payload.end_datetime} (CST)`;
      const rangePeriodEl = document.getElementById('range-note-dispo-period');
-     if (rangePeriodEl) rangePeriodEl.textContent = `${payload.start_datetime} → ${payload.end_datetime} (CA)`;
+     if (rangePeriodEl) rangePeriodEl.textContent = `${payload.start_datetime} → ${payload.end_datetime} (CST)`;
    }
 
    function renderDispositionBySku(rows) {
@@ -1889,7 +1889,7 @@
      title.textContent = 'NV Disposition – SN List';
      
      let metricLabel = 'Total';
-     if (metric === 'waiting_igs') metricLabel = 'Waiting IGS';
+     if (metric === 'waiting_igs') metricLabel = 'Waiting FA';
      else if (metric === 'complete') metricLabel = 'Complete';
      else if (metric === 'trays_bp') metricLabel = 'Unique Trays in BP';
      else if (metric === 'all_pass_trays') metricLabel = 'All Pass Trays';
@@ -2233,7 +2233,7 @@
      }
      const name = file.original_name || 'bonepile_upload.xlsx';
      const ts = file.uploaded_at_ca_ms ? fmtDateTimeCAFromMs(file.uploaded_at_ca_ms) : 'unknown';
-     line.textContent = `${name} • uploaded ${ts} (CA)`;
+     line.textContent = `${name} • uploaded ${ts} (CST)`;
      
      // Compute summary: count ok/error sheets and total rows
      let okCount = 0, errCount = 0, totalRows = 0;
@@ -2748,7 +2748,7 @@
 
   function updateRangeNotes() {
     const p = getRangePayload();
-    const rangeText = `${p.start_datetime} → ${p.end_datetime} (CA)`;
+    const rangeText = `${p.start_datetime} → ${p.end_datetime} (CST)`;
     const set = (id, txt) => {
       const el = document.getElementById(id);
       if (el) el.textContent = txt;
@@ -3010,7 +3010,7 @@
 
      const title = metric ? `${metricLabel(metric)} • ${segmentLabel(segment || '')}` : 'SN List';
      document.getElementById('sn-modal-title').textContent = title;
-     document.getElementById('sn-modal-subtitle').textContent = `${payload.start_datetime} → ${payload.end_datetime} (CA) • ${data.count || 0} SN`;
+     document.getElementById('sn-modal-subtitle').textContent = `${payload.start_datetime} → ${payload.end_datetime} (CST) • ${data.count || 0} SN`;
      renderSnModalRows(data.rows || []);
      setLoading(false);
    }
@@ -3291,7 +3291,7 @@
         if (failData.error) throw new Error(failData.error);
         const title = `Test Flow • ${station}${sku ? (' • ' + sku) : ''}`;
         document.getElementById('sn-modal-title').textContent = title;
-        document.getElementById('sn-modal-subtitle').textContent = `${payload.start_datetime} → ${payload.end_datetime} (CA) • Pass: ${passData.count || 0} • Fail: ${failData.count || 0}`;
+        document.getElementById('sn-modal-subtitle').textContent = `${payload.start_datetime} → ${payload.end_datetime} (CST) • Pass: ${passData.count || 0} • Fail: ${failData.count || 0}`;
         renderTestFlowSnModal(passData.rows || [], failData.rows || []);
         setLoading(false);
       })

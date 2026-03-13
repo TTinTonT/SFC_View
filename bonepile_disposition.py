@@ -823,7 +823,7 @@ def compute_disposition_stats(aggregation: str = "daily", start_ca_ms: Optional[
         else:
             return d.strftime("%Y-%m-%d")
 
-    # Per SN, keep one row; tie-break by latest last mm/dd in nv_disposition
+    # Per SN, keep one row; tie-break: prefer rows with populated nv_disposition, then latest mm/dd date
     sn_latest: Dict[str, Dict[str, Any]] = {}
     for r in rows:
         rd = _row_dict(r)
@@ -833,22 +833,29 @@ def compute_disposition_stats(aggregation: str = "daily", start_ca_ms: Optional[
         ca_ms = rd.get("updated_at_ca_ms")
         nv_text = rd.get("nv_disposition")
         last_mmdd = _last_mmdd_only(nv_text) if nv_text else None
+        has_nv = bool((nv_text or "").strip())
         existing = sn_latest.get(sn)
         if existing is None:
-            sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+            sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd, "has_nv": has_nv}
             continue
         existing_ca = existing.get("updated_at_ca_ms") or 0
         if (ca_ms or 0) > existing_ca:
-            sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+            sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd, "has_nv": has_nv}
             continue
-        if (ca_ms or 0) == existing_ca and last_mmdd and existing.get("last_mmdd"):
-            try:
-                cur_d = date(year, last_mmdd[0], last_mmdd[1])
-                exist_d = date(year, existing["last_mmdd"][0], existing["last_mmdd"][1])
-                if cur_d > exist_d:
-                    sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
-            except (ValueError, TypeError):
-                pass
+        if (ca_ms or 0) == existing_ca:
+            # On tie: prefer a row that has nv_disposition populated over one that doesn't
+            if has_nv and not existing.get("has_nv"):
+                sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd, "has_nv": has_nv}
+                continue
+            # If both have nv_disposition, prefer the one with the later mm/dd date
+            if has_nv and existing.get("has_nv") and last_mmdd and existing.get("last_mmdd"):
+                try:
+                    cur_d = date(year, last_mmdd[0], last_mmdd[1])
+                    exist_d = date(year, existing["last_mmdd"][0], existing["last_mmdd"][1])
+                    if cur_d > exist_d:
+                        sn_latest[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd, "has_nv": has_nv}
+                except (ValueError, TypeError):
+                    pass
 
     # New logic: Only Status=FAIL & PIC=IGS. Waiting = igs empty or igs_date < nv_date; Complete = igs_date >= nv_date
     waiting_sns: Dict[str, Dict[str, Any]] = {}
@@ -858,7 +865,7 @@ def compute_disposition_stats(aggregation: str = "daily", start_ca_ms: Optional[
         status_val = _norm(rd.get("status"))
         
         # Consider any non-PASS status as a failure (e.g. FAIL, OLDERR, etc.)
-        if _is_pass_status(status_val) or _norm(rd.get("pic")) != "IGS":
+        if _is_pass_status(status_val) or _norm(rd.get("pic")) != "FA":
             continue
         mmdd_nv = _last_mmdd_only(rd.get("nv_disposition"))
         if mmdd_nv is None:
@@ -869,9 +876,7 @@ def compute_disposition_stats(aggregation: str = "daily", start_ca_ms: Optional[
                 nv_date = date(year + 1, mmdd_nv[0], mmdd_nv[1])
         except (ValueError, TypeError):
             continue
-        if start_d is not None and end_d is not None:
-            if not (start_d <= nv_date <= end_d):
-                continue
+        # No date range filter here: the summary always shows current state of ALL bonepile entries.
         sku = (rd.get("nvpn") or "").strip() or "Unknown"
         period_nv = _date_to_period(nv_date)
         mmdd_igs = _last_mmdd_only(rd.get("igs_action"))
@@ -1092,28 +1097,34 @@ def compute_disposition_sn_list(
         if not sn:
             continue
         ca_ms = rd.get("updated_at_ca_ms")
-        last_mmdd = _last_mmdd_only(rd.get("nv_disposition"))
+        nv_text = rd.get("nv_disposition")
+        last_mmdd = _last_mmdd_only(nv_text) if nv_text else None
+        has_nv = bool((nv_text or "").strip())
         existing = sn_data.get(sn)
         if existing is None:
-            sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+            sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd, "has_nv": has_nv}
             continue
         if (ca_ms or 0) > (existing.get("updated_at_ca_ms") or 0):
-            sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
+            sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd, "has_nv": has_nv}
             continue
-        if (ca_ms or 0) == (existing.get("updated_at_ca_ms") or 0) and last_mmdd and existing.get("last_mmdd"):
-            try:
-                cur_d = date(year, last_mmdd[0], last_mmdd[1])
-                exist_d = date(year, existing["last_mmdd"][0], existing["last_mmdd"][1])
-                if cur_d > exist_d:
-                    sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd}
-            except (ValueError, TypeError):
-                pass
+        if (ca_ms or 0) == (existing.get("updated_at_ca_ms") or 0):
+            if has_nv and not existing.get("has_nv"):
+                sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd, "has_nv": has_nv}
+                continue
+            if has_nv and existing.get("has_nv") and last_mmdd and existing.get("last_mmdd"):
+                try:
+                    cur_d = date(year, last_mmdd[0], last_mmdd[1])
+                    exist_d = date(year, existing["last_mmdd"][0], existing["last_mmdd"][1])
+                    if cur_d > exist_d:
+                        sn_data[sn] = {"row": r, "rd": rd, "updated_at_ca_ms": ca_ms, "last_mmdd": last_mmdd, "has_nv": has_nv}
+                except (ValueError, TypeError):
+                    pass
 
     out: List[Dict[str, Any]] = []
     for sn, data in sn_data.items():
         rd = data["rd"]
         status_val = _norm(rd.get("status"))
-        if _is_pass_status(status_val) or _norm(rd.get("pic")) != "IGS":
+        if _is_pass_status(status_val) or _norm(rd.get("pic")) != "FA":
             continue
         mmdd_nv = _last_mmdd_only(rd.get("nv_disposition"))
         if mmdd_nv is None:
@@ -1124,9 +1135,7 @@ def compute_disposition_sn_list(
                 nv_date = date(year + 1, mmdd_nv[0], mmdd_nv[1])
         except (ValueError, TypeError):
             continue
-        if start_d is not None and end_d is not None:
-            if not (start_d <= nv_date <= end_d):
-                continue
+        # No date range filter: always include all matching bonepile entries.
         row_sku = (rd.get("nvpn") or "").strip() or "Unknown"
         if sku and sku != "__TOTAL__" and row_sku != sku:
             continue

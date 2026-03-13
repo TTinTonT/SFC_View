@@ -29,7 +29,7 @@
     "RIN",
     "NVL"
   ],
-  "timezone": "America/Los_Angeles",
+  "timezone": "Asia/Shanghai",
   "extend_hours": 2,
   "top_k_errors_default": 5,
   "aggregation_default": "daily",
