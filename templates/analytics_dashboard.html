@@ -2708,7 +2708,7 @@
     }
     const stations = flow.stations;
     headRow.innerHTML =
-      `<th style="min-width: 100px;">TS</th><th style="min-width: 120px;">SKU</th>` +
+      `<th style="min-width: 120px;">SKU</th>` +
       stations.map(s => `<th>${s}</th>`).join('');
 
     const mkCell = ({sku, station, pass, fail}) => {
@@ -2727,7 +2727,6 @@
 
     const totalRow = `
       <tr>
-        <td class="font-bold">-</td>
         <td class="font-bold">TOTAL</td>
         ${stations.map(st => mkCell({sku: '', station: st, pass: flow.totals?.[st]?.pass ?? 0, fail: flow.totals?.[st]?.fail ?? 0})).join('')}
       </tr>
@@ -2736,7 +2735,6 @@
     const rowsHtml = (flow.rows || []).map(r => {
       return `
         <tr>
-          <td class="font-mono font-semibold">${r.ts}</td>
           <td class="font-mono font-semibold">${r.sku}</td>
           ${stations.map(st => mkCell({sku: r.sku, station: st, pass: r.stations?.[st]?.pass ?? 0, fail: r.stations?.[st]?.fail ?? 0})).join('')}
         </tr>

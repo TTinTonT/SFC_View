@@ -25,7 +25,16 @@ def run_fail_result_rows(
     ok, html = request_fail_result(user_start, user_end)
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
-    return parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+    rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
+
+    ssh_rows = []
+    try:
+        from sfc.log_parser import fetch_ssh_logs
+        ssh_rows = fetch_ssh_logs(user_start, user_end)
+    except Exception as e:
+        print(f"Warning: Failed to fetch SSH logs for CSV: {e}")
+
+    return rows + ssh_rows
 
 
 def run_analytics_query(
@@ -89,7 +98,16 @@ def run_error_stats(
     if not ok:
         raise RuntimeError("SFC API request failed (login or fail_result)")
     rows = parse_fail_result_html(html, user_start=user_start, user_end=user_end)
-    return compute_error_stats(rows, top_k=top_k)
+
+    ssh_rows = []
+    try:
+        from sfc.log_parser import fetch_ssh_logs
+        ssh_rows = fetch_ssh_logs(user_start, user_end)
+    except Exception as e:
+        print(f"Warning: Failed to fetch SSH logs for error stats: {e}")
+
+    combined_rows = rows + ssh_rows
+    return compute_error_stats(combined_rows, top_k=top_k)
 
 
 def get_error_stats_sn_list(

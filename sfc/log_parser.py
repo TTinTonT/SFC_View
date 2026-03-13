@@ -9,7 +9,7 @@ import paramiko
 from config.app_config import LOG_SERVER_IP, LOG_SERVER_USER, LOG_SERVER_PWD
 
 # Example log: IGFG_NA_675-24109-0000-T2B_2100926000111_P_RIN_20260311T082610Z.zip
-# Groups: (Prefix)_(Model)_(SN)_(P_or_F)_(Station)_(DateString).zip
+# Groups: (Model) (SN) (P/F) (Station) (DateTime)
 LOG_REGEX = re.compile(
     r"^[^_]+_[^_]+_([^_]+)_([^_]+)_(P|F)_([^_]+)_(\d{8}T\d{6}Z)\.zip$"
 )
@@ -75,13 +75,15 @@ def fetch_ssh_logs(user_start: datetime, user_end: datetime) -> List[dict]:
                     date_str = match.group(5)
                     
                     try:
-                        # Parse 20260311T082610Z
-                        test_time_dt = datetime.strptime(date_str, "%Y%m%dT%H%M%SZ")
+                        # Parse 20260311T082610Z as UTC
+                        test_time_utc = datetime.strptime(date_str, "%Y%m%dT%H%M%SZ")
+                        # Convert to CST (UTC+8) for comparison with user_start/user_end
+                        test_time_cst = test_time_utc + timedelta(hours=8)
                     except ValueError:
                         continue
                         
-                    # Filter perfectly to user range
-                    if not (user_start <= test_time_dt <= user_end):
+                    # Filter perfectly to user range (which are naive local datetimes)
+                    if not (user_start <= test_time_cst <= user_end):
                         continue
                         
                     result_str = "PASS" if pf_flag == "P" else "FAIL"
@@ -91,8 +93,8 @@ def fetch_ssh_logs(user_start: datetime, user_end: datetime) -> List[dict]:
                         "work_order": "UNKNOWN",
                         "part_number": model,
                         "station": station,
-                        "test_time": test_time_dt.strftime("%Y/%m/%d %H:%M:%S"),
-                        "test_time_dt": test_time_dt,
+                        "test_time": test_time_cst.strftime("%Y/%m/%d %H:%M:%S"),
+                        "test_time_dt": test_time_cst,
                         "result": result_str,
                         "error_code": "",
                         "failure_msg": "From SSH Logs" if result_str == "FAIL" else "",

@@ -857,7 +857,7 @@ def compute_disposition_stats(aggregation: str = "daily", start_ca_ms: Optional[
                 except (ValueError, TypeError):
                     pass
 
-    # New logic: Only Status=FAIL & PIC=IGS. Waiting = igs empty or igs_date < nv_date; Complete = igs_date >= nv_date
+    # New logic: Only Status=FAIL & PIC=FA. Waiting = fa/igs empty or fa/igs_date < nv_date; Complete = fa/igs_date >= nv_date
     waiting_sns: Dict[str, Dict[str, Any]] = {}
     complete_sns: Dict[str, Dict[str, Any]] = {}
     for sn, data in sn_latest.items():
