@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Pass station by part number; uses analytics_config pass_rules."""
 
+from datetime import datetime
 from typing import List
 
 from config.analytics_config import get_pass_rules
@@ -31,19 +32,22 @@ def get_pass_station_for_part_number(part_number: str) -> str:
 
 def is_sn_passed(rows_for_sn: List[dict]) -> bool:
     """
-    Return True if SN has at least one row with RESULT=PASS and station
-    matching the pass rule for that row's part_number.
+    Return True if the LATEST test (by test_time_dt) is PASS at the pass station.
+    - Latest test FAIL -> FAIL
+    - Latest test PASS but at wrong station (not pass rule for part) -> FAIL
+    - Latest test PASS at pass station -> PASS
     SFC uses result="PASS"/"FAIL" (not P/F).
     """
-    for r in rows_for_sn:
-        result = (r.get("result") or "").strip().upper()
-        if result != "PASS":
-            continue
-        station = (r.get("station") or "").strip().upper()
-        part_number = (r.get("part_number") or "").strip()
-        if not part_number or part_number.upper() == "UNKNOWN":
-            continue
-        pass_station = get_pass_station_for_part_number(part_number)
-        if station == pass_station:
-            return True
-    return False
+    if not rows_for_sn:
+        return False
+    latest = max(
+        rows_for_sn,
+        key=lambda r: r.get("test_time_dt") or datetime.min,
+    )
+    result = (latest.get("result") or "").strip().upper()
+    if result != "PASS":
+        return False
+    station = (latest.get("station") or "").strip().upper()
+    part_number = (latest.get("part_number") or "").strip()
+    pass_station = get_pass_station_for_part_number(part_number)
+    return station == pass_station
