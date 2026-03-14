@@ -450,17 +450,21 @@ def api_auth_login():
     success, err_msg, user = login_flow(username, password, ip)
     if not success:
         return jsonify({"ok": False, "error": err_msg}), 401
+    from fa_debug.auth import get_session_ttl_seconds
     conn = connect_auth_db()
     try:
         token = create_session(conn, user["id"])
+        ttl_sec = get_session_ttl_seconds(conn, user_id=user["id"])
     finally:
         conn.close()
     resp = jsonify({"ok": True, "redirect": "/debug"})
     secure = not FLASK_DEBUG
+    # Cookie max_age must match session TTL; unlimited => 1 year
+    cookie_max_age = ttl_sec if ttl_sec is not None else 365 * 24 * 60 * 60
     resp.set_cookie(
         "auth_token",
         token,
-        max_age=30 * 60,
+        max_age=cookie_max_age,
         httponly=True,
         samesite="Lax",
         secure=secure,

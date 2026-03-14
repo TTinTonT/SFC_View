@@ -394,7 +394,7 @@
       toolbar.appendChild(copyBtn);
       body.appendChild(toolbar);
       const ta = el('textarea', { className: 'notepad-textarea' });
-      ta.placeholder = 'Ghi chú, paste text...';
+      ta.placeholder = 'Note, paste text...';
       try { ta.value = localStorage.getItem(NOTEPAD_KEY) || ''; } catch (_) {}
       const saveNotepad = () => { try { localStorage.setItem(NOTEPAD_KEY, ta.value); } catch (_) {} };
       ta.addEventListener('input', () => {
