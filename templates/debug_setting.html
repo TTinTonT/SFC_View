@@ -77,7 +77,7 @@
   <div class="panel">
     <h2>Create user</h2>
     <div id="create-user-err" class="alert err" style="display: none;"></div>
-    <div class="form-row"><label>Username</label><input type="text" id="cu-username" placeholder="username"></div>
+    <div class="form-row"><label>Username</label><input type="text" id="cu-username" placeholder="username" style="text-transform: lowercase" oninput="this.value = this.value.toLowerCase()"></div>
     <div class="form-row"><label>Password</label><input type="password" id="cu-password" placeholder="password"></div>
     <div class="form-row"><label>Full name</label><input type="text" id="cu-full_name" placeholder="Full name"></div>
     <div class="form-row"><label>Department</label><select id="cu-department"><option value="TE">TE</option><option value="FA">FA</option><option value="OTHER">OTHER</option></select></div>

@@ -442,7 +442,7 @@ def api_auth_login():
     """Validate credentials, create session, set auth_token cookie, return JSON or redirect."""
     from flask import make_response
     ensure_auth_db()
-    username = (request.form.get("username") or request.json.get("username") if request.is_json else request.form.get("username") or "").strip()
+    username = (request.form.get("username") or request.json.get("username") if request.is_json else request.form.get("username") or "").strip().lower()
     password = (request.form.get("password") or request.json.get("password") if request.is_json else request.form.get("password") or "")
     if not username:
         return jsonify({"ok": False, "error": "Username required"}), 400
@@ -492,7 +492,7 @@ def api_auth_register():
     ensure_auth_db()
     data = request.get_json() or {}
     full_name = (data.get("full_name") or "").strip()
-    username = (data.get("username") or "").strip()
+    username = (data.get("username") or "").strip().lower()
     password = data.get("password") or ""
     department = (data.get("department") or "").strip().upper()
     employee_id = (data.get("employee_id") or "").strip()
@@ -559,10 +559,10 @@ def api_auth_change_password():
     user = get_current_user(request)
     if not user:
         return jsonify({"ok": False, "error": "Authentication required"}), 401
-    data = request.get_json() or {}
-    current = data.get("current_password") or ""
-    new_pw = data.get("new_password") or ""
-    confirm = data.get("new_password_confirm") or ""
+    data = request.get_json(silent=True) or {}
+    current = (data.get("current_password") or "").strip()
+    new_pw = (data.get("new_password") or "").strip()
+    confirm = (data.get("new_password_confirm") or "").strip()
     if not current or not new_pw:
         return jsonify({"ok": False, "error": "current_password and new_password required"}), 400
     if new_pw != confirm:
@@ -590,7 +590,7 @@ def api_auth_change_username():
     if not user:
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     data = request.get_json() or {}
-    new_username = (data.get("new_username") or "").strip()
+    new_username = (data.get("new_username") or "").strip().lower()
     if not new_username:
         return jsonify({"ok": False, "error": "new_username required"}), 400
     from fa_debug.auth_db import connect_auth_db
@@ -614,7 +614,7 @@ def api_auth_forgot_password():
     import string
     ensure_auth_db()
     data = request.get_json() or {}
-    username = (data.get("username") or "").strip()
+    username = (data.get("username") or "").strip().lower()
     if not username:
         return jsonify({"ok": False, "error": "Username or email required"}), 400
     conn = connect_auth_db()

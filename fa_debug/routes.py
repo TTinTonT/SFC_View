@@ -170,7 +170,7 @@ def api_jump_station_execute():
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next
         from sfis_tool.jump_route import get_station_order_and_next, check_jump_station as do_check_jump_station
-        from sfis_tool.repair_ok import get_group_info, jump_routing
+        from sfis_tool.repair_ok import get_group_info, jump_routing, get_jump_param_from_route
         conn = get_conn()
         try:
             row = get_station_and_next(conn, sn)
@@ -188,7 +188,10 @@ def api_jump_station_execute():
                     pass
             if check_jump_station and not do_check_jump_station(conn, target_group, sn):
                 return jsonify({"ok": False, "error": "CheckJumpStation: not allowed (kitting/assy)."})
-            info = get_group_info(conn, v_line, target_group)
+            # target_group from UI = desired destination (e.g. FLA). Convert to station-before (BAT)
+            # so jump lands at FLA instead of FLB (SFIS advances one step when given destination).
+            jump_param = get_jump_param_from_route(conn, sn, target_group)
+            info = get_group_info(conn, v_line, jump_param)
             if not info:
                 return jsonify({"ok": False, "error": "GetGroupInfo returned no target; cannot jump."})
             ok = jump_routing(
@@ -833,7 +836,7 @@ def api_setting_create_user():
     if _setting_admin() is None:
         return jsonify({"error": "Forbidden"}), 403
     data = request.get_json(silent=True) or {}
-    username = (data.get("username") or "").strip()
+    username = (data.get("username") or "").strip().lower()
     password = (data.get("password") or "").strip()
     full_name = (data.get("full_name") or "").strip()
     department = (data.get("department") or "").strip().upper()

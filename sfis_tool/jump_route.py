@@ -28,6 +28,33 @@ def get_route_list(conn, sn):
     return cols, rows
 
 
+def get_station_order_and_next(conn, sn):
+    """Return (order, current_group, next_group). order = list of GROUP_NAME in route sequence."""
+    cols, rows = get_route_list(conn, sn)
+    if not rows:
+        return [], None, None
+    order = []
+    for row in rows:
+        d = dict(zip(cols, row))
+        grp = (d.get("GROUP_NAME") or "").strip()
+        if grp:
+            order.append(grp)
+    wip_cols, wip_rows = get_wip(conn, sn)
+    current_group = None
+    next_group = None
+    if wip_rows:
+        wip = dict(zip(wip_cols, wip_rows[0]))
+        current_group = (wip.get("GROUP_NAME") or "").strip() or None
+        if current_group and order:
+            try:
+                idx = order.index(current_group)
+                if idx + 1 < len(order):
+                    next_group = order[idx + 1]
+            except ValueError:
+                pass
+    return order, current_group, next_group
+
+
 def check_jump_station(conn, target_group, sn):
     """CheckJumpStation (ASSY_VIP): True = cho phép, False = chặn."""
     cur = conn.cursor()
