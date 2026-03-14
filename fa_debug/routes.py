@@ -203,6 +203,53 @@ def api_kitting_table_config_update():
         return jsonify({"ok": False, "error": str(e)}), 502
 
 
+def _table_config_forward(endpoint):
+    """Proxy to external table_config API. Same logic as table_config_update."""
+    import requests
+    data = request.get_json(silent=True) or {}
+    select_data = data.get("selectData")
+    table_selected = data.get("tableSelected") or _TABLE_CONFIG_UPDATE_TABLE
+    if not select_data or not isinstance(select_data, dict):
+        return jsonify({"ok": False, "error": "selectData required"}), 400
+    if not TABLE_CONFIG_API_URL:
+        return jsonify({"ok": False, "error": "TABLE_CONFIG_API_URL not configured"}), 500
+    payload = {"selectData": select_data, "tableSelected": table_selected}
+    url = f"{TABLE_CONFIG_API_URL}/api/common/{endpoint}"
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if TABLE_CONFIG_COOKIE:
+        headers["Cookie"] = TABLE_CONFIG_COOKIE
+    try:
+        r = requests.post(url, json=payload, timeout=30, headers=headers)
+        if not r.ok:
+            return jsonify({"ok": False, "error": f"External API returned {r.status_code}"}), 502
+        try:
+            resp = r.json()
+        except ValueError:
+            text = (r.text or "").strip().lower()
+            if text == '"success"' or text == "success":
+                return jsonify({"ok": True})
+            return jsonify({"ok": False, "error": r.text or "Invalid response"}), 502
+        if resp is True or (isinstance(resp, dict) and resp.get("ok") is True):
+            return jsonify({"ok": True})
+        if isinstance(resp, str) and resp.lower() == "success":
+            return jsonify({"ok": True})
+        return jsonify({"ok": True, "raw": resp})
+    except requests.RequestException as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+
+
+@bp.route("/api/debug/kitting/table-config-insert", methods=["POST"])
+def api_kitting_table_config_insert():
+    """Proxy to external table_config_insert API."""
+    return _table_config_forward("table_config_insert")
+
+
+@bp.route("/api/debug/kitting/table-config-delete", methods=["POST"])
+def api_kitting_table_config_delete():
+    """Proxy to external table_config_delete API."""
+    return _table_config_forward("table_config_delete")
+
+
 # --- IT Jump (Jump Station) APIs ---
 _WIP_KEYS = ["SERIAL_NUMBER", "MO_NUMBER", "MODEL_NAME", "STATION_NAME", "LINE_NAME", "GROUP_NAME", "NEXT_STATION"]
 

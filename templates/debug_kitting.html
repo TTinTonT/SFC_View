@@ -69,10 +69,9 @@
         <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
       </div>
       <div class="flex gap-2 mt-2">
-        <button type="button" class="kitting-action-btn">Add</button>
         <button type="button" id="btn-edit" class="kitting-action-btn" disabled>Edit</button>
-        <button type="button" class="kitting-action-btn">Copy</button>
-        <button type="button" class="kitting-action-btn">Delete</button>
+        <button type="button" id="btn-copy" class="kitting-action-btn" disabled>Copy</button>
+        <button type="button" id="btn-delete" class="kitting-action-btn" disabled>Delete</button>
       </div>
       <p id="sn-error" class="text-sm msg-error mt-1 hidden"></p>
     </div>
@@ -106,7 +105,7 @@
 
   <div id="modal-edit" class="modal-overlay">
     <div class="modal-box">
-      <h3>Edit</h3>
+      <h3 id="modal-edit-title">Edit</h3>
       <div id="modal-edit-form" class="modal-grid"></div>
       <div class="modal-buttons">
         <button type="button" id="modal-btn-cancel" class="kitting-action-btn btn-cancel">Cancel</button>
@@ -130,6 +129,7 @@
   var childrenByNum = {};
   var selectedRowNum = null;
   var newVendorByNum = {};
+  var modalMode = 'edit';
 
   var EDIT_MODAL_FIELDS = ['ROWID','SERIAL_NUMBER','MO_NUMBER','MODEL_NAME','REV','FATHER_SN','LINE_NAME','IN_STATION_TIME','SUB_MODEL_NAME','SUB_REV','VENDOR_SN','CUST_PN','CUST_REV','ASSY_ORD','ASSY_FLAG','ASSY_QTY','EMP_NO','GROUP_NAME','CUST_NO','LEVEL_GRADE','LEVEL_NO','PPID_MODEL','SUB_PPID','SLOT','PPID_HEADER','REV_FLAG','DEBUG_FLAG','ASSY_SEQ','DATE_CODE','REFERENCE_TIME','STACK'];
 
@@ -330,6 +330,8 @@
       treeSection.classList.remove('hidden');
       renderTree();
       document.getElementById('btn-edit').disabled = true;
+      document.getElementById('btn-copy').disabled = true;
+      document.getElementById('btn-delete').disabled = true;
       showMsg(true, 'Loaded ' + sessionData.length + ' rows.');
     }).catch(function () {
       btnSearch.disabled = false;
@@ -360,6 +362,8 @@
       selectedRowNum = parseInt(tr.getAttribute('data-num'), 10);
       renderTree();
       document.getElementById('btn-edit').disabled = false;
+      document.getElementById('btn-copy').disabled = false;
+      document.getElementById('btn-delete').disabled = false;
     }
   });
 
@@ -512,8 +516,26 @@
 
   function openEditModal() {
     if (!selectedRowNum) return;
+    modalMode = 'edit';
     var node = treeNodes.find(function (n) { return n.num === selectedRowNum; });
     if (!node) return;
+    var titleEl = document.getElementById('modal-edit-title');
+    if (titleEl) titleEl.textContent = 'Edit';
+    var row = node.row;
+    EDIT_MODAL_FIELDS.forEach(function (key) {
+      var el = document.getElementById('edit-' + key);
+      if (el) el.value = (row[key] != null ? row[key] : '') + '';
+    });
+    document.getElementById('modal-edit').classList.add('show');
+  }
+
+  function openCopyModal() {
+    if (!selectedRowNum) return;
+    modalMode = 'copy';
+    var node = treeNodes.find(function (n) { return n.num === selectedRowNum; });
+    if (!node) return;
+    var titleEl = document.getElementById('modal-edit-title');
+    if (titleEl) titleEl.textContent = 'Copy row';
     var row = node.row;
     EDIT_MODAL_FIELDS.forEach(function (key) {
       var el = document.getElementById('edit-' + key);
@@ -524,9 +546,31 @@
 
   function closeEditModal() {
     document.getElementById('modal-edit').classList.remove('show');
+    var titleEl = document.getElementById('modal-edit-title');
+    if (titleEl) titleEl.textContent = 'Edit';
+    modalMode = 'edit';
   }
 
   document.getElementById('btn-edit').addEventListener('click', openEditModal);
+  document.getElementById('btn-copy').addEventListener('click', openCopyModal);
+
+  document.getElementById('btn-delete').addEventListener('click', function () {
+    if (!selectedRowNum) return;
+    var node = treeNodes.find(function (n) { return n.num === selectedRowNum; });
+    if (!node) return;
+    if (!confirm('Delete row này?')) return;
+    var tableSelected = 'select a.rowid,a.* from sfism4.r_assy_component_T a where a.assy_flag =\'Y\'';
+    apiPost('table-config-delete', { selectData: node.row, tableSelected: tableSelected }).then(function (res) {
+      if (res && res.ok) {
+        showMsg(true, 'Đã delete row số ' + selectedRowNum);
+        doSearch();
+      } else {
+        showMsg(false, res && res.error ? res.error : 'Delete failed');
+      }
+    }).catch(function () {
+      showMsg(false, 'Delete failed');
+    });
+  });
 
   document.getElementById('modal-btn-cancel').addEventListener('click', closeEditModal);
 
@@ -543,30 +587,34 @@
       selectData[key] = (key === 'ASSY_ORD' || key === 'ASSY_QTY' || key === 'LEVEL_NO' || key === 'ASSY_SEQ') && v !== '' ? (parseFloat(v) || 0) : v;
     });
     var btn = document.getElementById('modal-btn-save');
+    var tableSelected = 'select a.rowid,a.* from sfism4.r_assy_component_T a where a.assy_flag =\'Y\'';
     btn.disabled = true;
-    apiPost('table-config-update', {
-      selectData: selectData,
-      tableSelected: 'select a.rowid,a.* from sfism4.r_assy_component_T a where a.assy_flag =\'Y\''
-    }).then(function (res) {
+    var apiPath = modalMode === 'copy' ? 'table-config-insert' : 'table-config-update';
+    apiPost(apiPath, { selectData: selectData, tableSelected: tableSelected }).then(function (res) {
       btn.disabled = false;
       if (res && res.ok) {
         closeEditModal();
-        showSuccessBanner();
-        var idx = sessionData.findIndex(function (r) { return (r.ROWID || '') === (orig.ROWID || ''); });
-        if (idx >= 0) {
-          Object.keys(selectData).forEach(function (k) { sessionData[idx][k] = selectData[k]; });
-          treeNodes = buildTree(sessionData);
-          childrenByNum = {};
-          treeNodes.forEach(function (n) {
-            if (n.father_sn) {
-              var p = treeNodes.find(function (x) { return x.vendor_sn === n.father_sn; });
-              if (p) {
-                if (!childrenByNum[p.num]) childrenByNum[p.num] = [];
-                childrenByNum[p.num].push(n);
+        if (modalMode === 'copy') {
+          showMsg(true, 'Đã add row số ' + selectedRowNum);
+          doSearch();
+        } else {
+          showSuccessBanner();
+          var idx = sessionData.findIndex(function (r) { return (r.ROWID || '') === (orig.ROWID || ''); });
+          if (idx >= 0) {
+            Object.keys(selectData).forEach(function (k) { sessionData[idx][k] = selectData[k]; });
+            treeNodes = buildTree(sessionData);
+            childrenByNum = {};
+            treeNodes.forEach(function (n) {
+              if (n.father_sn) {
+                var p = treeNodes.find(function (x) { return x.vendor_sn === n.father_sn; });
+                if (p) {
+                  if (!childrenByNum[p.num]) childrenByNum[p.num] = [];
+                  childrenByNum[p.num].push(n);
+                }
               }
-            }
-          });
-          renderTree();
+            });
+            renderTree();
+          }
         }
       } else {
         showMsg(false, res && res.error ? res.error : 'Save failed');
