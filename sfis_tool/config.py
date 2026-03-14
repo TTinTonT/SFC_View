@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 Cấu hình chung: DB, Reason codes, Repair actions, Duty types.
-Sửa file này khi cần đổi DSN, user, password, Oracle client path.
+Sửa file này khi cần đổi DSN, user, password.
+ORACLE_CLIENT_DIR: auto từ ~/Downloads/instantclient_23_0 (mỗi user một path).
 """
+import os
 
 # --- Database (Oracle) ---
 CONN_USER = "sfis1"
 CONN_PASSWORD = "sfis1"
 CONN_DSN = "10.16.137.112:1526/SJSFC2DB"
-ORACLE_CLIENT_DIR = r"C:\Users\FAswing\Downloads\instantclient_23_0"
+ORACLE_CLIENT_DIR = os.path.join(os.path.expanduser("~"), "Downloads", "instantclient_23_0")
 
 # --- Reason codes: (code, display_label, reason_desc) ---
 REASON_CODES = [
