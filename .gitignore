@@ -12,7 +12,8 @@ env/
 debug-*.log
 
 # Cache & data
-analytics_cache/
+analytics_cache/   # debug auth.db, analytics.db, repair cache
+auth.db            # debug page login DB (if outside analytics_cache)
 *.db
 *.xlsx
 

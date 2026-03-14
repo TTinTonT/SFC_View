@@ -128,13 +128,24 @@ def in_allowed_time_window(user_row: Any) -> bool:
     now = datetime.now().time()
     try:
         if start:
-            s = datetime.strptime(start, "%H:%M").time()
-            if now < s:
-                return False
+            s = datetime.strptime(start.replace(" ", ""), "%H:%M").time()
+        else:
+            s = None
         if end:
-            e = datetime.strptime(end, "%H:%M").time()
-            if now > e:
-                return False
+            e = datetime.strptime(end.replace(" ", ""), "%H:%M").time()
+        else:
+            e = None
+        if s is not None and e is not None:
+            if e <= s:
+                # Window spans midnight (e.g. 15:00–00:00): in window iff now >= start OR now <= end
+                return now >= s or now <= e
+            else:
+                # Normal window: in window iff start <= now <= end
+                return now >= s and now <= e
+        if s is not None and now < s:
+            return False
+        if e is not None and now > e:
+            return False
     except Exception:
         return True
     return True
