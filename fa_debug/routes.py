@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, redirect, render_template, request
 
 from analytics.service import run_analytics_query
-from config.app_config import ANALYTICS_CACHE_DIR
+from config.app_config import ANALYTICS_CACHE_DIR, TABLE_CONFIG_API_URL, TABLE_CONFIG_COOKIE
 from config.debug_config import LOOKBACK_HOURS, POLL_INTERVAL_SEC
 from fa_debug.auth import get_current_user
 from fa_debug.logic import prepare_debug_rows
@@ -108,6 +108,99 @@ def debug_repair():
 def debug_jump_station():
     """IT Jump page: move station flow UI."""
     return render_template("debug_jump_station.html", current_user=getattr(request, "current_user", None))
+
+
+@bp.route("/debug/kitting")
+def debug_kitting():
+    """IT Kitting page: assy tree from external table_config API."""
+    return render_template("debug_kitting.html", current_user=getattr(request, "current_user", None))
+
+
+# --- IT Kitting API (proxy to external table_config_search_data) ---
+_TABLE_CONFIG_COLUMNS2_KEYS = [
+    "ROWID", "SERIAL_NUMBER", "MO_NUMBER", "MODEL_NAME", "REV", "FATHER_SN", "LINE_NAME", "IN_STATION_TIME",
+    "SUB_MODEL_NAME", "SUB_REV", "VENDOR_SN", "CUST_PN", "CUST_REV", "ASSY_ORD", "ASSY_FLAG", "ASSY_QTY",
+    "EMP_NO", "GROUP_NAME", "CUST_NO", "PRODUCT_TYPE", "LEVEL_GRADE", "PLANT_ID", "LEVEL_NO", "PPID_MODEL",
+    "SUB_PPID_MODEL", "SUB_PPID", "PPID", "SLOT", "PPID_HEADER", "FACTORY_ID", "SUB_PPID_REV", "PO_LINE",
+    "PO", "REV_FLAG", "DEBUG_FLAG", "ASSY_SEQ", "DATE_CODE", "REFERENCE_TIME", "STACK",
+]
+
+
+@bp.route("/api/debug/kitting/assy-data", methods=["GET"])
+def api_kitting_assy_data():
+    """Proxy to external table_config_search_data API. Returns rows for assy tree."""
+    import requests
+    sn = (request.args.get("sn") or "").strip().upper()
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    if not TABLE_CONFIG_API_URL:
+        return jsonify({"ok": False, "error": "TABLE_CONFIG_API_URL not configured"}), 500
+    columns2 = {k: "" for k in _TABLE_CONFIG_COLUMNS2_KEYS}
+    columns2["SERIAL_NUMBER"] = sn
+    columns2["IN_STATION_TIME"] = []
+    columns2["REFERENCE_TIME"] = []
+    payload = {
+        "columns2": columns2,
+        "tableSelected": "select a.rowid,a.* from sfism4.r_assy_component_t a where a.assy_flag ='Y'",
+    }
+    url = f"{TABLE_CONFIG_API_URL}/api/common/table_config_search_data"
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if TABLE_CONFIG_COOKIE:
+        headers["Cookie"] = TABLE_CONFIG_COOKIE
+    try:
+        r = requests.post(url, json=payload, timeout=30, headers=headers)
+        if not r.ok:
+            return jsonify({"ok": False, "error": f"External API returned {r.status_code}"}), 502
+        try:
+            data = r.json()
+        except ValueError as je:
+            ct = r.headers.get("Content-Type", "")
+            hint = " (API may require auth; set TABLE_CONFIG_COOKIE from browser)" if "text/html" in ct else ""
+            return jsonify({"ok": False, "error": f"External API returned invalid JSON{hint}"}), 502
+        if isinstance(data, list):
+            return jsonify({"ok": True, "rows": data})
+        return jsonify({"ok": False, "error": "Invalid response format"}), 502
+    except requests.RequestException as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+
+
+_TABLE_CONFIG_UPDATE_TABLE = "select a.rowid,a.* from sfism4.r_assy_component_T a where a.assy_flag ='Y'"
+
+
+@bp.route("/api/debug/kitting/table-config-update", methods=["POST"])
+def api_kitting_table_config_update():
+    """Proxy to external table_config_update API. Accepts selectData + tableSelected, forwards with Cookie."""
+    import requests
+    data = request.get_json(silent=True) or {}
+    select_data = data.get("selectData")
+    table_selected = data.get("tableSelected") or _TABLE_CONFIG_UPDATE_TABLE
+    if not select_data or not isinstance(select_data, dict):
+        return jsonify({"ok": False, "error": "selectData required"}), 400
+    if not TABLE_CONFIG_API_URL:
+        return jsonify({"ok": False, "error": "TABLE_CONFIG_API_URL not configured"}), 500
+    payload = {"selectData": select_data, "tableSelected": table_selected}
+    url = f"{TABLE_CONFIG_API_URL}/api/common/table_config_update"
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if TABLE_CONFIG_COOKIE:
+        headers["Cookie"] = TABLE_CONFIG_COOKIE
+    try:
+        r = requests.post(url, json=payload, timeout=30, headers=headers)
+        if not r.ok:
+            return jsonify({"ok": False, "error": f"External API returned {r.status_code}"}), 502
+        try:
+            resp = r.json()
+        except ValueError:
+            text = (r.text or "").strip().lower()
+            if text == '"success"' or text == "success":
+                return jsonify({"ok": True})
+            return jsonify({"ok": False, "error": r.text or "Invalid response"}), 502
+        if resp is True or (isinstance(resp, dict) and resp.get("ok") is True):
+            return jsonify({"ok": True})
+        if isinstance(resp, str) and resp.lower() == "success":
+            return jsonify({"ok": True})
+        return jsonify({"ok": True, "raw": resp})
+    except requests.RequestException as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
 
 
 # --- IT Jump (Jump Station) APIs ---

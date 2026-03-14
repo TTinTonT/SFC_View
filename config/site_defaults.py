@@ -60,6 +60,9 @@ DEFAULT = {
     "ROOM8_SSH_PASS": "root",
     "ROOM8_SCRIPT_PATH": "/root/TIN/scan_tray_bmc_arp_ssh.sh",
     "ROOM8_STATE_DIR": "/root/TIN/scan_state",
+    # Table config (IT Kitting proxy)
+    "TABLE_CONFIG_API_URL": "http://10.16.137.110:81",
+    "TABLE_CONFIG_COOKIE": "__RequestVerificationToken=x1HVWw4XHu2J-MOi2YdeFFCdxtE1cyXP0MpMiZxXaWDkZhI2H3-o-0omkiut66yo8j3gfvCI82f0aaxQ7DjNzeX7hRZ9_NKmTfFoNCPbJdE1; ASP.NET_SessionId=vfqjvf4snhhoc1tgptzkbzic; .AspNet.ApplicationCookie=G9FNtsRNFyjjdtGMvgrvEUSht_YxPX5ok6pPaMW1MUgfYW7NaWANUExzePekBOQhDA4tzbnwiQ8SlUPS6bD6LmuSCsdHxQmVjLDD0bm_Ht4RljAxG5uyffOgxiDQpv6Nq1oP6iaegAsNbcU2eC3VQ0dgbii8lahNtW8kCcu8S096GBDk0qWa_g-T4QNWTGwcXH-fTkgkm8k6PHM9qoytNhgQRH5KoIRB1ot7MWyeWMl2I2Ws4zOj1A9OOvnJQG72XAXP5Y8jk8J_PeZ-rRGJYQoaQjJyiGWTpJmup46c9PGsuYSnOSnZP4hxdbhvcyzhczk3SSt4tfH50bZGUgJOuw; JSESSIONID=913A8EF395179BEB13454B2C88C86089",  # expires; use env TABLE_CONFIG_COOKIE to override
     # Analytics
     "timezone": "America/Los_Angeles",
     # Auth (debug area): SMTP send-only, session TTL

@@ -50,3 +50,7 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", get_default("SMTP_PORT") or "587"))
 SMTP_USER = os.environ.get("SMTP_USER", get_default("SMTP_USER") or "")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", get_default("SMTP_PASSWORD") or "")
 SMTP_USE_TLS = (os.environ.get("SMTP_USE_TLS", get_default("SMTP_USE_TLS") or "true")).lower() in ("1", "true", "yes")
+
+# Table config (IT Kitting external API)
+TABLE_CONFIG_API_URL = (os.environ.get("TABLE_CONFIG_API_URL") or get_default("TABLE_CONFIG_API_URL") or "http://10.16.137.110:81").rstrip("/")
+TABLE_CONFIG_COOKIE = (os.environ.get("TABLE_CONFIG_COOKIE") or get_default("TABLE_CONFIG_COOKIE") or "").strip()
