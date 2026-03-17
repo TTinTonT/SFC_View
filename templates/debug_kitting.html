@@ -33,6 +33,10 @@
   .tree-row-selected { background: #fef08a; }
   .tree-row-required { background: #fef3c7; }
   .tree-row-clickable { cursor: pointer; }
+  .tree-copy-cell { white-space: nowrap; }
+  .tree-copy-cell span { display: inline; }
+  .tree-copy-btn { padding: 0.15rem 0.3rem; font-size: 0.7rem; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); cursor: pointer; margin-left: 0.25rem; }
+  .tree-copy-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100; }
   .modal-overlay.show { display: flex; }
   .modal-box { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 560px; width: 90%; max-height: 90vh; overflow-y: auto; }
@@ -265,14 +269,16 @@
       var rev = node.row.REV || node.row.SUB_REV || '';
       var selClass = (selectedRowNum === node.num) ? ' tree-row-selected' : '';
       var reqClass = getRequiredHighlightSet().has(node.num) ? ' tree-row-required' : '';
+      var esc = function (s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+      var copyBtn = function (text) { return '<button type="button" class="tree-copy-btn" data-copy="' + esc(text) + '" title="Copy">Copy</button>'; };
       return '<tr data-num="' + node.num + '" class="tree-row-clickable' + selClass + reqClass + '">' +
         '<td class="tree-td-num py-1 pr-2" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + node.num + '</td>' +
-        '<td class="py-1 pr-2">' + sn + '</td>' +
-        '<td class="py-1 pr-2">' + fatherSn + '</td>' +
-        '<td class="py-1 pr-2">' + vendorSn + '</td>' +
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + esc(sn) + '</span>' + copyBtn(sn) + '</td>' +
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + esc(fatherSn) + '</span>' + copyBtn(fatherSn) + '</td>' +
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + esc(vendorSn) + '</span>' + copyBtn(vendorSn) + '</td>' +
         '<td class="py-1 pr-2"><textarea class="tree-input" data-num="' + node.num + '" rows="1" placeholder=""></textarea></td>' +
-        '<td class="py-1 pr-2">' + subModel + '</td>' +
-        '<td class="py-1">' + rev + '</td></tr>';
+        '<td class="py-1 pr-2">' + esc(subModel) + '</td>' +
+        '<td class="py-1">' + esc(rev) + '</td></tr>';
     }).filter(Boolean).join('');
 
     treeTbody.querySelectorAll('.tree-input').forEach(function (ta) {
@@ -348,6 +354,28 @@
   });
 
   treeSection.addEventListener('click', function (e) {
+    var copyBtn = e.target.closest('.tree-copy-btn');
+    if (copyBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      var text = copyBtn.getAttribute('data-copy') || '';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { showMsg(true, 'Copied'); }, function () { showMsg(false, 'Copy failed'); });
+      } else {
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          showMsg(true, 'Copied');
+        } catch (err) { showMsg(false, 'Copy failed'); }
+      }
+      return;
+    }
     var tg = e.target.closest('.tree-toggle[data-num]');
     if (tg) {
       e.preventDefault();
@@ -358,7 +386,7 @@
       return;
     }
     var tr = e.target.closest('tr[data-num]');
-    if (tr && !e.target.closest('.tree-input')) {
+    if (tr && !e.target.closest('.tree-input') && !e.target.closest('.tree-copy-btn')) {
       selectedRowNum = parseInt(tr.getAttribute('data-num'), 10);
       renderTree();
       document.getElementById('btn-edit').disabled = false;
@@ -436,6 +464,17 @@
         }
         swapPairs.push({ R: node, S: S, newVendorR: newV, newVendorS: oldV });
       }
+    }
+    for (var oldV in oldToNew) {
+      var newV = oldToNew[oldV];
+      treeNodes.forEach(function (child) {
+        if ((child.father_sn || '') !== oldV) return;
+        var already = updates.some(function (u) { return u.node.num === child.num; });
+        if (already) return;
+        updates.push({
+          node: child, vendorSn: child.vendor_sn || '', fatherSn: newV, empNo: 'T81047'
+        });
+      });
     }
     for (var i = 0; i < swapPairs.length; i++) {
       var pair = swapPairs[i];
