@@ -30,6 +30,7 @@
   .tree-toggle:hover { color: var(--color-primary); }
   .tree-hbar { position: absolute; top: 50%; height: 2px; background: var(--color-border); display: block; }
   .tree-input { width: 100%; min-width: 12rem; min-height: 2rem; padding: 0.35rem 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); font: inherit; resize: none; overflow: hidden; field-sizing: content; }
+  .filter-highlight { background-color: #22c55e; color: #fff; border-radius: 2px; padding: 0 1px; }
   .tree-row-selected { background: #fef08a; }
   .tree-row-required { background: #fef3c7; }
   .tree-row-clickable { cursor: pointer; }
@@ -83,6 +84,7 @@
     <div id="tree-section" class="hidden overflow-x-auto w-full">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <p class="text-sm font-medium mb-0">Assy tree</p>
+        <input type="text" id="filter-input" class="flex-1 min-w-[12rem] max-w-xs px-2 py-1 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Filter (highlight match)...">
         <button type="button" id="tree-expand-all" class="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]">Expand all</button>
         <button type="button" id="tree-collapse-all" class="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]">Collapse all</button>
         <span class="text-sm font-medium mx-2">New Vendor SN</span>
@@ -134,6 +136,30 @@
   var selectedRowNum = null;
   var newVendorByNum = {};
   var modalMode = 'edit';
+  var filterText = '';
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    var t = String(s);
+    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function highlightFilter(text, filter) {
+    if (!filter || !text) return escapeHtml(text);
+    var s = String(text);
+    var f = String(filter).trim();
+    if (!f) return escapeHtml(s);
+    var lower = s.toLowerCase();
+    var flow = f.toLowerCase();
+    var out = '';
+    var pos = 0;
+    var idx;
+    while ((idx = lower.indexOf(flow, pos)) !== -1) {
+      out += escapeHtml(s.substring(pos, idx)) + '<span class="filter-highlight">' + escapeHtml(s.substring(idx, idx + flow.length)) + '</span>';
+      pos = idx + flow.length;
+    }
+    out += escapeHtml(s.substring(pos));
+    return out;
+  }
 
   var EDIT_MODAL_FIELDS = ['ROWID','SERIAL_NUMBER','MO_NUMBER','MODEL_NAME','REV','FATHER_SN','LINE_NAME','IN_STATION_TIME','SUB_MODEL_NAME','SUB_REV','VENDOR_SN','CUST_PN','CUST_REV','ASSY_ORD','ASSY_FLAG','ASSY_QTY','EMP_NO','GROUP_NAME','CUST_NO','LEVEL_GRADE','LEVEL_NO','PPID_MODEL','SUB_PPID','SLOT','PPID_HEADER','REV_FLAG','DEBUG_FLAG','ASSY_SEQ','DATE_CODE','REFERENCE_TIME','STACK'];
 
@@ -272,13 +298,13 @@
       var esc = function (s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
       var copyBtn = function (text) { return '<button type="button" class="tree-copy-btn" data-copy="' + esc(text) + '" title="Copy">Copy</button>'; };
       return '<tr data-num="' + node.num + '" class="tree-row-clickable' + selClass + reqClass + '">' +
-        '<td class="tree-td-num py-1 pr-2" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + node.num + '</td>' +
-        '<td class="py-1 pr-2 tree-copy-cell"><span>' + esc(sn) + '</span>' + copyBtn(sn) + '</td>' +
-        '<td class="py-1 pr-2 tree-copy-cell"><span>' + esc(fatherSn) + '</span>' + copyBtn(fatherSn) + '</td>' +
-        '<td class="py-1 pr-2 tree-copy-cell"><span>' + esc(vendorSn) + '</span>' + copyBtn(vendorSn) + '</td>' +
+        '<td class="tree-td-num py-1 pr-2" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + highlightFilter(node.num, filterText) + '</td>' +
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(sn, filterText) + '</span>' + copyBtn(sn) + '</td>' +
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(fatherSn, filterText) + '</span>' + copyBtn(fatherSn) + '</td>' +
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(vendorSn, filterText) + '</span>' + copyBtn(vendorSn) + '</td>' +
         '<td class="py-1 pr-2"><textarea class="tree-input" data-num="' + node.num + '" rows="1" placeholder=""></textarea></td>' +
-        '<td class="py-1 pr-2">' + esc(subModel) + '</td>' +
-        '<td class="py-1">' + esc(rev) + '</td></tr>';
+        '<td class="py-1 pr-2">' + highlightFilter(subModel, filterText) + '</td>' +
+        '<td class="py-1">' + highlightFilter(rev, filterText) + '</td></tr>';
     }).filter(Boolean).join('');
 
     treeTbody.querySelectorAll('.tree-input').forEach(function (ta) {
@@ -394,6 +420,18 @@
       document.getElementById('btn-delete').disabled = false;
     }
   });
+
+  var filterInputEl = document.getElementById('filter-input');
+  if (filterInputEl) {
+    filterInputEl.addEventListener('input', function () {
+      filterText = (filterInputEl.value || '').trim();
+      renderTree();
+    });
+    filterInputEl.addEventListener('keyup', function () {
+      filterText = (filterInputEl.value || '').trim();
+      renderTree();
+    });
+  }
 
   document.getElementById('tree-expand-all').addEventListener('click', function () {
     collapsedSet.clear();

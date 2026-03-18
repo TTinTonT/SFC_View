@@ -38,6 +38,7 @@
   .tree-new-sn-input { min-width: 28ch; width: 28ch; max-width: 80ch; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); font: inherit; box-sizing: border-box; font-size: 0.9375rem; }
   .remark-block { max-width: 100%; }
   .remark-textarea { width: 100%; min-width: 20rem; max-width: 42rem; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); font: inherit; font-size: 0.9375rem; resize: vertical; min-height: 4.5rem; }
+  .filter-highlight { background-color: #22c55e; color: #fff; border-radius: 2px; padding: 0 1px; }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
   .modal-overlay.hidden { display: none; }
   .modal-box { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 28rem; width: 90%; }
@@ -95,6 +96,7 @@
     <div id="tree-section" class="hidden mb-4 overflow-x-auto w-full">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <p class="text-sm font-medium mb-0">Vendor SN tree (optional kitting: fill New SN)</p>
+        <input type="text" id="filter-input" class="flex-1 min-w-[12rem] max-w-xs px-2 py-1 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Filter (highlight match)...">
         <button type="button" id="tree-expand-all" class="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]">Expand all</button>
         <button type="button" id="tree-collapse-all" class="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]">Collapse all</button>
       </div>
@@ -154,6 +156,30 @@
   var childrenByNum = {};
   var collapsedSet = new Set();
   var savedInputValues = {};
+  var filterText = '';
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    var t = String(s);
+    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function highlightFilter(text, filter) {
+    if (!filter || !text) return escapeHtml(text);
+    var s = String(text);
+    var f = String(filter).trim();
+    if (!f) return escapeHtml(s);
+    var lower = s.toLowerCase();
+    var flow = f.toLowerCase();
+    var out = '';
+    var pos = 0;
+    var idx;
+    while ((idx = lower.indexOf(flow, pos)) !== -1) {
+      out += escapeHtml(s.substring(pos, idx)) + '<span class="filter-highlight">' + escapeHtml(s.substring(idx, idx + flow.length)) + '</span>';
+      pos = idx + flow.length;
+    }
+    out += escapeHtml(s.substring(pos));
+    return out;
+  }
 
   function getCookie(name) {
     const v = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[^$.*+?()[{}|\\^]/g, '\\$&') + '=([^;]*)'));
@@ -307,9 +333,9 @@
         : '<span class="tree-toggle" style="visibility:hidden">&#9660;</span>';
       var rowClass = node.assy_flag === 'N' ? ' tree-row-flag-n' : '';
       return '<tr class="' + rowClass + '" data-num="' + node.num + '" data-vendor-sn="' + (node.vendor_sn || '') + '" data-father-sn="' + (node.father_sn != null ? node.father_sn : '') + '">' +
-        '<td class="' + numCellClass + '" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + node.num + '</td>' +
-        '<td class="py-1 pr-2">' + (node.vendor_sn || '') + '</td>' +
-        '<td class="py-1 pr-2">' + desc + '</td>' +
+        '<td class="' + numCellClass + '" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + highlightFilter(node.num, filterText) + '</td>' +
+        '<td class="py-1 pr-2">' + highlightFilter(node.vendor_sn || '', filterText) + '</td>' +
+        '<td class="py-1 pr-2">' + highlightFilter(desc, filterText) + '</td>' +
         '<td class="py-1"><input type="text" class="tree-new-sn tree-new-sn-input" data-num="' + node.num + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '" placeholder="New SN"></td>' +
         '</tr>';
     }).join('');
@@ -333,6 +359,18 @@
     else collapsedSet.add(num);
     renderTree();
   }
+  var filterInput = document.getElementById('filter-input');
+  if (filterInput) {
+    filterInput.addEventListener('input', function () {
+      filterText = (filterInput.value || '').trim();
+      renderTree();
+    });
+    filterInput.addEventListener('keyup', function () {
+      filterText = (filterInput.value || '').trim();
+      renderTree();
+    });
+  }
+
   treeSection.addEventListener('click', function (e) {
     var tg = e.target.closest('.tree-toggle[data-num]');
     if (tg) { e.preventDefault(); onTreeToggle(tg.getAttribute('data-num')); }
