@@ -10,6 +10,14 @@ from .sql_queries import (
     KITTING_INSERT_SELECT,
 )
 
+DEPTH_LIMIT = 5
+MAX_TREE_NODES = 200
+
+
+def _is_config_vendor(vendor_sn):
+    s = str(vendor_sn or "").strip().upper()
+    return bool(s.startswith("CONFIG") and s[6:].isdigit())
+
 
 def fetch_assy_tree(conn, sn, assy_flag=None):
     """Lấy row assy cho SN theo query chuẩn UI. Trả về (cols, rows)."""
@@ -125,13 +133,26 @@ def build_numbered_tree_preserve_order(cols, rows):
         if pnk is not None:
             children_by_key.setdefault(pnk, []).append(nk)
 
+    if len(rows_in_order) > MAX_TREE_NODES:
+        raise ValueError(f"Tree has too many nodes ({len(rows_in_order)}). Max allowed: {MAX_TREE_NODES}.")
+
     depth_cache = {}
 
-    def get_depth(node_key):
+    def get_depth(node_key, stack=None):
+        stack = stack or set()
         if node_key in depth_cache:
             return depth_cache[node_key]
+        if node_key in stack:
+            raise ValueError(f"Cycle detected at node {node_key[1]}. Please contact IT to fix data.")
+        stack.add(node_key)
         pnk = parent_of(node_key)
-        depth = 0 if pnk is None else 1 + get_depth(pnk)
+        depth = 0 if pnk is None else 1 + get_depth(pnk, stack)
+        stack.discard(node_key)
+        if depth > DEPTH_LIMIT:
+            raise ValueError(
+                f"Tree depth exceeds limit (max {DEPTH_LIMIT}). "
+                f"Node {node_key[1]} at depth {depth}. Please contact IT to fix data."
+            )
         depth_cache[node_key] = depth
         return depth
 
@@ -165,6 +186,8 @@ def collect_subtree_nodes(numbered_list, root_key):
     stack = [root_num]
     seen = set()
     while stack:
+        if len(out) > MAX_TREE_NODES:
+            raise ValueError(f"Subtree exceeds max nodes {MAX_TREE_NODES}.")
         pnum = stack.pop(0)
         for nk in by_parent.get(pnum, []):
             if nk in seen:
@@ -215,6 +238,8 @@ def _collect_subtree(root_node_key, vendor_to_row):
     out = {root_node_key}
     stack = [root_node_key]
     while stack:
+        if len(out) > MAX_TREE_NODES:
+            raise ValueError(f"Subtree exceeds max nodes {MAX_TREE_NODES}.")
         v, f = stack.pop()
         for ck in children_of.get(v, []):
             out.add(ck)
@@ -222,7 +247,7 @@ def _collect_subtree(root_node_key, vendor_to_row):
     return out
 
 
-def dekit_nodes(conn, sn, node_keys, emp):
+def dekit_nodes(conn, sn, node_keys, emp, auto_commit=True):
     """UPDATE ASSY_FLAG='N' cho từng row key (SN, VENDOR_SN, FATHER_SN) hoặc (VENDOR_SN, FATHER_SN)."""
     if not node_keys:
         return 0, ""
@@ -235,24 +260,31 @@ def dekit_nodes(conn, sn, node_keys, emp):
             else:
                 v, f = key
             cur.execute(KITTING_DEKIT_UPDATE, {"sn": sn.upper(), "emp": (emp or "").strip(), "v": v, "f": f})
+            if cur.rowcount <= 0:
+                return 0, f"Row not found/already dekitted: vendor_sn={v}, father_sn={f}"
             total += cur.rowcount
-        conn.commit()
+        if auto_commit:
+            conn.commit()
         return total, ""
     except Exception as e:
-        conn.rollback()
+        if auto_commit:
+            conn.rollback()
         return 0, str(e)
     finally:
         cur.close()
 
 
-def insert_assy_row(conn, sn, old_vendor_sn, old_father_sn, new_vendor_sn, new_father_sn, emp):
+def insert_assy_row(conn, sn, old_vendor_sn, old_father_sn, new_vendor_sn, new_father_sn, emp, auto_commit=True):
     """INSERT row mới từ row cũ (sau de-kit)."""
     cur = conn.cursor()
     try:
         cur.execute(KITTING_INSERT_SELECT, {"sn": sn.upper(), "old": old_vendor_sn, "old_f": old_father_sn})
-        row = cur.fetchone()
-        if not row:
-            return False, "Row not found"
+        rows = cur.fetchall()
+        if not rows:
+            return False, "source_not_found"
+        if len(rows) > 1 and not _is_config_vendor(old_vendor_sn):
+            return False, "ambiguous_source_row"
+        row = rows[0]
         cols = [d[0] for d in cur.description]
         col_idx = {c.upper(): i for i, c in enumerate(cols)}
         idx_vendor = col_idx.get("VENDOR_SN", -1)
@@ -281,10 +313,89 @@ def insert_assy_row(conn, sn, old_vendor_sn, old_father_sn, new_vendor_sn, new_f
         placeholders = ", ".join(f":p{i}" for i in range(len(cols)))
         ins_sql = f"INSERT INTO SFISM4.R_ASSY_COMPONENT_T ({col_list}) VALUES ({placeholders})"
         cur.execute(ins_sql, {f"p{i}": values[i] for i in range(len(cols))})
-        conn.commit()
+        if auto_commit:
+            conn.commit()
         return True, ""
     except Exception as e:
-        conn.rollback()
+        if auto_commit:
+            conn.rollback()
         return False, str(e)
     finally:
         cur.close()
+
+
+def snapshot_tree(conn, sn):
+    cols, rows = fetch_assy_tree(conn, sn)
+    out = {}
+    for r in rows:
+        row_dict = {cols[i]: r[i] for i in range(len(cols))}
+        key = (str(row_dict.get("VENDOR_SN") or ""), str(row_dict.get("FATHER_SN") or ""))
+        out[key] = {
+            "ASSY_FLAG": str(row_dict.get("ASSY_FLAG") or ""),
+            "EMP_NO": row_dict.get("EMP_NO"),
+            "IN_STATION_TIME": row_dict.get("IN_STATION_TIME"),
+            "VENDOR_SN": row_dict.get("VENDOR_SN"),
+            "FATHER_SN": row_dict.get("FATHER_SN"),
+        }
+    return out
+
+
+def validate_tree_integrity(conn, sn):
+    cols, rows = fetch_assy_tree(conn, sn)
+    numbered_list, _ = build_numbered_tree_preserve_order(cols, rows)
+    dup = {}
+    for _, _, row, _, _, _ in numbered_list:
+        vsn = str(row.get("VENDOR_SN") or "").strip().upper()
+        assy_flag = str(row.get("ASSY_FLAG") or "").strip().upper()
+        if not vsn or assy_flag != "Y" or _is_config_vendor(vsn):
+            continue
+        dup[vsn] = dup.get(vsn, 0) + 1
+    invalid = sorted([k for k, c in dup.items() if c > 1])
+    if invalid:
+        return False, invalid
+    return True, []
+
+
+def validate_kit_request(conn, sn, kit_list):
+    cols, rows = fetch_assy_tree(conn, sn)
+    numbered_list, _ = build_numbered_tree_preserve_order(cols, rows)
+    existing = {}
+    depth_map = {}
+    for _, nk, row, _, _, depth in numbered_list:
+        key = (str(nk[0]), str(nk[1]), "" if nk[2] is None else str(nk[2]))
+        existing[key] = row
+        depth_map[key] = depth
+    mapped = {}
+    errors = []
+    for item in kit_list:
+        ov = (item.get("old_vendor_sn") or "").strip()
+        of = item.get("old_father_sn")
+        ofs = "" if of is None else str(of).strip()
+        nv = (item.get("new_vendor_sn") or "").strip()
+        if not ov or not nv:
+            errors.append("Each kit item must have old_vendor_sn and new_vendor_sn.")
+            continue
+        key = (sn.upper(), ov, ofs)
+        row = existing.get(key)
+        if not row:
+            errors.append(f"Node not found in DB for ({ov}, {ofs or 'NULL'}).")
+            continue
+        if str(row.get("ASSY_FLAG") or "").upper() != "Y":
+            errors.append(f"Node already dekitted for ({ov}, {ofs or 'NULL'}).")
+            continue
+        mapped[key] = {"new_vendor_sn": nv, "new_father_sn": (item.get("new_father_sn") or "").strip()}
+    for key, payload in mapped.items():
+        _, _, old_father = key
+        if not old_father:
+            continue
+        parent_candidates = [k for k in mapped if k[1] == old_father]
+        if not parent_candidates:
+            continue
+        parent_key = sorted(parent_candidates, key=lambda k: depth_map.get(k, 999))[0]
+        expected_parent_new = mapped[parent_key]["new_vendor_sn"]
+        if payload["new_father_sn"] != expected_parent_new:
+            errors.append(
+                f"Parent must be kitted before child: parent {old_father} -> {expected_parent_new}, "
+                f"child has new_father_sn={payload['new_father_sn']!r}"
+            )
+    return len(errors) == 0, errors, depth_map

@@ -4,6 +4,7 @@
 import json
 import os
 import threading
+import time
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, redirect, render_template, request
@@ -35,6 +36,46 @@ _upload_history_lock = threading.Lock()
 _debug_cache_lock = threading.Lock()
 _debug_cache = None
 _poller_started = False
+_repair_sn_locks_guard = threading.Lock()
+_repair_sn_locks = {}
+_repair_request_cache = {}
+_REPAIR_REQ_TTL_SEC = 300
+
+
+def _get_sn_lock(sn):
+    key = (sn or "").strip().upper()
+    with _repair_sn_locks_guard:
+        lk = _repair_sn_locks.get(key)
+        if lk is None:
+            lk = threading.Lock()
+            _repair_sn_locks[key] = lk
+        return lk
+
+
+def _cache_repair_response(sn, request_id, resp_obj):
+    if not request_id:
+        return
+    key = ((sn or "").strip().upper(), str(request_id).strip())
+    now = int(time.time())
+    _repair_request_cache[key] = (now + _REPAIR_REQ_TTL_SEC, resp_obj)
+    expired = [k for k, v in _repair_request_cache.items() if v[0] < now]
+    for k in expired:
+        _repair_request_cache.pop(k, None)
+
+
+def _get_cached_repair_response(sn, request_id):
+    if not request_id:
+        return None
+    key = ((sn or "").strip().upper(), str(request_id).strip())
+    now = int(time.time())
+    item = _repair_request_cache.get(key)
+    if not item:
+        return None
+    expire_ts, resp = item
+    if expire_ts < now:
+        _repair_request_cache.pop(key, None)
+        return None
+    return resp
 
 
 def _parse_dt(s, is_end=False):
@@ -55,6 +96,7 @@ def _parse_dt(s, is_end=False):
 
 
 def _fetch_debug_data(user_start, user_end):
+    conn = None
     try:
         computed = run_analytics_query(user_start, user_end, aggregation="daily")
     except RuntimeError:
@@ -600,12 +642,13 @@ def api_repair_assy_tree():
         return jsonify({"ok": False, "error": "sn required"}), 400
     try:
         from sfis_tool.db import get_conn
-        from sfis_tool.change_ok import fetch_assy_tree, build_numbered_tree_preserve_order
+        from sfis_tool.change_ok import fetch_assy_tree, build_numbered_tree_preserve_order, validate_tree_integrity
         conn = get_conn()
         try:
             cols, rows = fetch_assy_tree(conn, sn)
             if not rows:
                 return jsonify({"ok": True, "tree": []})
+            ok_tree, duplicate_vendor_sns = validate_tree_integrity(conn, sn)
             numbered_list, _ = build_numbered_tree_preserve_order(cols, rows)
             tree = []
             for t in numbered_list:
@@ -626,7 +669,12 @@ def api_repair_assy_tree():
                     "is_father": is_father,
                     "parent_num": parent_num,
                 })
-            return jsonify({"ok": True, "tree": tree})
+            return jsonify({
+                "ok": True,
+                "tree": tree,
+                "invalid_duplicates": duplicate_vendor_sns,
+                "tree_valid": ok_tree,
+            })
         finally:
             conn.close()
     except Exception as e:
@@ -652,7 +700,15 @@ def api_repair_execute():
     dekit_keys = data.get("dekit_keys") or []
     action = (data.get("action") or "repair").strip().lower()
     force_continue = data.get("force_continue") is True
+    request_id = (data.get("request_id") or "").strip()
 
+    cached = _get_cached_repair_response(sn, request_id)
+    if cached is not None:
+        return jsonify(cached)
+
+    sn_lock = _get_sn_lock(sn)
+    if not sn_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "error": "SN is being processed. Please wait and retry."}), 409
     try:
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next, validate_next_station_r
@@ -664,7 +720,15 @@ def api_repair_execute():
             resolve_jump_target,
             get_jump_param_from_route,
         )
-        from sfis_tool.change_ok import dekit_nodes, insert_assy_row
+        from sfis_tool.change_ok import (
+            dekit_nodes,
+            insert_assy_row,
+            validate_kit_request,
+            validate_tree_integrity,
+            snapshot_tree,
+            build_numbered_tree_preserve_order,
+            fetch_assy_tree,
+        )
         conn = get_conn()
         try:
             row = get_station_and_next(conn, sn)
@@ -681,6 +745,17 @@ def api_repair_execute():
                     return jsonify({"ok": False, "error": msg})
             if action == "repair" and not check_has_unrepaired(conn, sn):
                 return jsonify({"ok": False, "error": "No un-repaired record"})
+            tree_valid, bad_duplicates = validate_tree_integrity(conn, sn)
+            if not tree_valid:
+                return jsonify({
+                    "ok": False,
+                    "error": (
+                        "Cannot proceed: duplicate vendor SN found with ASSY_FLAG=Y (non-CONFIG). "
+                        f"Please fix via IT Kitting first: {', '.join(bad_duplicates)}"
+                    ),
+                    "invalid_duplicates": bad_duplicates,
+                }), 400
+            before_snapshot = snapshot_tree(conn, sn)
 
             repair_station = (
                 (next_station if (next_station and str(next_station).startswith("R_")) else None)
@@ -697,29 +772,41 @@ def api_repair_execute():
                     f = f.strip() if isinstance(f, str) else f
                     if v:
                         keys.append((v, f))
-                total, err = dekit_nodes(conn, sn, keys, emp)
+                cols, rows = fetch_assy_tree(conn, sn)
+                numbered_list, _ = build_numbered_tree_preserve_order(cols, rows)
+                depth_map = {}
+                for _, nk, _, _, _, depth in numbered_list:
+                    depth_map[(str(nk[1]), "" if nk[2] is None else str(nk[2]))] = depth
+                keys = sorted(keys, key=lambda x: depth_map.get((str(x[0]), "" if x[1] is None else str(x[1])), 999))
+                total, err = dekit_nodes(conn, sn, keys, emp, auto_commit=False)
                 if err:
+                    conn.rollback()
                     return jsonify({"ok": False, "error": f"De-kit failed: {err}", "step": "dekit"})
+                after_snapshot = snapshot_tree(conn, sn)
+                for v, f in keys:
+                    key = (str(v), "" if f is None else str(f))
+                    row_after = after_snapshot.get(key) or {}
+                    if str(row_after.get("ASSY_FLAG") or "").upper() != "N":
+                        conn.rollback()
+                        return jsonify({
+                            "ok": False,
+                            "error": (
+                                f"Rollback: post-validation failed -- node {v} expected ASSY_FLAG=N but got "
+                                f"{row_after.get('ASSY_FLAG')!r}. All changes reverted."
+                            ),
+                            "step": "dekit",
+                        }), 400
+                conn.commit()
                 row2 = get_station_and_next(conn, sn)
                 current_station = dict(zip(_WIP_KEYS, row2)) if row2 else None
-                return jsonify({"ok": True, "message": f"De-kit OK ({total} row(s)).", "current_station": current_station})
+                resp = {"ok": True, "message": f"De-kit OK ({total} row(s)).", "current_station": current_station}
+                _cache_repair_response(sn, request_id, resp)
+                return jsonify(resp)
 
             if kit_list:
-                old_to_new = {}
-                for item in kit_list:
-                    ov = (item.get("old_vendor_sn") or "").strip()
-                    nv = (item.get("new_vendor_sn") or "").strip()
-                    if not ov or not nv:
-                        return jsonify({"ok": False, "error": "Each kit item must have old_vendor_sn and new_vendor_sn"})
-                    old_to_new[ov] = nv
-                for item in kit_list:
-                    of = item.get("old_father_sn")
-                    of_str = (of if of is not None else "").strip() if isinstance(of, str) else (str(of).strip() if of is not None else "")
-                    if of_str and of_str in old_to_new:
-                        parent_new = old_to_new[of_str]
-                        nf = (item.get("new_father_sn") or "").strip()
-                        if nf != parent_new:
-                            return jsonify({"ok": False, "error": f"Parent must be kitted before child: parent SN {of_str} -> new {parent_new}, child has new_father_sn {nf!r}"})
+                ok_req, errors, depth_map_raw = validate_kit_request(conn, sn, kit_list)
+                if not ok_req:
+                    return jsonify({"ok": False, "error": errors[0], "errors": errors}), 400
                 if not force_continue:
                     from sfis_tool.qa_lock import check_ppid_lock
                     vendor_sns = list(dict.fromkeys([(item.get("old_vendor_sn") or "").strip() for item in kit_list if (item.get("old_vendor_sn") or "").strip()]))
@@ -739,52 +826,108 @@ def api_repair_execute():
                             "error": lock_msg or "Part(s) are QA locked (PPID lock). Please unlock before retry."
                         })
                 node_keys = [(item.get("old_vendor_sn"), item.get("old_father_sn")) for item in kit_list if (item.get("old_vendor_sn") or "").strip()]
-                total, err = dekit_nodes(conn, sn, [(k[0], k[1]) for k in node_keys if k[0]], emp)
+                node_keys = sorted(
+                    [(k[0], k[1]) for k in node_keys if k[0]],
+                    key=lambda x: depth_map_raw.get((sn.upper(), str(x[0]), "" if x[1] is None else str(x[1])), 999),
+                )
+                total, err = dekit_nodes(conn, sn, node_keys, emp, auto_commit=False)
                 if err:
+                    conn.rollback()
                     return jsonify({"ok": False, "error": f"De-kit failed: {err}", "step": "dekit"})
-                for item in kit_list:
+                kit_sorted = sorted(
+                    list(kit_list),
+                    key=lambda item: depth_map_raw.get(
+                        (sn.upper(), str((item.get("old_vendor_sn") or "").strip()), "" if item.get("old_father_sn") is None else str(item.get("old_father_sn")).strip()),
+                        999,
+                    ),
+                )
+                for item in kit_sorted:
                     ov = (item.get("old_vendor_sn") or "").strip()
                     of = item.get("old_father_sn")
                     nv = (item.get("new_vendor_sn") or "").strip()
                     nf = item.get("new_father_sn")
                     if not ov or not nv:
                         continue
-                    ok, err = insert_assy_row(conn, sn, ov, of, nv, nf, emp)
+                    ok, err = insert_assy_row(conn, sn, ov, of, nv, nf, emp, auto_commit=False)
                     if not ok:
+                        conn.rollback()
                         return jsonify({"ok": False, "error": f"Kit failed: {err}", "step": "kit", "vendor_sn": ov})
+                after_kit_snapshot = snapshot_tree(conn, sn)
+                for item in kit_sorted:
+                    ov = (item.get("old_vendor_sn") or "").strip()
+                    of = item.get("old_father_sn")
+                    key = (str(ov), "" if of is None else str(of))
+                    row_after = after_kit_snapshot.get(key) or {}
+                    if str(row_after.get("ASSY_FLAG") or "").upper() != "N":
+                        conn.rollback()
+                        return jsonify({
+                            "ok": False,
+                            "error": (
+                                f"Rollback: post-validation failed -- node {ov} expected ASSY_FLAG=N but got "
+                                f"{row_after.get('ASSY_FLAG')!r}. All changes reverted."
+                            ),
+                            "step": "post_validate",
+                        }), 400
                 if action == "kitting":
+                    conn.commit()
                     row2 = get_station_and_next(conn, sn)
                     current_station = dict(zip(_WIP_KEYS, row2)) if row2 else None
-                    return jsonify({
+                    resp = {
                         "ok": True,
                         "message": f"Kitting OK ({len(kit_list)} row(s)).",
                         "current_station": current_station
-                    })
+                    }
+                    _cache_repair_response(sn, request_id, resp)
+                    return jsonify(resp)
             elif action == "kitting":
                 return jsonify({"ok": False, "error": "No kitting items found. Please input New SN for selected subtree."})
             rows_ok, success, err, repair_time = execute_repair_ok(
-                conn, sn, repair_station, emp, reason_code, duty_station, remark, repair_action
+                conn, sn, repair_station, emp, reason_code, duty_station, remark, repair_action,
+                duty_type=duty_station, auto_commit=False
             )
             if not success:
+                conn.rollback()
                 return jsonify({"ok": False, "error": err})
             desired_target = desired_target or resolve_jump_target(reason_code, group_name)
             target_group = get_jump_param_from_route(conn, sn, desired_target)
             info = get_group_info(conn, line_name, target_group)
+            jump_warning = False
             if info:
                 ok = jump_routing(
                     conn, sn,
                     info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
-                    emp, in_station_time=repair_time
+                    emp, in_station_time=repair_time, auto_commit=False
                 )
                 if not ok:
-                    pass
+                    jump_warning = True
+            after_snapshot = snapshot_tree(conn, sn)
+            if action in ("repair", "kitting") and before_snapshot == after_snapshot and kit_list:
+                conn.rollback()
+                return jsonify({
+                    "ok": False,
+                    "error": "Rollback: post-validation failed -- no tree changes detected after kit. All changes reverted.",
+                    "step": "post_validate",
+                }), 400
+            conn.commit()
             row2 = get_station_and_next(conn, sn)
             current_station = dict(zip(_WIP_KEYS, row2)) if row2 else None
-            return jsonify({"ok": True, "message": "Repair OK.", "current_station": current_station})
+            message = "Repair OK."
+            if jump_warning:
+                message = "Repair OK, but jump failed (0 rows updated). Please check station manually."
+            resp = {"ok": True, "message": message, "current_station": current_station, "jump_warning": jump_warning}
+            _cache_repair_response(sn, request_id, resp)
+            return jsonify(resp)
         finally:
             conn.close()
     except Exception as e:
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception:
+            pass
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        sn_lock.release()
 
 
 @bp.route("/debug/my-settings")

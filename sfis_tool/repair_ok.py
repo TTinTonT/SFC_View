@@ -26,7 +26,7 @@ def check_has_unrepaired(conn, sn):
         cur.close()
 
 
-def execute_repair_ok(conn, sn, repair_station, emp, reason_code, duty_station, remark, repair_action):
+def execute_repair_ok(conn, sn, repair_station, emp, reason_code, duty_station, remark, repair_action, duty_type=None, auto_commit=True):
     """
     UPDATE r_repair_t. Trả về (rows_updated, success: bool, err_msg: str, repair_time).
     """
@@ -41,7 +41,7 @@ def execute_repair_ok(conn, sn, repair_station, emp, reason_code, duty_station, 
             "sn": sn.upper(),
             "reason_code": (reason_code or "").strip(),
             "duty_station": (duty_station or "").strip(),
-            "duty_type": (duty_station or "").strip(),
+            "duty_type": (duty_type or duty_station or "").strip(),
             "record_type": record_type,
             "repair_action": (repair_action or "").strip()[:100],
             "remark": (remark or "").strip()[:400],
@@ -49,12 +49,14 @@ def execute_repair_ok(conn, sn, repair_station, emp, reason_code, duty_station, 
             "repair_station": (repair_station or "").strip(),
             "repair_time": repair_out,
         })
-        conn.commit()
+        if auto_commit:
+            conn.commit()
         n = cur.rowcount
         rt = repair_out.getvalue()[0] if n else None
         return n, True, "", rt
     except Exception as e:
-        conn.rollback()
+        if auto_commit:
+            conn.rollback()
         return 0, False, str(e), None
     finally:
         cur.close()
@@ -95,7 +97,7 @@ def get_jump_param_from_route(conn, sn, desired_target):
         cur.close()
 
 
-def jump_routing(conn, sn, v_line, v_section, v_group, v_station, emp, in_station_time=None):
+def jump_routing(conn, sn, v_line, v_section, v_group, v_station, emp, in_station_time=None, auto_commit=True):
     """UPDATE R_WIP_TRACKING_T - jump station."""
     if in_station_time is not None:
         sql = REPAIR_JUMP_WITH_TIME
@@ -108,7 +110,8 @@ def jump_routing(conn, sn, v_line, v_section, v_group, v_station, emp, in_statio
     cur = conn.cursor()
     try:
         cur.execute(sql, params)
-        conn.commit()
+        if auto_commit:
+            conn.commit()
         return cur.rowcount > 0
     finally:
         cur.close()

@@ -44,6 +44,16 @@
   .btn-warning-like:hover { filter: brightness(1.03); }
   .btn-neon-green { padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-weight: 700; color: #001a08; background: #39ff14; border: 1px solid #39ff14; box-shadow: 0 0 10px rgba(57,255,20,0.55); }
   .btn-neon-red { padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-weight: 700; color: #2a0000; background: #ff3131; border: 1px solid #ff3131; box-shadow: 0 0 10px rgba(255,49,49,0.55); }
+  .loading-overlay { position: fixed; inset: 0; z-index: 120; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; }
+  .loading-box { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1rem 1.4rem; font-weight: 600; }
+  .dup-banner { margin: 0.5rem 0; padding: 0.6rem 0.8rem; border: 2px solid #dc2626; border-radius: 8px; background: rgba(220,38,38,0.12); color: #b91c1c; font-size: 0.875rem; }
+  .tree-row-selected-root { box-shadow: inset 0 0 0 2px var(--color-primary); }
+  .flag-badge { display: inline-block; min-width: 1.2rem; text-align: center; border-radius: 999px; padding: 0 0.35rem; font-size: 0.7rem; font-weight: 700; margin-left: 0.25rem; }
+  .flag-y { background: rgba(22,163,74,0.2); color: #166534; }
+  .flag-n { background: rgba(220,38,38,0.2); color: #991b1b; }
+  .selection-summary { font-size: 0.82rem; color: var(--color-muted); }
+  .tree-new-sn-input.in-scope { border-color: var(--color-primary); }
+  .tree-new-sn-input.out-scope { opacity: 0.65; }
   </style>
 </head>
 <body>
@@ -103,8 +113,14 @@
     </div>
 
     <div id="tree-section" class="hidden mb-4 overflow-x-auto w-full">
+      <div id="dup-banner" class="dup-banner hidden"></div>
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <p class="text-sm font-medium mb-0">Vendor SN tree (optional kitting: fill New SN)</p>
+        <span id="selection-summary" class="selection-summary">Click a row to select subtree for dekit/kitting.</span>
+        <label class="text-sm flex items-center gap-1 ml-2">
+          <input type="checkbox" id="chk-show-dekitted" checked>
+          Show dekitted parts
+        </label>
         <button type="button" id="tree-expand-all" class="btn-primary-like">Expand all</button>
         <button type="button" id="tree-collapse-all" class="btn-primary-like">Collapse all</button>
         <button type="button" id="tree-dekit" class="btn-primary-like">Dekit</button>
@@ -127,6 +143,9 @@
     </div>
 
     <p id="result-msg" class="text-sm hidden"></p>
+  </div>
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div id="loading-text" class="loading-box">Processing...</div>
   </div>
 
   <div id="fail-modal" class="modal-overlay hidden">
@@ -181,6 +200,11 @@
     var treeKitting = document.getElementById('tree-kitting');
     var treeExpandAll = document.getElementById('tree-expand-all');
     var treeCollapseAll = document.getElementById('tree-collapse-all');
+    var chkShowDekitted = document.getElementById('chk-show-dekitted');
+    var dupBanner = document.getElementById('dup-banner');
+    var selectionSummary = document.getElementById('selection-summary');
+    var loadingOverlay = document.getElementById('loading-overlay');
+    var loadingText = document.getElementById('loading-text');
 
     var failModal = document.getElementById('fail-modal');
     var failHistoryBody = document.getElementById('fail-history-body');
@@ -199,6 +223,8 @@
     var collapsedSet = new Set();
     var savedInputValues = {};
     var selectedRootNum = null;
+    var hasInvalidDuplicate = false;
+    var requestPending = false;
     var inputTextRuler = document.createElement('span');
     inputTextRuler.style.position = 'absolute';
     inputTextRuler.style.visibility = 'hidden';
@@ -209,13 +235,40 @@
     function api(path, opts) {
       var init = Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }, opts || {});
       if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
+      var controller = new AbortController();
+      var timeoutMs = (opts && opts.timeout_ms) || 60000;
+      init.signal = controller.signal;
+      var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
       return fetch(path, init).then(function (r) {
         return r.json().then(function (j) { return { status: r.status, json: j }; }).catch(function (e) {
           throw e;
         });
+      }).finally(function () {
+        clearTimeout(timer);
       }).catch(function (e) {
+        if (e && e.name === 'AbortError') throw new Error('Request timed out');
         throw e;
       });
+    }
+    function lockUI(msg) {
+      requestPending = true;
+      loadingText.textContent = msg || 'Processing...';
+      loadingOverlay.classList.remove('hidden');
+      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail].forEach(function (b) {
+        if (b) b.disabled = true;
+      });
+    }
+    function unlockUI() {
+      requestPending = false;
+      loadingOverlay.classList.add('hidden');
+      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail].forEach(function (b) {
+        if (b) b.disabled = false;
+      });
+      if (hasInvalidDuplicate) {
+        treeDekit.disabled = true;
+        treeKitting.disabled = true;
+        btnRepair.disabled = true;
+      }
     }
     function autoSizeInput(inp) {
       if (!inp) return;
@@ -298,7 +351,17 @@
         return isVisible(node.parent_num);
       }
       var selectedNums = new Set(getSubtreeNums(selectedRootNum));
+      var selectedNodesCount = selectedNums.size;
+      if (selectedNodesCount) {
+        var rootNode = numToNode[selectedRootNum] || {};
+        selectionSummary.textContent = 'Selected: ' + (rootNode.vendor_sn || selectedRootNum) + ' + ' + Math.max(0, selectedNodesCount - 1) + ' children';
+      } else {
+        selectionSummary.textContent = 'Click a row to select subtree for dekit/kitting.';
+      }
       var visible = tree.filter(function (node) { return isVisible(node.num); });
+      if (!chkShowDekitted.checked) {
+        visible = visible.filter(function (node) { return String(node.assy_flag || '').toUpperCase() !== 'N'; });
+      }
       visible.sort(function (a, b) { return (a.num || 0) - (b.num || 0); });
 
       var LINE_W = 22;
@@ -306,6 +369,7 @@
       treeTbody.innerHTML = visible.map(function (node) {
         var rowClass = node.assy_flag === 'N' ? 'tree-row-flag-n' : 'tree-row-flag-y';
         if (selectedNums.has(node.num)) rowClass += ' tree-row-selected';
+        if (node.num === selectedRootNum) rowClass += ' tree-row-selected-root';
         var depth = node.depth || 0;
         var shadows = [];
         for (var k = 0; k < depth; k++) {
@@ -320,11 +384,11 @@
           ? '<span class="tree-toggle" data-num="' + node.num + '">' + (collapsedSet.has(node.num) ? '&#9654;' : '&#9660;') + '</span>'
           : '<span class="tree-toggle" style="visibility:hidden">&#9660;</span>';
         return '<tr class="' + rowClass + '" data-num="' + node.num + '" data-vendor-sn="' + (node.vendor_sn || '') + '" data-father-sn="' + (node.father_sn != null ? node.father_sn : '') + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '">' +
-          '<td class="tree-td-num py-1 pr-2" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + (node.num || '') + '</td>' +
+          '<td class="tree-td-num py-1 pr-2" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + (node.num || '') + '<span class="flag-badge ' + (String(node.assy_flag || '').toUpperCase() === 'N' ? 'flag-n' : 'flag-y') + '">' + (String(node.assy_flag || '').toUpperCase() || 'Y') + '</span></td>' +
           '<td class="py-1 pr-2">' + (node.sub_model_name || '') + '</td>' +
           '<td class="py-1 pr-2">' + (node.father_sn || '') + '</td>' +
           '<td class="py-1 pr-2">' + (node.vendor_sn || '') + '</td>' +
-          '<td class="py-1"><input type="text" class="tree-new-sn tree-new-sn-input" data-num="' + node.num + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '" placeholder="New SN"></td>' +
+          '<td class="py-1"><input type="text" class="tree-new-sn tree-new-sn-input ' + (selectedNums.has(node.num) ? 'in-scope' : 'out-scope') + '" data-num="' + node.num + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '" placeholder="' + (selectedNums.has(node.num) ? 'Required - enter new SN' : 'New SN') + '"></td>' +
           '<td class="py-1 pr-2">' + (node.stack || '') + '</td>' +
           '<td class="py-1 pr-2">' + (node.in_station_time || '') + '</td>' +
           '</tr>';
@@ -340,7 +404,21 @@
     }
     function loadTree(sn) {
       return api('/api/debug/repair/assy-tree?sn=' + encodeURIComponent(sn)).then(function (res) {
+        if (res.json && !res.json.ok && res.json.error) {
+          showErr('Tree: ' + res.json.error);
+        }
         tree = (res.json && res.json.ok) ? (res.json.tree || []) : [];
+        var invalid = (res.json && res.json.invalid_duplicates) ? res.json.invalid_duplicates : [];
+        hasInvalidDuplicate = invalid.length > 0;
+        if (hasInvalidDuplicate) {
+          dupBanner.textContent = 'WARNING: Duplicate vendor SN detected (ASSY_FLAG=Y, non-CONFIG): ' + invalid.join(', ') + '. Please contact IT to fix data via IT Kitting page before proceeding.';
+          dupBanner.classList.remove('hidden');
+          treeDekit.disabled = true;
+          treeKitting.disabled = true;
+          btnRepair.disabled = true;
+        } else {
+          dupBanner.classList.add('hidden');
+        }
         childrenByNum = {};
         tree.forEach(function (n) {
           if (n.parent_num != null) {
@@ -359,6 +437,8 @@
         collapsedSet = new Set();
         savedInputValues = {};
         selectedRootNum = null;
+        hasInvalidDuplicate = false;
+        dupBanner.classList.add('hidden');
         renderTree();
       });
     }
@@ -544,12 +624,12 @@
       });
     }
     function doSearch() {
+      if (requestPending) return;
       resetView();
       var sn = (inputSn.value || '').trim();
       if (!sn) { snError.textContent = 'Enter SN'; snError.classList.remove('hidden'); return; }
-      btnSearch.disabled = true;
+      lockUI('Loading data...');
       api('/api/debug/repair/flow-state?sn=' + encodeURIComponent(sn)).then(function (res) {
-        btnSearch.disabled = false;
         flowState = res.json;
         if (!res.json.ok) {
           snError.textContent = res.json.error || 'Search failed';
@@ -557,26 +637,30 @@
           return;
         }
         renderFlowState();
-        loadTree(sn);
+        return loadTree(sn);
       }).catch(function () {
-        btnSearch.disabled = false;
         snError.textContent = 'Request failed';
         snError.classList.remove('hidden');
+      }).finally(function () {
+        unlockUI();
       });
     }
     function onPass() {
+      if (requestPending) return;
       if (!flowState || !flowState.wip) return;
       var sn = (inputSn.value || '').trim();
       var target = ((flowState.wip || {}).NEXT_STATION || '').trim();
       if (!target) { showErr('NEXT_STATION is empty'); return; }
+      lockUI('Passing current station...');
       api('/api/debug/repair/pass-jump', {
         method: 'POST',
         body: { sn: sn, target_group: target, emp_no: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
       }).then(function (res) {
         if (!res.json.ok) { showErr(res.json.error || 'Pass jump failed'); return; }
         showOk('Jump completed.');
+        unlockUI();
         doSearch();
-      }).catch(function () { showErr('Request failed'); });
+      }).catch(function (e) { showErr(e && e.message ? e.message : 'Request failed'); }).finally(function () { unlockUI(); });
     }
     function openFailModal() {
       if (!flowState || !flowState.wip) return;
@@ -615,9 +699,11 @@
       });
     }
     function updateFail() {
+      if (requestPending) return;
       var sn = (inputSn.value || '').trim();
       var ec = (failEcInput.value || '').trim();
       if (!ecValidated) { showErr('Please validate the error code first.'); return; }
+      lockUI('Updating fail...');
       api('/api/debug/repair/fail-input', {
         method: 'POST',
         body: { sn: sn, error_code: ec, emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
@@ -625,17 +711,21 @@
         if (!res.json.ok) { showErr(res.json.error || 'Update fail failed'); return; }
         failModal.classList.add('hidden');
         showOk('Fail update completed.');
+        unlockUI();
         doSearch();
-      }).catch(function () { showErr('Request failed'); });
+      }).catch(function (e) { showErr(e && e.message ? e.message : 'Request failed'); }).finally(function () { unlockUI(); });
     }
     function doRepair(desiredTarget) {
+      if (requestPending) return;
       var sn = (inputSn.value || '').trim();
       var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
       if (!sn) { showErr('Search SN first'); return; }
+      if (hasInvalidDuplicate) { showErr('Duplicate vendor SN data is invalid. Please fix via IT Kitting first.'); return; }
       if (!selReason.value || !selAction.value || !selDuty.value) { showErr('Please fill Reason/Action/Duty.'); return; }
       var kitBuilt = buildKitList(false);
       if (kitBuilt.error) { showErr(kitBuilt.error); return; }
-      btnRepair.disabled = true;
+      lockUI('Executing repair...');
+      var requestId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : String(Date.now());
       api('/api/debug/repair/execute', {
         method: 'POST',
         body: {
@@ -647,63 +737,88 @@
           duty_station: selDuty.value,
           remark: inputRemark.value || '',
           kit_list: kitBuilt.list,
-          desired_target: desiredTarget || ''
+          desired_target: desiredTarget || '',
+          request_id: requestId
         }
       }).then(function (res) {
-        btnRepair.disabled = false;
         if (!res.json.ok) { showErr(res.json.error || 'Repair failed'); return; }
         showOk(res.json.message || 'Repair successful');
+        unlockUI();
         doSearch();
-      }).catch(function () {
-        btnRepair.disabled = false;
-        showErr('Request failed');
+      }).catch(function (e) {
+        showErr(e && e.message ? e.message : 'Request failed');
+      }).finally(function () {
+        unlockUI();
       });
     }
-    function doKitting() {
+    function doKitting(forceContinue) {
+      if (requestPending) return;
       var sn = (inputSn.value || '').trim();
       var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
       if (!sn) { showErr('Search SN first.'); return; }
+      if (hasInvalidDuplicate) { showErr('Duplicate vendor SN data is invalid. Please fix via IT Kitting first.'); return; }
       var kitBuilt = buildKitList(true);
       if (kitBuilt.error) { showErr(kitBuilt.error); return; }
+      if (!confirm('Kit ' + kitBuilt.list.length + ' node(s)? This will dekit old and insert new.')) return;
+      lockUI('Executing kitting...');
+      var requestId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : String(Date.now());
       api('/api/debug/repair/execute', {
         method: 'POST',
         body: {
           action: 'kitting',
           sn: sn,
           emp: emp,
-          kit_list: kitBuilt.list
+          kit_list: kitBuilt.list,
+          force_continue: !!forceContinue,
+          request_id: requestId
         }
       }).then(function (res) {
+        if (!res.json.ok && res.json.qa_locked) {
+          var locked = (res.json.locked_sns || []).join(', ');
+          if (confirm('QA lock detected for: ' + locked + '. Force continue?')) {
+            unlockUI();
+            return doKitting(true);
+          }
+          showErr(res.json.error || 'Kitting blocked by QA lock');
+          return;
+        }
         if (!res.json.ok) { showErr(res.json.error || 'Kitting failed'); return; }
         showOk(res.json.message || 'Kitting successful');
+        unlockUI();
         doSearch();
-      }).catch(function () { showErr('Request failed'); });
+      }).catch(function (e) { showErr(e && e.message ? e.message : 'Request failed'); }).finally(function () { unlockUI(); });
     }
     function doDekit() {
+      if (requestPending) return;
       var sn = (inputSn.value || '').trim();
       var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
       var subtreeNums = getSubtreeNums(selectedRootNum);
       if (!sn) { showErr('Search SN first.'); return; }
       if (!subtreeNums.length) { showErr('Please select one row for dekit.'); return; }
+      if (!confirm('Dekit ' + subtreeNums.length + ' node(s)? This will set ASSY_FLAG=N.')) return;
       var byNum = {};
       tree.forEach(function (n) { byNum[n.num] = n; });
       var keys = subtreeNums.sort(function (a, b) { return a - b; }).map(function (num) {
         var n = byNum[num];
         return { vendor_sn: n.vendor_sn, father_sn: n.father_sn };
       });
+      lockUI('Executing dekit...');
+      var requestId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : String(Date.now());
       api('/api/debug/repair/execute', {
         method: 'POST',
         body: {
           action: 'dekit',
           sn: sn,
           emp: emp,
-          dekit_keys: keys
+          dekit_keys: keys,
+          request_id: requestId
         }
       }).then(function (res) {
         if (!res.json.ok) { showErr(res.json.error || 'Dekit failed'); return; }
         showOk(res.json.message || 'Dekit successful');
+        unlockUI();
         doSearch();
-      }).catch(function () { showErr('Request failed'); });
+      }).catch(function (e) { showErr(e && e.message ? e.message : 'Request failed'); }).finally(function () { unlockUI(); });
     }
     function onRc500() {
       if (!confirm('Confirm RC500 and move station?')) return;
@@ -723,7 +838,7 @@
     }
 
     btnSearch.addEventListener('click', doSearch);
-    inputSn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+    inputSn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (!requestPending) doSearch(); } });
     btnPass.addEventListener('click', onPass);
     btnFail.addEventListener('click', openFailModal);
     btnRepair.addEventListener('click', function () { doRepair(selectedRTarget || ''); });
@@ -761,6 +876,7 @@
       Object.keys(childrenByNum).forEach(function (n) { collapsedSet.add(parseInt(n, 10)); });
       renderTree();
     });
+    chkShowDekitted.addEventListener('change', renderTree);
 
     loadOptions();
   })();
