@@ -1,0 +1,22 @@
+---
+description: Repair debug UI modes and Oracle fail flow
+globs: "{templates/debug_repair.html,fa_debug/routes.py,sfis_tool/repair_*.py,sfis_tool/oracle_sp.py,sfis_tool/sql_queries.py}"
+alwaysApply: false
+---
+
+# Repair Debug UI Rule
+
+- UI current node must follow IT Jump semantics: display and highlight `NEXT_STATION`.
+- Main line diagram only renders route segment from `AOI_FIN_ASSY` to `T_VI`.
+- If current logical node is at or after `T_VI`, show an `ALL PASS` message.
+- Use three UI modes:
+  - `main_line`
+  - `repair_dido` (DI/DO/RI/RO/R_xxx display chain)
+  - `repair_r_only` (R_xxx branch buttons with RC500/RC36 behavior)
+- Pass action must support jump without mandatory user reason.
+- Fail flow must:
+  - load EC history from `R_REPAIR_T`
+  - validate EC using `REPLACE(ERROR_CODE, ' ', '')` with error types `E/W`
+  - call `SFIS1.NEW_TEST_INPUT_Z`
+  - commit only when returned `RES='OK'`, otherwise rollback
+- Employee ID source is top Search area and defaults to `SJOP`.
