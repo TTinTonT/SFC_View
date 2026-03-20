@@ -385,22 +385,46 @@
         if (requireSelection) return { error: 'Please select one row to continue.' };
         return { list: [] };
       }
+      // Base subtree: selected root + its descendants.
+      // Enhancement: if user entered New SN for an ancestor (a "parent" above the selected root),
+      // include that ancestor too, so backend updates both parent and child nodes.
       var newByNum = {};
+      var candidateNumsSet = new Set(subtreeNums);
+
+      function getNewSnForNum(num) {
+        var inp = treeTbody.querySelector('.tree-new-sn[data-num="' + num + '"]');
+        return inp ? (inp.value || '').trim() : (savedInputValues[String(num)] || '').trim();
+      }
+
       subtreeNums.forEach(function (num) {
+        var v = getNewSnForNum(num);
+        if (v) newByNum[num] = v;
+      });
+
+      // Walk upward from each subtree node; if an ancestor has a filled New SN, include it.
+      subtreeNums.forEach(function (num) {
+        var n = byNum[num];
+        while (n && n.parent_num != null && byNum[n.parent_num]) {
+          var p = n.parent_num;
+          var pv = getNewSnForNum(p);
+          if (pv) {
+            candidateNumsSet.add(p);
+            newByNum[p] = pv;
+          }
+          n = byNum[p];
+        }
+      });
+
+      var candidateNums = Array.from(candidateNumsSet);
+      for (var i = 0; i < candidateNums.length; i++) {
+        var num = candidateNums[i];
+        if (!newByNum[num]) return { error: 'Please enter New SN for all nodes in the selected subtree.' };
+      }
+
+      candidateNums.sort(function (a, b) { return a - b; });
+      candidateNums.forEach(function (num) {
         var n = byNum[num];
         if (!n) return;
-        var inp = treeTbody.querySelector('.tree-new-sn[data-num="' + n.num + '"]');
-        var v = inp ? (inp.value || '').trim() : (savedInputValues[String(n.num)] || '').trim();
-        if (v) newByNum[n.num] = v;
-      });
-      for (var i = 0; i < subtreeNums.length; i++) {
-        var n = byNum[subtreeNums[i]];
-        if (!n) continue;
-        if (!newByNum[n.num]) return { error: 'Can nhap du New SN cho toan bo node trong nhanh da chon.' };
-      }
-      subtreeNums.sort(function (a, b) { return a - b; });
-      subtreeNums.forEach(function (num) {
-        var n = byNum[num];
         var newSn = newByNum[n.num];
         if (!newSn) return;
         var parentNum = n.parent_num;

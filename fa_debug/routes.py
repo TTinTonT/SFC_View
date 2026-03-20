@@ -702,7 +702,7 @@ def api_repair_execute():
                     return jsonify({"ok": False, "error": f"De-kit failed: {err}", "step": "dekit"})
                 row2 = get_station_and_next(conn, sn)
                 current_station = dict(zip(_WIP_KEYS, row2)) if row2 else None
-                return jsonify({"ok": True, "message": f"De-kit OK ({total} row(s)).", "current_station": current_station, "dekit_count": total})
+                return jsonify({"ok": True, "message": f"De-kit OK ({total} row(s)).", "current_station": current_station})
 
             if kit_list:
                 old_to_new = {}
@@ -755,7 +755,11 @@ def api_repair_execute():
                 if action == "kitting":
                     row2 = get_station_and_next(conn, sn)
                     current_station = dict(zip(_WIP_KEYS, row2)) if row2 else None
-                    return jsonify({"ok": True, "message": f"Kitting OK ({len(kit_list)} row(s)).", "current_station": current_station})
+                    return jsonify({
+                        "ok": True,
+                        "message": f"Kitting OK ({len(kit_list)} row(s)).",
+                        "current_station": current_station
+                    })
             elif action == "kitting":
                 return jsonify({"ok": False, "error": "No kitting items found. Please input New SN for selected subtree."})
             rows_ok, success, err, repair_time = execute_repair_ok(
