@@ -209,7 +209,13 @@
     function api(path, opts) {
       var init = Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }, opts || {});
       if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
-      return fetch(path, init).then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); });
+      return fetch(path, init).then(function (r) {
+        return r.json().then(function (j) { return { status: r.status, json: j }; }).catch(function (e) {
+          throw e;
+        });
+      }).catch(function (e) {
+        throw e;
+      });
     }
     function autoSizeInput(inp) {
       if (!inp) return;
