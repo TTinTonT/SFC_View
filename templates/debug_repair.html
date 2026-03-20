@@ -11,37 +11,39 @@
   html, body { height: 100%; }
   body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
   .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 100%; width: 100%; margin: 0 auto; }
-  h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; }
   .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .nav-btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; text-decoration: none; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; }
   .nav-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .nav-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .nav-links form { display: inline; }
-  .nav-links .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
-  .nav-links .btn-logout:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .form-group-compact { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem 1rem; max-width: 520px; font-size: 0.8125rem; }
-  .form-group-compact label { font-weight: 500; }
-  .form-group-compact input, .form-group-compact select { padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg); width: 100%; }
-  .tree-row-flag-n { background: rgba(220, 38, 38, 0.15); }
-  .tree-row-flag-n td { border-color: var(--color-border); }
+  .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
+  .btn-logout:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .msg-error { color: #dc2626; }
   .msg-ok { color: #16a34a; }
-  .current-station-box { margin-top: 0.75rem; padding: 1rem 1.25rem; border: 2px solid var(--color-border); border-radius: 12px; background: var(--color-bg); }
-  .current-station-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted); margin-bottom: 0.25rem; }
-  .current-station-value { font-size: 1.5rem; font-weight: 700; color: var(--color-text); }
-  .next-station-hint { font-size: 0.875rem; color: var(--color-muted); margin-top: 0.35rem; }
+  .hidden { display: none !important; }
+  .flow-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0; min-height: 3rem; }
+  .flow-node { display: inline-flex; align-items: center; justify-content: center; min-width: 6rem; padding: 0.4rem 0.9rem; border-radius: 10px; border: 2px solid var(--color-border); background: var(--color-surface); font-weight: 600; font-size: 0.875rem; }
+  .flow-node.current { border-color: var(--color-primary); background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.15); }
+  .flow-arrow { color: var(--color-muted); font-size: 1.25rem; user-select: none; }
+  .flow-branch { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal-box { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 44rem; width: 94%; max-height: 80vh; overflow: auto; }
+  .table-compact { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .table-compact th, .table-compact td { border-bottom: 1px solid var(--color-border); padding: 0.4rem 0.25rem; text-align: left; }
+  .ec-valid { color: #16a34a; font-weight: 600; }
+  .tree-row-flag-y { background: rgba(22, 163, 74, 0.15); }
+  .tree-row-flag-n { background: rgba(220, 38, 38, 0.15); }
+  .tree-row-selected { outline: 2px solid var(--color-primary); outline-offset: -2px; }
   .tree-td-num { white-space: nowrap; position: relative; vertical-align: middle; }
-  .tree-td-num.has-depth { }
   .tree-toggle { display: inline-block; width: 1.2em; cursor: pointer; user-select: none; font-size: 0.75em; color: var(--color-text); margin-right: 2px; }
   .tree-toggle:hover { color: var(--color-primary); }
   .tree-hbar { position: absolute; top: 50%; height: 2px; background: var(--color-border); display: block; }
-  .tree-new-sn-input { min-width: 28ch; width: 28ch; max-width: 80ch; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); font: inherit; box-sizing: border-box; font-size: 0.9375rem; }
-  .remark-block { max-width: 100%; }
-  .remark-textarea { width: 100%; min-width: 20rem; max-width: 42rem; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); font: inherit; font-size: 0.9375rem; resize: vertical; min-height: 4.5rem; }
-  .filter-highlight { background-color: #22c55e; color: #fff; border-radius: 2px; padding: 0 1px; }
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
-  .modal-overlay.hidden { display: none; }
-  .modal-box { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 28rem; width: 90%; }
+  .tree-new-sn-input { min-width: 28ch; width: 28ch; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); box-sizing: border-box; }
+  .btn-primary-like { padding: 0.5rem 0.9rem; border-radius: 0.5rem; font-weight: 600; color: #fff; background: var(--color-primary); border: 1px solid var(--color-primary); }
+  .btn-primary-like:hover { opacity: 0.9; }
+  .btn-warning-like { padding: 0.5rem 0.9rem; border-radius: 0.5rem; font-weight: 700; color: #2a1a00; background: #facc15; border: 1px solid #facc15; box-shadow: 0 0 8px rgba(250, 204, 21, 0.45); }
+  .btn-warning-like:hover { filter: brightness(1.03); }
+  .btn-neon-green { padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-weight: 700; color: #001a08; background: #39ff14; border: 1px solid #39ff14; box-shadow: 0 0 10px rgba(57,255,20,0.55); }
+  .btn-neon-red { padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-weight: 700; color: #2a0000; background: #ff3131; border: 1px solid #ff3131; box-shadow: 0 0 10px rgba(255,49,49,0.55); }
   </style>
 </head>
 <body>
@@ -57,208 +59,282 @@
         <button type="submit" class="btn-logout">Logout</button>
       </form>
     </div>
-    <h1>Repair</h1>
 
+    <h1 class="text-2xl font-bold mb-3">Repair</h1>
     <div class="mb-4">
       <label class="block text-sm font-medium mb-1">Serial Number</label>
-      <div class="flex gap-2">
-        <input type="text" id="input-sn" class="flex-1 max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter SN">
+      <div class="flex gap-2 flex-wrap">
+        <input type="text" id="input-sn" class="flex-1 min-w-[15rem] max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter SN">
+        <label class="text-sm flex items-center gap-2">Employee ID
+          <input type="text" id="input-emp-top" value="SJOP" class="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] w-40">
+        </label>
         <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
       </div>
       <p id="sn-error" class="mt-1 text-sm msg-error hidden"></p>
-      <div id="current-station-box" class="current-station-box hidden">
-        <div class="current-station-label">Current station (where SN is)</div>
-        <div id="current-station-value" class="current-station-value"></div>
-        <div id="next-station-hint" class="next-station-hint"></div>
-      </div>
-      <div id="repair-btn-wrap" class="mt-3 hidden">
-        <button type="button" id="btn-repair" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50">Repair</button>
+    </div>
+
+    <div id="flow-section" class="hidden mb-4">
+      <div class="text-xs uppercase tracking-wide text-[var(--color-muted)] mb-1">Current station (UI = NEXT_STATION)</div>
+      <div id="all-pass-msg" class="hidden text-sm msg-ok mb-2">This SN is ALL PASS (>= T_VI).</div>
+      <p id="mode-hint" class="text-sm text-[var(--color-muted)]"></p>
+      <div id="main-flow-row" class="flow-row"></div>
+      <div id="repair-chain-row" class="flow-row hidden"></div>
+      <div id="r-only-wrap" class="hidden"></div>
+      <div id="current-actions" class="hidden mt-2 flex items-center gap-2">
+        <span class="text-sm">Current node: <b id="current-node-text"></b></span>
+        <button type="button" id="btn-pass" class="btn-neon-green">Pass</button>
+        <button type="button" id="btn-fail" class="btn-neon-red">Fail</button>
       </div>
     </div>
 
     <div id="form-section" class="hidden mb-4">
-      <div class="mb-3 form-group-compact">
-        <label>Repairer (Employee ID)</label>
-        <input type="text" id="input-repairer" value="SJOP" placeholder="Employee ID">
-        <label>Reason Code</label>
-        <select id="sel-reason"></select>
-        <label>Repair Action</label>
-        <select id="sel-action"></select>
-        <label>Duty Type</label>
-        <select id="sel-duty"></select>
+      <div class="grid grid-cols-2 gap-2 max-w-2xl text-sm">
+        <label>Reason Code</label><select id="sel-reason" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
+        <label>Repair Action</label><select id="sel-action" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
+        <label>Duty Type</label><select id="sel-duty" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
       </div>
-      <div class="remark-block mt-2">
+      <div class="mt-2 max-w-2xl">
         <label class="block text-sm font-medium mb-1">Remark</label>
-        <textarea id="input-remark" class="remark-textarea" rows="3" placeholder="Comment...">Retest</textarea>
+        <textarea id="input-remark" class="w-full px-3 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]" rows="3">Retest</textarea>
+      </div>
+      <div class="mt-3">
+        <button type="button" id="btn-repair" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Repair</button>
       </div>
     </div>
 
     <div id="tree-section" class="hidden mb-4 overflow-x-auto w-full">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <p class="text-sm font-medium mb-0">Vendor SN tree (optional kitting: fill New SN)</p>
-        <input type="text" id="filter-input" class="flex-1 min-w-[12rem] max-w-xs px-2 py-1 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Filter (highlight match)...">
-        <button type="button" id="tree-expand-all" class="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]">Expand all</button>
-        <button type="button" id="tree-collapse-all" class="text-xs px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-bg)]">Collapse all</button>
+        <button type="button" id="tree-expand-all" class="btn-primary-like">Expand all</button>
+        <button type="button" id="tree-collapse-all" class="btn-primary-like">Collapse all</button>
+        <button type="button" id="tree-dekit" class="btn-primary-like">Dekit</button>
+        <button type="button" id="tree-kitting" class="btn-primary-like">Kitting</button>
       </div>
       <table class="w-full border-collapse text-sm table-auto" style="min-width: 100%;">
         <thead>
           <tr class="border-b border-[var(--color-border)]">
             <th class="text-left py-2 pr-2 w-12">#</th>
+            <th class="text-left py-2 pr-2">Sub Model</th>
+            <th class="text-left py-2 pr-2">Father SN</th>
             <th class="text-left py-2 pr-2">Vendor SN</th>
-            <th class="text-left py-2 pr-2">Description</th>
-            <th class="text-left py-2" style="min-width: 32rem;">New SN</th>
+            <th class="text-left py-2">New SN</th>
+            <th class="text-left py-2 pr-2">Stack</th>
+            <th class="text-left py-2 pr-2">In Time (Cali)</th>
           </tr>
         </thead>
         <tbody id="tree-tbody"></tbody>
       </table>
     </div>
 
-    <p id="result-msg" class="text-sm hidden mb-2"></p>
-    <p id="result-station" class="text-sm text-[var(--color-muted)] hidden"></p>
+    <p id="result-msg" class="text-sm hidden"></p>
+  </div>
 
-    <div id="qa-lock-modal" class="modal-overlay hidden">
-      <div class="modal-box">
-        <p class="font-medium mb-2">Part(s) chưa được unlock (QA lock)</p>
-        <p id="qa-lock-sns" class="text-sm mb-3" style="color: var(--color-muted);"></p>
-        <p class="text-sm mb-3">Bạn có muốn tiếp tục?</p>
-        <div class="flex gap-2">
-          <button type="button" id="qa-lock-continue" class="px-3 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white">Tiếp tục</button>
-          <button type="button" id="qa-lock-cancel" class="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">Hủy</button>
-        </div>
+  <div id="fail-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold">Fail update (error code history)</h3>
+        <button type="button" id="btn-fail-close" class="px-2 py-1 rounded border border-[var(--color-border)]">Close</button>
       </div>
+      <table class="table-compact mb-2">
+        <thead>
+          <tr><th>Test time</th><th>Group</th><th>Error</th><th>Desc</th><th></th></tr>
+        </thead>
+        <tbody id="fail-history-body"></tbody>
+      </table>
+      <div class="flex gap-2 items-center flex-wrap mb-2">
+        <label class="text-sm">Error code
+          <input type="text" id="fail-ec-input" class="ml-1 px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)]">
+        </label>
+        <button type="button" id="btn-validate-ec" class="px-2 py-1 rounded border border-[var(--color-border)]">Validate</button>
+        <span id="ec-valid-msg" class="text-sm"></span>
+      </div>
+      <button type="button" id="btn-update-fail" class="px-3 py-2 rounded bg-[var(--color-primary)] text-white">Update fail</button>
     </div>
   </div>
 
   <script>
-(function () {
-  const inputSn = document.getElementById('input-sn');
-  const btnSearch = document.getElementById('btn-search');
-  const btnRepair = document.getElementById('btn-repair');
-  const snError = document.getElementById('sn-error');
-  const currentStationBox = document.getElementById('current-station-box');
-  const currentStationValue = document.getElementById('current-station-value');
-  const nextStationHint = document.getElementById('next-station-hint');
-  const formSection = document.getElementById('form-section');
-  const repairBtnWrap = document.getElementById('repair-btn-wrap');
-  const treeSection = document.getElementById('tree-section');
-  const treeTbody = document.getElementById('tree-tbody');
-  const selReason = document.getElementById('sel-reason');
-  const selAction = document.getElementById('sel-action');
-  const selDuty = document.getElementById('sel-duty');
-  const inputRemark = document.getElementById('input-remark');
-  const inputRepairer = document.getElementById('input-repairer');
-  const resultMsg = document.getElementById('result-msg');
-  const resultStation = document.getElementById('result-station');
+  (function () {
+    var inputSn = document.getElementById('input-sn');
+    var inputEmpTop = document.getElementById('input-emp-top');
+    var btnSearch = document.getElementById('btn-search');
+    var snError = document.getElementById('sn-error');
+    var resultMsg = document.getElementById('result-msg');
+    var flowSection = document.getElementById('flow-section');
+    var modeHint = document.getElementById('mode-hint');
+    var allPassMsg = document.getElementById('all-pass-msg');
+    var mainFlowRow = document.getElementById('main-flow-row');
+    var repairChainRow = document.getElementById('repair-chain-row');
+    var rOnlyWrap = document.getElementById('r-only-wrap');
+    var currentActions = document.getElementById('current-actions');
+    var currentNodeText = document.getElementById('current-node-text');
+    var btnPass = document.getElementById('btn-pass');
+    var btnFail = document.getElementById('btn-fail');
+    var formSection = document.getElementById('form-section');
+    var btnRepair = document.getElementById('btn-repair');
+    var selReason = document.getElementById('sel-reason');
+    var selAction = document.getElementById('sel-action');
+    var selDuty = document.getElementById('sel-duty');
+    var inputRemark = document.getElementById('input-remark');
+    var treeSection = document.getElementById('tree-section');
+    var treeTbody = document.getElementById('tree-tbody');
+    var treeDekit = document.getElementById('tree-dekit');
+    var treeKitting = document.getElementById('tree-kitting');
+    var treeExpandAll = document.getElementById('tree-expand-all');
+    var treeCollapseAll = document.getElementById('tree-collapse-all');
 
-  let options = { reason_codes: [], repair_actions: [], duty_types: [] };
-  let wip = null;
-  let tree = [];
-  var childrenByNum = {};
-  var collapsedSet = new Set();
-  var savedInputValues = {};
-  var filterText = '';
+    var failModal = document.getElementById('fail-modal');
+    var failHistoryBody = document.getElementById('fail-history-body');
+    var failEcInput = document.getElementById('fail-ec-input');
+    var btnValidateEc = document.getElementById('btn-validate-ec');
+    var btnUpdateFail = document.getElementById('btn-update-fail');
+    var btnFailClose = document.getElementById('btn-fail-close');
+    var ecValidMsg = document.getElementById('ec-valid-msg');
 
-  function escapeHtml(s) {
-    if (s == null) return '';
-    var t = String(s);
-    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-  function highlightFilter(text, filter) {
-    if (!filter || !text) return escapeHtml(text);
-    var s = String(text);
-    var f = String(filter).trim();
-    if (!f) return escapeHtml(s);
-    var lower = s.toLowerCase();
-    var flow = f.toLowerCase();
-    var out = '';
-    var pos = 0;
-    var idx;
-    while ((idx = lower.indexOf(flow, pos)) !== -1) {
-      out += escapeHtml(s.substring(pos, idx)) + '<span class="filter-highlight">' + escapeHtml(s.substring(idx, idx + flow.length)) + '</span>';
-      pos = idx + flow.length;
+    var options = { reason_codes: [], repair_actions: [], duty_types: [] };
+    var flowState = null;
+    var selectedRTarget = null;
+    var ecValidated = false;
+    var tree = [];
+    var childrenByNum = {};
+    var collapsedSet = new Set();
+    var savedInputValues = {};
+    var selectedRootNum = null;
+    var inputTextRuler = document.createElement('span');
+    inputTextRuler.style.position = 'absolute';
+    inputTextRuler.style.visibility = 'hidden';
+    inputTextRuler.style.whiteSpace = 'pre';
+    inputTextRuler.style.pointerEvents = 'none';
+    document.body.appendChild(inputTextRuler);
+
+    function api(path, opts) {
+      var init = Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }, opts || {});
+      if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
+      return fetch(path, init).then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); });
     }
-    out += escapeHtml(s.substring(pos));
-    return out;
-  }
-
-  function getCookie(name) {
-    const v = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[^$.*+?()[{}|\\^]/g, '\\$&') + '=([^;]*)'));
-    return v ? decodeURIComponent(v[1]) : '';
-  }
-
-  function api(path, opts) {
-    const url = path.startsWith('/') ? path : '/api/debug/repair/' + path;
-    const init = Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }, opts);
-    if (opts && opts.body && typeof opts.body !== 'string') init.body = JSON.stringify(opts.body);
-    return fetch(url, init).then(function (r) { return r.json().then(function (j) { return { status: r.status, json: j }; }); });
-  }
-
-  function loadOptions() {
-    return api('options').then(function (res) {
-      if (res.json.ok) {
-        options = { reason_codes: res.json.reason_codes || [], repair_actions: res.json.repair_actions || [], duty_types: res.json.duty_types || [] };
-        selReason.innerHTML = options.reason_codes.map(function (r) { return '<option value="' + (r.code || r) + '">' + (r.label || r.code || r) + '</option>'; }).join('');
-        selAction.innerHTML = options.repair_actions.map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
-        selDuty.innerHTML = options.duty_types.map(function (d) { return '<option value="' + d + '">' + d + '</option>'; }).join('');
-        var rc500 = options.reason_codes.find(function (r) { return (r.code || r) === 'RC500'; });
-        if (rc500) { selReason.value = 'RC500'; }
-        if (options.repair_actions.indexOf('RETEST') >= 0) { selAction.value = 'RETEST'; }
-        var tf = options.duty_types.indexOf('TEST FIXTURE') >= 0 ? 'TEST FIXTURE' : (options.duty_types[0] || '');
-        if (tf) selDuty.value = tf;
+    function autoSizeInput(inp) {
+      if (!inp) return;
+      var cs = window.getComputedStyle(inp);
+      inputTextRuler.style.font = cs.font;
+      inputTextRuler.style.letterSpacing = cs.letterSpacing;
+      var val = (inp.value || '');
+      // Always keep at least two trailing spaces worth of room.
+      inputTextRuler.textContent = val + '  ';
+      var textWidth = Math.ceil(inputTextRuler.getBoundingClientRect().width);
+      var pl = parseFloat(cs.paddingLeft) || 0;
+      var pr = parseFloat(cs.paddingRight) || 0;
+      var bl = parseFloat(cs.borderLeftWidth) || 0;
+      var br = parseFloat(cs.borderRightWidth) || 0;
+      var minPx = 28 * ((parseFloat(cs.fontSize) || 14) * 0.62);
+      var w = Math.max(minPx, textWidth + pl + pr + bl + br + 2);
+      inp.style.width = w + 'px';
+    }
+    function showErr(msg) {
+      resultMsg.className = 'text-sm msg-error';
+      resultMsg.textContent = msg || '';
+      resultMsg.classList.toggle('hidden', !msg);
+    }
+    function showOk(msg) {
+      resultMsg.className = 'text-sm msg-ok';
+      resultMsg.textContent = msg || '';
+      resultMsg.classList.toggle('hidden', !msg);
+    }
+    function drawFlow(container, nodes, currentNode) {
+      container.innerHTML = '';
+      for (var i = 0; i < nodes.length; i++) {
+        if (i > 0) {
+          var arr = document.createElement('span');
+          arr.className = 'flow-arrow';
+          arr.textContent = '→';
+          container.appendChild(arr);
+        }
+        var n = document.createElement('span');
+        n.className = 'flow-node' + (nodes[i] === currentNode ? ' current' : '');
+        n.textContent = nodes[i];
+        container.appendChild(n);
       }
-    });
-  }
-
-  function showError(el, msg) {
-    snError.classList.add('hidden');
-    resultMsg.classList.add('hidden');
-    resultStation.classList.add('hidden');
-    if (el === 'sn') { snError.textContent = msg || ''; snError.classList.toggle('hidden', !msg); if (msg) currentStationBox.classList.add('hidden'); }
-    if (el === 'result') { resultMsg.textContent = msg ? 'Error: ' + msg : ''; resultMsg.className = 'text-sm msg-error ' + (msg ? '' : 'hidden'); }
-  }
-  function setCurrentStation(wip, afterRepair) {
-    if (!wip) { currentStationBox.classList.add('hidden'); return; }
-    if (afterRepair && (wip.NEXT_STATION || '')) {
-      currentStationValue.textContent = wip.NEXT_STATION;
-      nextStationHint.textContent = 'SN has been moved (next station from WIP).';
-    } else {
-      currentStationValue.textContent = (wip.STATION_NAME || '') + ' / ' + (wip.GROUP_NAME || '');
-      var next = wip.NEXT_STATION || '';
-      nextStationHint.textContent = next ? 'After repair will move to: ' + next : '';
     }
-    currentStationBox.classList.remove('hidden');
-  }
-  function showOk(msg, stationText) {
-    resultMsg.textContent = msg || 'Repair successful.';
-    resultMsg.className = 'text-sm msg-ok';
-    resultMsg.classList.remove('hidden');
-    resultStation.textContent = stationText || '';
-    resultStation.classList.toggle('hidden', !stationText);
-  }
-
-  function doSearch() {
-    var sn = (inputSn.value || '').trim();
-    if (!sn) { showError('sn', 'Enter SN'); return; }
-    showError('sn');
-    showError('result');
-    api('wip?sn=' + encodeURIComponent(sn)).then(function (res) {
-      if (!res.json.ok) {
-        showError('sn', res.json.error || 'No WIP for this SN');
-        formSection.classList.add('hidden');
-        repairBtnWrap.classList.add('hidden');
+    function resetView() {
+      flowSection.classList.add('hidden');
+      formSection.classList.add('hidden');
+      treeSection.classList.add('hidden');
+      mainFlowRow.innerHTML = '';
+      repairChainRow.innerHTML = '';
+      rOnlyWrap.innerHTML = '';
+      treeTbody.innerHTML = '';
+      selectedRootNum = null;
+      currentActions.classList.add('hidden');
+      allPassMsg.classList.add('hidden');
+      snError.classList.add('hidden');
+      resultMsg.classList.add('hidden');
+    }
+    function renderTree() {
+      if (!tree || !tree.length) {
         treeSection.classList.add('hidden');
-        btnRepair.disabled = true;
+        treeTbody.innerHTML = '';
         return;
       }
-      wip = res.json.wip;
-      setCurrentStation(wip, false);
-      formSection.classList.remove('hidden');
-      repairBtnWrap.classList.remove('hidden');
       treeSection.classList.remove('hidden');
-      btnRepair.disabled = false;
-      return api('assy-tree?sn=' + encodeURIComponent(sn)).then(function (r2) {
-        if (r2.json.ok) tree = r2.json.tree || [];
-        else tree = [];
+      treeTbody.querySelectorAll('.tree-new-sn').forEach(function (inp) {
+        var n = inp.getAttribute('data-num');
+        if (n) savedInputValues[n] = inp.value;
+      });
+
+      var numToNode = {};
+      tree.forEach(function (n) { numToNode[n.num] = n; });
+      function hasChildren(num) {
+        return childrenByNum[num] && childrenByNum[num].length > 0;
+      }
+      function isVisible(num) {
+        var node = numToNode[num];
+        if (!node) return false;
+        if ((node.depth || 0) === 0) return true;
+        if (collapsedSet.has(node.parent_num)) return false;
+        return isVisible(node.parent_num);
+      }
+      var selectedNums = new Set(getSubtreeNums(selectedRootNum));
+      var visible = tree.filter(function (node) { return isVisible(node.num); });
+      visible.sort(function (a, b) { return (a.num || 0) - (b.num || 0); });
+
+      var LINE_W = 22;
+      var BAR_W = 11;
+      treeTbody.innerHTML = visible.map(function (node) {
+        var rowClass = node.assy_flag === 'N' ? 'tree-row-flag-n' : 'tree-row-flag-y';
+        if (selectedNums.has(node.num)) rowClass += ' tree-row-selected';
+        var depth = node.depth || 0;
+        var shadows = [];
+        for (var k = 0; k < depth; k++) {
+          var pos = BAR_W + k * LINE_W;
+          shadows.push('inset ' + pos + 'px 0 0 ' + (2 - pos) + 'px var(--color-border)');
+        }
+        var numCellStyle = 'padding-left:' + (8 + depth * LINE_W) + 'px;';
+        if (shadows.length) numCellStyle += 'box-shadow:' + shadows.join(',') + ';';
+        var hbarStyle = depth > 0 ? ('left:' + ((depth - 1) * LINE_W) + 'px;width:' + BAR_W + 'px;') : '';
+        var hbarHtml = depth > 0 ? '<span class="tree-hbar" style="' + hbarStyle + '"></span>' : '';
+        var toggleHtml = hasChildren(node.num)
+          ? '<span class="tree-toggle" data-num="' + node.num + '">' + (collapsedSet.has(node.num) ? '&#9654;' : '&#9660;') + '</span>'
+          : '<span class="tree-toggle" style="visibility:hidden">&#9660;</span>';
+        return '<tr class="' + rowClass + '" data-num="' + node.num + '" data-vendor-sn="' + (node.vendor_sn || '') + '" data-father-sn="' + (node.father_sn != null ? node.father_sn : '') + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '">' +
+          '<td class="tree-td-num py-1 pr-2" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + (node.num || '') + '</td>' +
+          '<td class="py-1 pr-2">' + (node.sub_model_name || '') + '</td>' +
+          '<td class="py-1 pr-2">' + (node.father_sn || '') + '</td>' +
+          '<td class="py-1 pr-2">' + (node.vendor_sn || '') + '</td>' +
+          '<td class="py-1"><input type="text" class="tree-new-sn tree-new-sn-input" data-num="' + node.num + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '" placeholder="New SN"></td>' +
+          '<td class="py-1 pr-2">' + (node.stack || '') + '</td>' +
+          '<td class="py-1 pr-2">' + (node.in_station_time || '') + '</td>' +
+          '</tr>';
+      }).join('');
+
+      Object.keys(savedInputValues).forEach(function (n) {
+        var inp = treeTbody.querySelector('.tree-new-sn[data-num="' + n + '"]');
+        if (inp) {
+          inp.value = savedInputValues[n];
+          autoSizeInput(inp);
+        }
+      });
+    }
+    function loadTree(sn) {
+      return api('/api/debug/repair/assy-tree?sn=' + encodeURIComponent(sn)).then(function (res) {
+        tree = (res.json && res.json.ok) ? (res.json.tree || []) : [];
         childrenByNum = {};
         tree.forEach(function (n) {
           if (n.parent_num != null) {
@@ -267,262 +343,397 @@
           }
         });
         collapsedSet = new Set();
-        Object.keys(childrenByNum).forEach(function (num) { collapsedSet.add(parseInt(num, 10)); });
+        Object.keys(childrenByNum).forEach(function (n) { collapsedSet.add(parseInt(n, 10)); });
+        savedInputValues = {};
+        selectedRootNum = null;
+        renderTree();
+      }).catch(function () {
+        tree = [];
+        childrenByNum = {};
+        collapsedSet = new Set();
+        savedInputValues = {};
+        selectedRootNum = null;
         renderTree();
       });
-    });
-  }
-
-  function hasChildren(num) {
-    var arr = childrenByNum[num];
-    return arr && arr.length > 0;
-  }
-  function isVisible(numToNode, num) {
-    var node = numToNode[num];
-    if (!node) return false;
-    if ((node.depth || 0) === 0) return true;
-    if (collapsedSet.has(node.parent_num)) return false;
-    return isVisible(numToNode, node.parent_num);
-  }
-  function renderTree() {
-    var numToNode = {};
-    tree.forEach(function (n) { numToNode[n.num] = n; });
-    if (treeTbody) {
-      treeTbody.querySelectorAll('.tree-new-sn').forEach(function (inp) {
-        var num = inp.getAttribute('data-num');
-        if (num) savedInputValues[num] = inp.value;
-      });
     }
-    var visible = tree.filter(function (node) { return isVisible(numToNode, node.num); });
-    function preorder(nodes) {
-      var roots = nodes.filter(function (n) { return (n.depth || 0) === 0; }).sort(function (a, b) { return a.num - b.num; });
-      var byParent = {};
-      nodes.forEach(function (n) {
-        var p = n.parent_num != null ? n.parent_num : 0;
-        if (!byParent[p]) byParent[p] = []; byParent[p].push(n);
-      });
-      function sortByNum(a, b) { return a.num - b.num; }
-      function walk(num) {
-        var out = [];
-        var kids = byParent[num];
-        if (kids) { kids.sort(sortByNum); kids.forEach(function (n) { out.push(n); out = out.concat(walk(n.num)); }); }
-        return out;
-      }
+    function getSubtreeNums(rootNum) {
+      if (!rootNum) return [];
       var out = [];
-      roots.forEach(function (r) { out.push(r); out = out.concat(walk(r.num)); });
+      var q = [rootNum];
+      var seen = new Set();
+      while (q.length) {
+        var n = q.shift();
+        if (seen.has(n)) continue;
+        seen.add(n);
+        out.push(n);
+        (childrenByNum[n] || []).forEach(function (c) { q.push(c); });
+      }
       return out;
     }
-    visible = preorder(visible);
-    var LINE_W = 22;
-    var BAR_W = 11;
-    treeTbody.innerHTML = visible.map(function (node) {
-      var desc = (node.cust_pn || '') + (node.cust_rev ? ' Rev:' + node.cust_rev : '') + (node.group_name ? ' (' + node.group_name + ')' : '');
-      var depth = node.depth || 0;
-      var numCellClass = 'tree-td-num py-1 pr-2' + (depth > 0 ? ' has-depth' : '');
-      var shadows = [];
-      for (var k = 0; k < depth; k++) {
-        var pos = BAR_W + k * LINE_W;
-        shadows.push('inset ' + pos + 'px 0 0 ' + (2 - pos) + 'px var(--color-border)');
+    function buildKitList(requireSelection) {
+      var list = [];
+      var byNum = {};
+      tree.forEach(function (n) { byNum[n.num] = n; });
+      var subtreeNums = getSubtreeNums(selectedRootNum);
+      if (!subtreeNums.length) {
+        if (requireSelection) return { error: 'Please select one row to continue.' };
+        return { list: [] };
       }
-      var numCellStyle = 'padding-left: ' + (8 + depth * LINE_W) + 'px;';
-      if (shadows.length) numCellStyle += ' box-shadow: ' + shadows.join(', ') + ';';
-      var hbarStyle = depth > 0 ? 'left: ' + ((depth - 1) * LINE_W) + 'px; width: ' + BAR_W + 'px;' : '';
-      var hbarHtml = depth > 0 ? '<span class="tree-hbar" style="' + hbarStyle + '"></span>' : '';
-      var toggleHtml = hasChildren(node.num)
-        ? '<span class="tree-toggle" data-num="' + node.num + '" title="Expand/Collapse">' + (collapsedSet.has(node.num) ? '&#9654;' : '&#9660;') + '</span>'
-        : '<span class="tree-toggle" style="visibility:hidden">&#9660;</span>';
-      var rowClass = node.assy_flag === 'N' ? ' tree-row-flag-n' : '';
-      return '<tr class="' + rowClass + '" data-num="' + node.num + '" data-vendor-sn="' + (node.vendor_sn || '') + '" data-father-sn="' + (node.father_sn != null ? node.father_sn : '') + '">' +
-        '<td class="' + numCellClass + '" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + highlightFilter(node.num, filterText) + '</td>' +
-        '<td class="py-1 pr-2">' + highlightFilter(node.vendor_sn || '', filterText) + '</td>' +
-        '<td class="py-1 pr-2">' + highlightFilter(desc, filterText) + '</td>' +
-        '<td class="py-1"><input type="text" class="tree-new-sn tree-new-sn-input" data-num="' + node.num + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '" placeholder="New SN"></td>' +
-        '</tr>';
-    }).join('');
-    Object.keys(savedInputValues).forEach(function (num) {
-      var inp = treeTbody.querySelector('.tree-new-sn[data-num="' + num + '"]');
-      if (inp) inp.value = savedInputValues[num];
-    });
-    treeTbody.querySelectorAll('.tree-new-sn').forEach(function (input) {
-      function resize() {
-        var len = (input.value || '').length;
-        input.style.width = Math.max(28, len + 2) + 'ch';
-      }
-      input.addEventListener('input', resize);
-      input.addEventListener('change', resize);
-      resize();
-    });
-  }
-  function onTreeToggle(num) {
-    num = parseInt(num, 10);
-    if (collapsedSet.has(num)) collapsedSet.delete(num);
-    else collapsedSet.add(num);
-    renderTree();
-  }
-  var filterInput = document.getElementById('filter-input');
-  if (filterInput) {
-    filterInput.addEventListener('input', function () {
-      filterText = (filterInput.value || '').trim();
-      renderTree();
-    });
-    filterInput.addEventListener('keyup', function () {
-      filterText = (filterInput.value || '').trim();
-      renderTree();
-    });
-  }
-
-  treeSection.addEventListener('click', function (e) {
-    var tg = e.target.closest('.tree-toggle[data-num]');
-    if (tg) { e.preventDefault(); onTreeToggle(tg.getAttribute('data-num')); }
-  });
-  document.getElementById('tree-expand-all').addEventListener('click', function () {
-    collapsedSet.clear();
-    renderTree();
-  });
-  document.getElementById('tree-collapse-all').addEventListener('click', function () {
-    Object.keys(childrenByNum).forEach(function (num) { collapsedSet.add(parseInt(num, 10)); });
-    renderTree();
-  });
-
-  function getNewSnForNum(num) {
-    var input = document.querySelector('.tree-new-sn[data-num="' + num + '"]');
-    if (input && input.value && input.value.trim()) return input.value.trim();
-    return (savedInputValues[num] || '').trim();
-  }
-  function buildKitList() {
-    var numToNode = {};
-    tree.forEach(function (n) { numToNode[n.num] = n; });
-    var list = [];
-    tree.forEach(function (node) {
-      var newSn = getNewSnForNum(node.num);
-      if (!newSn) return;
-      var parentNum = node.parent_num;
-      var newFather = null;
-      if (parentNum != null && numToNode[parentNum]) newFather = getNewSnForNum(parentNum) || null;
-      list.push({
-        old_vendor_sn: node.vendor_sn,
-        old_father_sn: node.father_sn,
-        new_vendor_sn: newSn,
-        new_father_sn: newFather
+      var newByNum = {};
+      subtreeNums.forEach(function (num) {
+        var n = byNum[num];
+        if (!n) return;
+        var inp = treeTbody.querySelector('.tree-new-sn[data-num="' + n.num + '"]');
+        var v = inp ? (inp.value || '').trim() : (savedInputValues[String(n.num)] || '').trim();
+        if (v) newByNum[n.num] = v;
       });
-    });
-    return list;
-  }
-
-  function validateKitList(kitList) {
-    var numToNewSn = {};
-    tree.forEach(function (n) {
-      var v = getNewSnForNum(n.num);
-      if (v) numToNewSn[n.num] = v;
-    });
-    for (var i = 0; i < tree.length; i++) {
-      var node = tree[i];
-      var newSn = numToNewSn[node.num];
-      if (!newSn) continue;
-      var parentNum = node.parent_num;
-      if (parentNum == null) continue;
-      var parentNew = numToNewSn[parentNum];
-      if (!parentNew) continue;
-      var item = kitList.find(function (k) { return k.old_vendor_sn === node.vendor_sn; });
-      if (item && item.new_father_sn !== parentNew) return 'Enter new SN for parent first (parent #' + parentNum + ' -> ' + parentNew + ')';
-    }
-    return null;
-  }
-
-  var qaLockPendingPayload = null;
-  var qaLockModal = document.getElementById('qa-lock-modal');
-  var qaLockSns = document.getElementById('qa-lock-sns');
-  var qaLockContinue = document.getElementById('qa-lock-continue');
-  var qaLockCancel = document.getElementById('qa-lock-cancel');
-
-  function showQaLockModal(lockedSns, payload) {
-    qaLockPendingPayload = payload;
-    qaLockSns.textContent = (lockedSns && lockedSns.length) ? lockedSns.join(', ') : '';
-    qaLockModal.classList.remove('hidden');
-  }
-  function hideQaLockModal() {
-    qaLockModal.classList.add('hidden');
-    qaLockPendingPayload = null;
-  }
-  function applyRepairSuccess(res) {
-    formSection.classList.add('hidden');
-    repairBtnWrap.classList.add('hidden');
-    treeSection.classList.add('hidden');
-    var cs = res.json.current_station;
-    var disp = (cs && cs.NEXT_STATION) ? cs.NEXT_STATION : (cs ? (cs.STATION_NAME || '') + ' / ' + (cs.GROUP_NAME || '') : '');
-    showOk(res.json.message || 'Repair successful.', disp ? 'SN has been moved to: ' + disp : '');
-    if (res.json.current_station) {
-      wip = res.json.current_station;
-      setCurrentStation(wip, true);
-    }
-  }
-
-  function doRepair(forceContinue) {
-    var sn = (inputSn.value || '').trim();
-    if (!sn || !wip) { showError('result', 'Search WIP first.'); return; }
-    showError('result');
-    var kitList = buildKitList();
-    var err = validateKitList(kitList);
-    if (err) { showError('result', err); return; }
-    var emp = (inputRepairer && inputRepairer.value) ? inputRepairer.value.trim() : 'SJOP';
-    if (!emp) emp = 'SJOP';
-    var payload = {
-      sn: sn,
-      emp: emp,
-      reason_code: selReason.value || 'RC500',
-      repair_action: selAction.value || 'RETEST',
-      duty_station: selDuty.value || 'TEST FIXTURE',
-      remark: inputRemark.value || 'Retest',
-      kit_list: kitList
-    };
-    if (forceContinue) payload.force_continue = true;
-    btnRepair.disabled = true;
-    api('execute', { method: 'POST', body: payload }).then(function (res) {
-      btnRepair.disabled = false;
-      if (res.json.ok) {
-        hideQaLockModal();
-        applyRepairSuccess(res);
-      } else if (res.json.qa_locked === true) {
-        showQaLockModal(res.json.locked_sns || [], payload);
-      } else {
-        showError('result', res.json.error || 'Execute failed');
+      for (var i = 0; i < subtreeNums.length; i++) {
+        var n = byNum[subtreeNums[i]];
+        if (!n) continue;
+        if (!newByNum[n.num]) return { error: 'Can nhap du New SN cho toan bo node trong nhanh da chon.' };
       }
-    }).catch(function () {
-      btnRepair.disabled = false;
-      showError('result', 'Network error');
-    });
-  }
-
-  qaLockContinue.addEventListener('click', function () {
-    if (!qaLockPendingPayload) return;
-    var payload = Object.assign({}, qaLockPendingPayload, { force_continue: true });
-    hideQaLockModal();
-    btnRepair.disabled = true;
-    api('execute', { method: 'POST', body: payload }).then(function (res) {
-      btnRepair.disabled = false;
-      if (res.json.ok) {
-        applyRepairSuccess(res);
-      } else {
-        showError('result', res.json.error || 'Execute failed');
+      subtreeNums.sort(function (a, b) { return a - b; });
+      subtreeNums.forEach(function (num) {
+        var n = byNum[num];
+        var newSn = newByNum[n.num];
+        if (!newSn) return;
+        var parentNum = n.parent_num;
+        var newFather = null;
+        if (parentNum != null && byNum[parentNum]) {
+          if (newByNum[parentNum]) newFather = newByNum[parentNum];
+          else newFather = n.father_sn || null;
+        }
+        list.push({
+          old_vendor_sn: n.vendor_sn,
+          old_father_sn: n.father_sn,
+          new_vendor_sn: newSn,
+          new_father_sn: newFather
+        });
+      });
+      return { list: list };
+    }
+    function renderRBranches(targets) {
+      rOnlyWrap.classList.remove('hidden');
+      rOnlyWrap.innerHTML = '';
+      var rc500Placed = false;
+      var rc36Placed = false;
+      (targets || []).forEach(function (item, idx) {
+        var row = document.createElement('div');
+        row.className = 'flow-branch';
+        var left = document.createElement('span');
+        left.className = 'flow-node';
+        left.textContent = item.from;
+        var arr = document.createElement('span');
+        arr.className = 'flow-arrow';
+        arr.textContent = '→';
+        var right = document.createElement('button');
+        right.type = 'button';
+        right.className = 'flow-node';
+        right.textContent = item.to;
+        right.addEventListener('click', function () { selectedRTarget = item.to; showOk('Selected target: ' + item.to); });
+        row.appendChild(left); row.appendChild(arr); row.appendChild(right);
+        var fromName = (item.from || '').toUpperCase();
+        var toName = (item.to || '').toUpperCase();
+        if (!rc500Placed && fromName === 'R_FLB' && toName === 'FLB') {
+          var rc500Btn = document.createElement('button');
+          rc500Btn.id = 'btn-rc500';
+          rc500Btn.className = 'btn-warning-like';
+          rc500Btn.type = 'button';
+          rc500Btn.textContent = 'RC500';
+          row.appendChild(rc500Btn);
+          rc500Placed = true;
+        }
+        if (!rc36Placed && fromName === 'R_FLB' && toName === 'FLA') {
+          var rc36Btn = document.createElement('button');
+          rc36Btn.id = 'btn-rc36';
+          rc36Btn.className = 'btn-warning-like';
+          rc36Btn.type = 'button';
+          rc36Btn.textContent = 'RC36';
+          row.appendChild(rc36Btn);
+          rc36Placed = true;
+        }
+        if (idx === 0 && !selectedRTarget) selectedRTarget = item.to;
+        rOnlyWrap.appendChild(row);
+      });
+      if (!rc500Placed) {
+        var topRow = document.createElement('div');
+        topRow.className = 'mt-2';
+        topRow.innerHTML = '<button id="btn-rc500" class="btn-warning-like" type="button">RC500</button>';
+        rOnlyWrap.appendChild(topRow);
       }
-    }).catch(function () {
-      btnRepair.disabled = false;
-      showError('result', 'Network error');
+      if (!rc36Placed) {
+        var rc36Row = document.createElement('div');
+        rc36Row.className = 'mt-2';
+        rc36Row.innerHTML = '<button id="btn-rc36" class="btn-warning-like" type="button">RC36</button>';
+        rOnlyWrap.appendChild(rc36Row);
+      }
+      var rc500El = document.getElementById('btn-rc500');
+      var rc36El = document.getElementById('btn-rc36');
+      if (rc500El) rc500El.addEventListener('click', onRc500);
+      if (rc36El) rc36El.addEventListener('click', onRc36);
+    }
+    function renderFlowState() {
+      if (!flowState || !flowState.ok) return;
+      var data = flowState;
+      var wip = data.wip || {};
+      var current = (wip.NEXT_STATION || '').trim() || (wip.GROUP_NAME || '').trim();
+      flowSection.classList.remove('hidden');
+      currentNodeText.textContent = current || '-';
+      modeHint.textContent = 'Mode: ' + (data.ui_mode || 'main_line');
+      allPassMsg.classList.toggle('hidden', !data.all_pass);
+      mainFlowRow.classList.add('hidden');
+      repairChainRow.classList.add('hidden');
+      rOnlyWrap.classList.add('hidden');
+      currentActions.classList.add('hidden');
+      formSection.classList.add('hidden');
+
+      if (data.ui_mode === 'main_line') {
+        var nodes = (data.segment_main && data.segment_main.length) ? data.segment_main : (data.groups_ordered || []);
+        mainFlowRow.classList.remove('hidden');
+        drawFlow(mainFlowRow, nodes, current);
+        currentActions.classList.remove('hidden');
+      } else if (data.ui_mode === 'repair_dido') {
+        repairChainRow.classList.remove('hidden');
+        drawFlow(repairChainRow, data.repair_chain_nodes || [], current);
+        formSection.classList.remove('hidden');
+      } else if (data.ui_mode === 'repair_r_only') {
+        renderRBranches(data.r_only_targets || []);
+        formSection.classList.remove('hidden');
+      }
+    }
+    function loadOptions() {
+      return api('/api/debug/repair/options').then(function (res) {
+        if (!res.json.ok) return;
+        options = res.json;
+        selReason.innerHTML = (options.reason_codes || []).map(function (r) { return '<option value="' + (r.code || r) + '">' + (r.label || r.code || r) + '</option>'; }).join('');
+        selAction.innerHTML = (options.repair_actions || []).map(function (a) { return '<option value="' + a + '">' + a + '</option>'; }).join('');
+        selDuty.innerHTML = (options.duty_types || []).map(function (d) { return '<option value="' + d + '">' + d + '</option>'; }).join('');
+        selReason.value = 'RC500';
+        if ((options.repair_actions || []).indexOf('RETEST') >= 0) selAction.value = 'RETEST';
+        if ((options.duty_types || []).indexOf('TEST FIXTURE') >= 0) selDuty.value = 'TEST FIXTURE';
+      });
+    }
+    function doSearch() {
+      resetView();
+      var sn = (inputSn.value || '').trim();
+      if (!sn) { snError.textContent = 'Enter SN'; snError.classList.remove('hidden'); return; }
+      btnSearch.disabled = true;
+      api('/api/debug/repair/flow-state?sn=' + encodeURIComponent(sn)).then(function (res) {
+        btnSearch.disabled = false;
+        flowState = res.json;
+        if (!res.json.ok) {
+          snError.textContent = res.json.error || 'Search failed';
+          snError.classList.remove('hidden');
+          return;
+        }
+        renderFlowState();
+        loadTree(sn);
+      }).catch(function () {
+        btnSearch.disabled = false;
+        snError.textContent = 'Request failed';
+        snError.classList.remove('hidden');
+      });
+    }
+    function onPass() {
+      if (!flowState || !flowState.wip) return;
+      var sn = (inputSn.value || '').trim();
+      var target = ((flowState.wip || {}).NEXT_STATION || '').trim();
+      if (!target) { showErr('NEXT_STATION is empty'); return; }
+      api('/api/debug/repair/pass-jump', {
+        method: 'POST',
+        body: { sn: sn, target_group: target, emp_no: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+      }).then(function (res) {
+        if (!res.json.ok) { showErr(res.json.error || 'Pass jump failed'); return; }
+        showOk('Jump completed.');
+        doSearch();
+      }).catch(function () { showErr('Request failed'); });
+    }
+    function openFailModal() {
+      if (!flowState || !flowState.wip) return;
+      var sn = (inputSn.value || '').trim();
+      ecValidated = false;
+      ecValidMsg.textContent = '';
+      failEcInput.value = '';
+      failHistoryBody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+      failModal.classList.remove('hidden');
+      api('/api/debug/repair/fail-history?sn=' + encodeURIComponent(sn)).then(function (res) {
+        if (!res.json.ok) { failHistoryBody.innerHTML = '<tr><td colspan="5">Error</td></tr>'; return; }
+        var rows = res.json.rows || [];
+        failHistoryBody.innerHTML = rows.map(function (r, idx) {
+          var ec = (r.ERROR_CODE_MASTER || r.ERROR_CODE_IN_REPAIR || '');
+          return '<tr><td>' + (r.TEST_TIME || '') + '</td><td>' + (r.GROUP_NAME || '') + '</td><td>' + (ec || '') + '</td><td>' + (r.ERROR_DESC || '') + '</td><td><button type="button" data-idx="' + idx + '" class="pick-ec px-2 py-1 rounded border border-[var(--color-border)]">Pick</button></td></tr>';
+        }).join('') || '<tr><td colspan="5">No history</td></tr>';
+        failHistoryBody.querySelectorAll('.pick-ec').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var idx = parseInt(this.getAttribute('data-idx'), 10);
+            var r = rows[idx] || {};
+            failEcInput.value = (r.ERROR_CODE_MASTER || r.ERROR_CODE_IN_REPAIR || '').trim();
+            ecValidated = false;
+            ecValidMsg.textContent = '';
+          });
+        });
+      });
+    }
+    function validateEc() {
+      var ec = (failEcInput.value || '').trim();
+      if (!ec) { showErr('Please enter an error code.'); return; }
+      api('/api/debug/repair/validate-error-code', { method: 'POST', body: { error_code: ec } }).then(function (res) {
+        if (!res.json.ok) { ecValidated = false; ecValidMsg.textContent = res.json.error || 'Validate failed'; ecValidMsg.className = 'text-sm msg-error'; return; }
+        ecValidated = res.json.valid === true;
+        ecValidMsg.textContent = ecValidated ? 'Error code is valid.' : 'Error code is invalid.';
+        ecValidMsg.className = 'text-sm ' + (ecValidated ? 'ec-valid' : 'msg-error');
+      });
+    }
+    function updateFail() {
+      var sn = (inputSn.value || '').trim();
+      var ec = (failEcInput.value || '').trim();
+      if (!ecValidated) { showErr('Please validate the error code first.'); return; }
+      api('/api/debug/repair/fail-input', {
+        method: 'POST',
+        body: { sn: sn, error_code: ec, emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+      }).then(function (res) {
+        if (!res.json.ok) { showErr(res.json.error || 'Update fail failed'); return; }
+        failModal.classList.add('hidden');
+        showOk('Fail update completed.');
+        doSearch();
+      }).catch(function () { showErr('Request failed'); });
+    }
+    function doRepair(desiredTarget) {
+      var sn = (inputSn.value || '').trim();
+      var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
+      if (!sn) { showErr('Search SN first'); return; }
+      if (!selReason.value || !selAction.value || !selDuty.value) { showErr('Please fill Reason/Action/Duty.'); return; }
+      var kitBuilt = buildKitList(false);
+      if (kitBuilt.error) { showErr(kitBuilt.error); return; }
+      btnRepair.disabled = true;
+      api('/api/debug/repair/execute', {
+        method: 'POST',
+        body: {
+          action: 'repair',
+          sn: sn,
+          emp: emp,
+          reason_code: selReason.value,
+          repair_action: selAction.value,
+          duty_station: selDuty.value,
+          remark: inputRemark.value || '',
+          kit_list: kitBuilt.list,
+          desired_target: desiredTarget || ''
+        }
+      }).then(function (res) {
+        btnRepair.disabled = false;
+        if (!res.json.ok) { showErr(res.json.error || 'Repair failed'); return; }
+        showOk(res.json.message || 'Repair successful');
+        doSearch();
+      }).catch(function () {
+        btnRepair.disabled = false;
+        showErr('Request failed');
+      });
+    }
+    function doKitting() {
+      var sn = (inputSn.value || '').trim();
+      var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
+      if (!sn) { showErr('Search SN first.'); return; }
+      var kitBuilt = buildKitList(true);
+      if (kitBuilt.error) { showErr(kitBuilt.error); return; }
+      api('/api/debug/repair/execute', {
+        method: 'POST',
+        body: {
+          action: 'kitting',
+          sn: sn,
+          emp: emp,
+          kit_list: kitBuilt.list
+        }
+      }).then(function (res) {
+        if (!res.json.ok) { showErr(res.json.error || 'Kitting failed'); return; }
+        showOk(res.json.message || 'Kitting successful');
+        doSearch();
+      }).catch(function () { showErr('Request failed'); });
+    }
+    function doDekit() {
+      var sn = (inputSn.value || '').trim();
+      var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
+      var subtreeNums = getSubtreeNums(selectedRootNum);
+      if (!sn) { showErr('Search SN first.'); return; }
+      if (!subtreeNums.length) { showErr('Please select one row for dekit.'); return; }
+      var byNum = {};
+      tree.forEach(function (n) { byNum[n.num] = n; });
+      var keys = subtreeNums.sort(function (a, b) { return a - b; }).map(function (num) {
+        var n = byNum[num];
+        return { vendor_sn: n.vendor_sn, father_sn: n.father_sn };
+      });
+      api('/api/debug/repair/execute', {
+        method: 'POST',
+        body: {
+          action: 'dekit',
+          sn: sn,
+          emp: emp,
+          dekit_keys: keys
+        }
+      }).then(function (res) {
+        if (!res.json.ok) { showErr(res.json.error || 'Dekit failed'); return; }
+        showOk(res.json.message || 'Dekit successful');
+        doSearch();
+      }).catch(function () { showErr('Request failed'); });
+    }
+    function onRc500() {
+      if (!confirm('Confirm RC500 and move station?')) return;
+      selReason.value = 'RC500';
+      if ((options.repair_actions || []).indexOf('RETEST') >= 0) selAction.value = 'RETEST';
+      if ((options.duty_types || []).indexOf('TEST FIXTURE') >= 0) selDuty.value = 'TEST FIXTURE';
+      inputRemark.value = 'Retest';
+      doRepair('FLB');
+    }
+    function onRc36() {
+      if (!confirm('Confirm RC36 and move station back to FLA?')) return;
+      selReason.value = 'RC36';
+      if ((options.repair_actions || []).indexOf('RETEST') >= 0) selAction.value = 'RETEST';
+      if ((options.duty_types || []).indexOf('TEST FIXTURE') >= 0) selDuty.value = 'TEST FIXTURE';
+      inputRemark.value = 'RC36 return to FLA';
+      doRepair('FLA');
+    }
+
+    btnSearch.addEventListener('click', doSearch);
+    inputSn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+    btnPass.addEventListener('click', onPass);
+    btnFail.addEventListener('click', openFailModal);
+    btnRepair.addEventListener('click', function () { doRepair(selectedRTarget || ''); });
+    treeDekit.addEventListener('click', doDekit);
+    treeKitting.addEventListener('click', doKitting);
+    btnValidateEc.addEventListener('click', validateEc);
+    btnUpdateFail.addEventListener('click', updateFail);
+    btnFailClose.addEventListener('click', function () { failModal.classList.add('hidden'); });
+    treeTbody.addEventListener('click', function (e) {
+      if (e.target.closest('.tree-new-sn-input')) return;
+      var tg = e.target.closest('.tree-toggle[data-num]');
+      if (tg) {
+        var num = parseInt(tg.getAttribute('data-num'), 10);
+        if (collapsedSet.has(num)) collapsedSet.delete(num);
+        else collapsedSet.add(num);
+        renderTree();
+        return;
+      }
+      var tr = e.target.closest('tr[data-num]');
+      if (!tr) return;
+      selectedRootNum = parseInt(tr.getAttribute('data-num'), 10);
+      renderTree();
     });
-  });
-  qaLockCancel.addEventListener('click', function () {
-    var snList = (qaLockSns.textContent || '').trim();
-    hideQaLockModal();
-    showError('result', 'Dekit/Kitting chưa hoàn thành. Vui lòng unlock part' + (snList ? ' (' + snList + ')' : '') + ' trước.');
-  });
+    treeTbody.addEventListener('input', function (e) {
+      var inp = e.target.closest('.tree-new-sn-input');
+      if (!inp) return;
+      autoSizeInput(inp);
+    });
+    treeExpandAll.addEventListener('click', function () {
+      collapsedSet.clear();
+      renderTree();
+    });
+    treeCollapseAll.addEventListener('click', function () {
+      collapsedSet = new Set();
+      Object.keys(childrenByNum).forEach(function (n) { collapsedSet.add(parseInt(n, 10)); });
+      renderTree();
+    });
 
-  btnSearch.addEventListener('click', doSearch);
-  inputSn.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSearch(); });
-  btnRepair.addEventListener('click', doRepair);
-
-  try { window.__current_user = {{ current_user | tojson if current_user else 'null' }}; } catch (_) {}
-  loadOptions();
-})();
+    loadOptions();
+  })();
   </script>
 </body>
 </html>

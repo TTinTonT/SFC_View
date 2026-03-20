@@ -254,6 +254,22 @@ def api_kitting_table_config_delete():
 _WIP_KEYS = ["SERIAL_NUMBER", "MO_NUMBER", "MODEL_NAME", "STATION_NAME", "LINE_NAME", "GROUP_NAME", "NEXT_STATION"]
 
 
+def _serialize_wip(wip):
+    return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in (wip or {}).items()}
+
+
+def _route_items(route_cols, route_rows):
+    route = []
+    for r in route_rows or []:
+        d = dict(zip(route_cols, r))
+        route.append({
+            "step": d.get("STEP"),
+            "group_name": d.get("GROUP_NAME") or "",
+            "group_next": d.get("GROUP_NEXT") or "",
+        })
+    return route
+
+
 @bp.route("/api/debug/jump-station/wip", methods=["GET"])
 def api_jump_station_wip():
     """Get WIP and route list for SN. Same current-station logic as Repair (get_station_and_next)."""
@@ -274,16 +290,8 @@ def api_jump_station_wip():
             if current_group in ("PACKING", "SHIPPING"):
                 return jsonify({"ok": False, "error": "SN is at PACKING/SHIPPING; jump not allowed."})
             route_cols, route_rows = get_route_list(conn, sn)
-            route = []
-            for r in route_rows or []:
-                d = dict(zip(route_cols, r))
-                route.append({
-                    "step": d.get("STEP"),
-                    "group_name": d.get("GROUP_NAME") or "",
-                    "group_next": d.get("GROUP_NEXT") or "",
-                })
-            wip_serial = {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in wip.items()}
-            return jsonify({"ok": True, "wip": wip_serial, "route": route})
+            route = _route_items(route_cols, route_rows)
+            return jsonify({"ok": True, "wip": _serialize_wip(wip), "route": route})
         finally:
             conn.close()
     except Exception as e:
@@ -302,7 +310,8 @@ def api_jump_station_execute():
     if not target_group:
         return jsonify({"ok": False, "error": "target_group required"}), 400
     reason = (data.get("reason") or "").strip()
-    if not reason:
+    repair_pass = data.get("repair_pass") is True
+    if not reason and not repair_pass:
         return jsonify({"ok": False, "error": "Jump reason is required."}), 400
     emp_no = (data.get("emp_no") or "").strip() or (getattr(request, "current_user", None) or {}).get("username") or "WEB"
     check_jump_station = data.get("check_jump_station") is True
@@ -393,9 +402,199 @@ def api_repair_wip():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@bp.route("/api/debug/repair/flow-state", methods=["GET"])
+def api_repair_flow_state():
+    """Get unified flow-state for Repair UI modes."""
+    sn = (request.args.get("sn") or "").strip().upper()
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.jump_route import get_route_list
+        from sfis_tool.repair_ok import check_has_unrepaired
+        from sfis_tool.repair_flow import (
+            build_groups_ordered,
+            slice_main_segment,
+            detect_repair_mode,
+            build_repair_chain,
+            build_r_only_targets,
+        )
+        conn = get_conn()
+        try:
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN"})
+            wip = dict(zip(_WIP_KEYS, row))
+            route_cols, route_rows = get_route_list(conn, sn)
+            route = _route_items(route_cols, route_rows)
+            groups_ordered = build_groups_ordered(route)
+            main_segment, segment_found = slice_main_segment(groups_ordered, "AOI_FIN_ASSY", "T_VI")
+            has_unrepaired = bool(check_has_unrepaired(conn, sn))
+            mode_info = detect_repair_mode(wip) if has_unrepaired else {"ui_mode": "main_line"}
+            ui_mode = mode_info.get("ui_mode") or "main_line"
+            base = mode_info.get("base")
+            repair_chain_nodes = build_repair_chain(base) if ui_mode == "repair_dido" else []
+            r_only_targets = build_r_only_targets(base, groups_ordered) if ui_mode == "repair_r_only" else []
+            current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            tvi_idx = groups_ordered.index("T_VI") if "T_VI" in groups_ordered else -1
+            current_idx = groups_ordered.index(current_node) if current_node in groups_ordered else -1
+            all_pass = bool(tvi_idx >= 0 and current_idx >= tvi_idx)
+            return jsonify({
+                "ok": True,
+                "wip": _serialize_wip(wip),
+                "route": route,
+                "groups_ordered": groups_ordered,
+                "segment_main": main_segment,
+                "segment_found": segment_found,
+                "has_unrepaired": has_unrepaired,
+                "ui_mode": ui_mode,
+                "repair_chain_nodes": repair_chain_nodes,
+                "r_only_targets": r_only_targets,
+                "all_pass": all_pass,
+            })
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/pass-jump", methods=["POST"])
+def api_repair_pass_jump():
+    """Pass on current node: jump using IT Jump semantics without reason input."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    target_group = (data.get("target_group") or "").strip()
+    if not sn or not target_group:
+        return jsonify({"ok": False, "error": "sn and target_group required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.repair_ok import get_group_info, jump_routing, get_jump_param_from_route
+        conn = get_conn()
+        try:
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."})
+            wip = dict(zip(_WIP_KEYS, row))
+            v_line = wip.get("LINE_NAME") or ""
+            emp_no = (data.get("emp_no") or "").strip() or "SJOP"
+            jump_param = get_jump_param_from_route(conn, sn, target_group)
+            info = get_group_info(conn, v_line, jump_param)
+            if not info:
+                return jsonify({"ok": False, "error": "GetGroupInfo returned no target; cannot jump."})
+            ok = jump_routing(
+                conn, sn,
+                info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
+                emp_no, in_station_time=None
+            )
+            if not ok:
+                return jsonify({"ok": False, "error": "UPDATE affected no rows."})
+            row2 = get_station_and_next(conn, sn)
+            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+            return jsonify({"ok": True, "wip": _serialize_wip(wip2)})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/fail-history", methods=["GET"])
+def api_repair_fail_history():
+    """Get fail history for SN from R_REPAIR_T + C_ERROR_CODE_T."""
+    sn = (request.args.get("sn") or "").strip().upper()
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.sql_queries import REPAIR_FAIL_HISTORY
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute(REPAIR_FAIL_HISTORY, {"sn": sn})
+                cols = [d[0] for d in cur.description]
+                rows = []
+                for row in cur.fetchall():
+                    item = {}
+                    for idx, col in enumerate(cols):
+                        val = row[idx]
+                        item[col] = val.isoformat() if hasattr(val, "isoformat") else val
+                    rows.append(item)
+                return jsonify({"ok": True, "rows": rows})
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/validate-error-code", methods=["POST"])
+def api_repair_validate_error_code():
+    """Validate error code against C_ERROR_CODE_T."""
+    data = request.get_json(silent=True) or {}
+    ec = (data.get("error_code") or "").strip()
+    if not ec:
+        return jsonify({"ok": False, "error": "error_code required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.oracle_sp import validate_error_code
+        conn = get_conn()
+        try:
+            valid = validate_error_code(conn, ec)
+            return jsonify({"ok": True, "valid": valid})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/fail-input", methods=["POST"])
+def api_repair_fail_input():
+    """Execute fail input by calling SFIS1.NEW_TEST_INPUT_Z."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    ec = (data.get("error_code") or "").strip()
+    if not sn or not ec:
+        return jsonify({"ok": False, "error": "sn and error_code required"}), 400
+    emp = (data.get("emp") or "").strip() or "SJOP"
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.repair_ok import get_group_info
+        from sfis_tool.oracle_sp import validate_error_code, call_new_test_input_z
+        conn = get_conn()
+        try:
+            if not validate_error_code(conn, ec):
+                return jsonify({"ok": False, "error": f"EC invalid/not allowed => [{ec}]"}), 400
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN"})
+            wip = dict(zip(_WIP_KEYS, row))
+            line = wip.get("LINE_NAME") or ""
+            ui_current = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            info = get_group_info(conn, line, ui_current)
+            if not info:
+                return jsonify({"ok": False, "error": "Cannot resolve line/section/station/group for fail input"}), 400
+            ok, res = call_new_test_input_z(
+                conn, sn, ec, emp,
+                info["LINE_NAME"], info["SECTION_NAME"], info["STATION_NAME"], info["GROUP_NAME"]
+            )
+            if not ok:
+                return jsonify({"ok": False, "error": res or "NEW_TEST_INPUT_Z failed"}), 400
+            row2 = get_station_and_next(conn, sn)
+            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+            return jsonify({"ok": True, "message": "Fail input updated.", "res": res, "wip": _serialize_wip(wip2)})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/api/debug/repair/assy-tree", methods=["GET"])
 def api_repair_assy_tree():
-    """Fetch assy tree for SN (Y + N combined), return serializable list for frontend."""
+    """Fetch assy tree for SN, return serializable list for frontend."""
     sn = (request.args.get("sn") or "").strip()
     if not sn:
         return jsonify({"ok": False, "error": "sn required"}), 400
@@ -404,29 +603,25 @@ def api_repair_assy_tree():
         from sfis_tool.change_ok import fetch_assy_tree, build_numbered_tree_preserve_order
         conn = get_conn()
         try:
-            cols_y, rows_y = fetch_assy_tree(conn, sn, "Y")
-            cols_n, rows_n = fetch_assy_tree(conn, sn, "N")
-            combined = list(rows_y) + list(rows_n)
-            if not combined:
+            cols, rows = fetch_assy_tree(conn, sn)
+            if not rows:
                 return jsonify({"ok": True, "tree": []})
-            numbered_list, _ = build_numbered_tree_preserve_order(cols_y, combined)
+            numbered_list, _ = build_numbered_tree_preserve_order(cols, rows)
             tree = []
             for t in numbered_list:
                 num, node_key, row, is_father, parent_num, depth = t
-                vendor_sn = node_key[0]
-                father_sn = node_key[1]
+                sn_key, vendor_sn, father_sn = node_key
                 assy_flag = (row.get("ASSY_FLAG") or "Y")
-                group_name = (row.get("GROUP_NAME") or "")
-                cust_pn = (row.get("CUST_PN") or row.get("SUB_MODEL_NAME") or "")
-                cust_rev = (row.get("CUST_REV") or row.get("SUB_REV") or "N/A")
                 tree.append({
                     "num": num,
+                    "sn": sn_key,
                     "vendor_sn": vendor_sn,
                     "father_sn": father_sn,
-                    "group_name": group_name,
+                    "sub_model_name": (row.get("SUB_MODEL_NAME") or ""),
+                    "in_station_time": (row.get("IN_STATION_TIME") or ""),
+                    "stack": (row.get("STACK") or ""),
                     "assy_flag": assy_flag,
-                    "cust_pn": cust_pn,
-                    "cust_rev": cust_rev,
+                    "assy_seq": row.get("ASSY_SEQ"),
                     "depth": depth,
                     "is_father": is_father,
                     "parent_num": parent_num,
@@ -449,10 +644,13 @@ def api_repair_execute():
     if not emp:
         return jsonify({"ok": False, "error": "emp required"}), 400
     reason_code = (data.get("reason_code") or "RC500").strip()
+    desired_target = (data.get("desired_target") or "").strip()
     repair_action = (data.get("repair_action") or "REPLACE").strip()
     duty_station = (data.get("duty_station") or "TEST FIXTURE").strip()
     remark = (data.get("remark") or "retest").strip()
     kit_list = data.get("kit_list") or []
+    dekit_keys = data.get("dekit_keys") or []
+    action = (data.get("action") or "repair").strip().lower()
     force_continue = data.get("force_continue") is True
 
     try:
@@ -477,16 +675,34 @@ def api_repair_execute():
             station_name = wip.get("STATION_NAME")
             line_name = wip.get("LINE_NAME") or ""
             group_name = wip.get("GROUP_NAME") or ""
-            valid, msg = validate_next_station_r(next_station)
-            if not valid:
-                return jsonify({"ok": False, "error": msg})
-            if not check_has_unrepaired(conn, sn):
+            if action == "repair":
+                valid, msg = validate_next_station_r(next_station)
+                if not valid:
+                    return jsonify({"ok": False, "error": msg})
+            if action == "repair" and not check_has_unrepaired(conn, sn):
                 return jsonify({"ok": False, "error": "No un-repaired record"})
 
             repair_station = (
                 (next_station if (next_station and str(next_station).startswith("R_")) else None)
                 or station_name or str(next_station or "")
             )
+
+            if action == "dekit":
+                keys = []
+                for item in dekit_keys:
+                    if not isinstance(item, dict):
+                        continue
+                    v = (item.get("vendor_sn") or "").strip()
+                    f = item.get("father_sn")
+                    f = f.strip() if isinstance(f, str) else f
+                    if v:
+                        keys.append((v, f))
+                total, err = dekit_nodes(conn, sn, keys, emp)
+                if err:
+                    return jsonify({"ok": False, "error": f"De-kit failed: {err}", "step": "dekit"})
+                row2 = get_station_and_next(conn, sn)
+                current_station = dict(zip(_WIP_KEYS, row2)) if row2 else None
+                return jsonify({"ok": True, "message": f"De-kit OK ({total} row(s)).", "current_station": current_station, "dekit_count": total})
 
             if kit_list:
                 old_to_new = {}
@@ -520,7 +736,7 @@ def api_repair_execute():
                             "ok": False,
                             "qa_locked": True,
                             "locked_sns": locked_sns,
-                            "error": lock_msg or "Part(s) bị QA lock (PPID lock). Chưa được unlock."
+                            "error": lock_msg or "Part(s) are QA locked (PPID lock). Please unlock before retry."
                         })
                 node_keys = [(item.get("old_vendor_sn"), item.get("old_father_sn")) for item in kit_list if (item.get("old_vendor_sn") or "").strip()]
                 total, err = dekit_nodes(conn, sn, [(k[0], k[1]) for k in node_keys if k[0]], emp)
@@ -536,12 +752,18 @@ def api_repair_execute():
                     ok, err = insert_assy_row(conn, sn, ov, of, nv, nf, emp)
                     if not ok:
                         return jsonify({"ok": False, "error": f"Kit failed: {err}", "step": "kit", "vendor_sn": ov})
+                if action == "kitting":
+                    row2 = get_station_and_next(conn, sn)
+                    current_station = dict(zip(_WIP_KEYS, row2)) if row2 else None
+                    return jsonify({"ok": True, "message": f"Kitting OK ({len(kit_list)} row(s)).", "current_station": current_station})
+            elif action == "kitting":
+                return jsonify({"ok": False, "error": "No kitting items found. Please input New SN for selected subtree."})
             rows_ok, success, err, repair_time = execute_repair_ok(
                 conn, sn, repair_station, emp, reason_code, duty_station, remark, repair_action
             )
             if not success:
                 return jsonify({"ok": False, "error": err})
-            desired_target = resolve_jump_target(reason_code, group_name)
+            desired_target = desired_target or resolve_jump_target(reason_code, group_name)
             target_group = get_jump_param_from_route(conn, sn, desired_target)
             info = get_group_info(conn, line_name, target_group)
             if info:

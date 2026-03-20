@@ -11,13 +11,17 @@ from .sql_queries import (
 )
 
 
-def fetch_assy_tree(conn, sn, assy_flag='Y'):
-    """Lấy row R_ASSY_COMPONENT_T cho SN, ASSY_FLAG=assy_flag. Trả về (cols, rows)."""
+def fetch_assy_tree(conn, sn, assy_flag=None):
+    """Lấy row assy cho SN theo query chuẩn UI. Trả về (cols, rows)."""
     cur = conn.cursor()
     try:
-        cur.execute(KITTING_FETCH_ASSY_TREE, {"sn": sn.upper(), "flag": assy_flag})
+        cur.execute(KITTING_FETCH_ASSY_TREE, {"sn": sn.upper()})
         cols = [d[0] for d in cur.description]
         rows = cur.fetchall()
+        if assy_flag in ("Y", "N"):
+            idx_flag = next((i for i, c in enumerate(cols) if c.upper() == "ASSY_FLAG"), -1)
+            if idx_flag >= 0:
+                rows = [r for r in rows if (str(r[idx_flag] or "").upper() == assy_flag)]
         return cols, rows
     finally:
         cur.close()
@@ -91,63 +95,86 @@ def build_numbered_tree(cols, rows):
 
 def build_numbered_tree_preserve_order(cols, rows):
     """
-    Build numbered tree preserving the order of `rows` (SQL order).
-    Returns (numbered_list, vendor_to_row). numbered_list is list of
-    (num, node_key, row, is_father, parent_node_key, depth) in same order as rows.
+    Build numbered tree theo SQL order (ASSY_SEQ), key node = (SN, VENDOR_SN, FATHER_SN).
+    Parent rule: child.FATHER_SN == parent.VENDOR_SN trong cùng SN.
     """
-    col_idx = {c.upper(): i for i, c in enumerate(cols)}
-    idx_vendor = col_idx.get("VENDOR_SN", -1)
-    idx_father = col_idx.get("FATHER_SN", -1)
-
-    vendor_to_row = {}
     rows_in_order = []
+    vendor_to_keys = {}
+    children_by_key = {}
+
     for r in rows:
         row_dict = {cols[i]: r[i] for i in range(len(cols))}
-        vsn = r[idx_vendor] if idx_vendor >= 0 else None
-        father = row_dict.get("FATHER_SN") if idx_father >= 0 else None
-        if vsn is not None:
-            node_key = (vsn, father)
-            vendor_to_row[node_key] = row_dict
-            rows_in_order.append((node_key, row_dict))
+        sn = row_dict.get("SN") or row_dict.get("SERIAL_NUMBER")
+        vsn = row_dict.get("VENDOR_SN")
+        father = row_dict.get("FATHER_SN")
+        if not sn or not vsn:
+            continue
+        nk = (str(sn), str(vsn), father if father is None else str(father))
+        rows_in_order.append((nk, row_dict))
+        vendor_to_keys.setdefault((str(sn), str(vsn)), []).append(nk)
 
-    vendor_sns_set = set(nk[0] for nk, _ in rows_in_order)
-    children_of = {}
-    for node_key, _ in rows_in_order:
-        vsn, father = node_key
-        if father is not None and father in vendor_sns_set:
-            children_of.setdefault(father, []).append(node_key)
-
-    def parent_node_key_of(node_key):
-        vsn, father = node_key
+    def parent_of(node_key):
+        sn, _, father = node_key
         if father is None:
             return None
-        return next((k for k in vendor_to_row if k[0] == father), None)
+        candidates = vendor_to_keys.get((sn, str(father))) or []
+        return candidates[0] if candidates else None
+
+    for nk, _ in rows_in_order:
+        pnk = parent_of(nk)
+        if pnk is not None:
+            children_by_key.setdefault(pnk, []).append(nk)
 
     depth_cache = {}
 
     def get_depth(node_key):
         if node_key in depth_cache:
             return depth_cache[node_key]
-        pnk = parent_node_key_of(node_key)
-        d = 0 if pnk is None else 1 + get_depth(pnk)
-        depth_cache[node_key] = d
-        return d
+        pnk = parent_of(node_key)
+        depth = 0 if pnk is None else 1 + get_depth(pnk)
+        depth_cache[node_key] = depth
+        return depth
 
     num_by_key = {}
-    for i, (node_key, _) in enumerate(rows_in_order):
-        num_by_key[node_key] = i + 1
+    for i, (nk, _) in enumerate(rows_in_order):
+        num_by_key[nk] = i + 1
 
     numbered_list = []
-    for i, (node_key, row) in enumerate(rows_in_order):
+    vendor_to_row = {}
+    for i, (nk, row) in enumerate(rows_in_order):
         num = i + 1
-        vsn, father = node_key
-        is_father = vsn in children_of
-        pnk = parent_node_key_of(node_key)
+        is_father = nk in children_by_key
+        pnk = parent_of(nk)
         parent_num = num_by_key.get(pnk) if pnk else None
-        depth = get_depth(node_key)
-        numbered_list.append((num, node_key, row, is_father, parent_num, depth))
-
+        depth = get_depth(nk)
+        vendor_to_row[nk] = row
+        numbered_list.append((num, nk, row, is_father, parent_num, depth))
     return numbered_list, vendor_to_row
+
+
+def collect_subtree_nodes(numbered_list, root_key):
+    """Collect subtree node_keys theo thứ tự xuất hiện trong numbered_list."""
+    by_parent = {}
+    for _, nk, _, _, parent_num, _ in numbered_list:
+        by_parent.setdefault(parent_num, []).append(nk)
+    num_by_key = {nk: num for num, nk, _, _, _, _ in numbered_list}
+    root_num = num_by_key.get(root_key)
+    if root_num is None:
+        return []
+    out = []
+    stack = [root_num]
+    seen = set()
+    while stack:
+        pnum = stack.pop(0)
+        for nk in by_parent.get(pnum, []):
+            if nk in seen:
+                continue
+            seen.add(nk)
+            out.append(nk)
+            child_num = num_by_key.get(nk)
+            if child_num is not None:
+                stack.append(child_num)
+    return [root_key] + [nk for nk in out if nk != root_key]
 
 
 def expand_selection_to_flat(numbered_list, vendor_to_row, selected_numbers):
@@ -196,13 +223,17 @@ def _collect_subtree(root_node_key, vendor_to_row):
 
 
 def dekit_nodes(conn, sn, node_keys, emp):
-    """UPDATE ASSY_FLAG='N' cho từng row (VENDOR_SN, FATHER_SN)."""
+    """UPDATE ASSY_FLAG='N' cho từng row key (SN, VENDOR_SN, FATHER_SN) hoặc (VENDOR_SN, FATHER_SN)."""
     if not node_keys:
         return 0, ""
     cur = conn.cursor()
     try:
         total = 0
-        for v, f in node_keys:
+        for key in node_keys:
+            if len(key) == 3:
+                _, v, f = key
+            else:
+                v, f = key
             cur.execute(KITTING_DEKIT_UPDATE, {"sn": sn.upper(), "emp": (emp or "").strip(), "v": v, "f": f})
             total += cur.rowcount
         conn.commit()
