@@ -8,6 +8,7 @@ from .sql_queries import (
     KITTING_COUNT_DEKITTED,
     KITTING_DEKIT_UPDATE,
     KITTING_INSERT_SELECT,
+    KITTING_CHECK_VENDOR_IN_OTHER_TRAY,
 )
 
 DEPTH_LIMIT = 5
@@ -247,7 +248,7 @@ def _collect_subtree(root_node_key, vendor_to_row):
     return out
 
 
-def dekit_nodes(conn, sn, node_keys, emp, auto_commit=True):
+def dekit_nodes(conn, sn, node_keys, emp, auto_commit=True, skip_missing=False):
     """UPDATE ASSY_FLAG='N' cho từng row key (SN, VENDOR_SN, FATHER_SN) hoặc (VENDOR_SN, FATHER_SN)."""
     if not node_keys:
         return 0, ""
@@ -261,6 +262,8 @@ def dekit_nodes(conn, sn, node_keys, emp, auto_commit=True):
                 v, f = key
             cur.execute(KITTING_DEKIT_UPDATE, {"sn": sn.upper(), "emp": (emp or "").strip(), "v": v, "f": f})
             if cur.rowcount <= 0:
+                if skip_missing:
+                    continue
                 return 0, f"Row not found/already dekitted: vendor_sn={v}, father_sn={f}"
             total += cur.rowcount
         if auto_commit:
@@ -399,3 +402,130 @@ def validate_kit_request(conn, sn, kit_list):
                 f"child has new_father_sn={payload['new_father_sn']!r}"
             )
     return len(errors) == 0, errors, depth_map
+
+
+def check_vendor_in_other_trays(conn, new_vendor_sns, current_sn):
+    """
+    Check new vendor SNs against trays other than current_sn.
+    Returns list of dicts: vendor_sn, tray_sn, father_sn, sub_model_name, child_count.
+    Empty list if no conflicts (new SN, or only on current tray).
+    """
+    current_upper = (current_sn or "").strip().upper()
+    raw_conflicts = []
+    seen = set()
+    cur = conn.cursor()
+    try:
+        for vsn in new_vendor_sns:
+            vsn_clean = (vsn or "").strip().upper()
+            if not vsn_clean or _is_config_vendor(vsn_clean) or vsn_clean in seen:
+                continue
+            seen.add(vsn_clean)
+            cur.execute(
+                KITTING_CHECK_VENDOR_IN_OTHER_TRAY,
+                {"vendor_sn": vsn_clean, "current_sn": current_upper},
+            )
+            cols = [d[0] for d in cur.description]
+            for row in cur.fetchall():
+                rd = dict(zip(cols, row))
+                tray = (rd.get("TRAY_SN") or "").strip()
+                if not tray or tray.upper() == current_upper:
+                    continue
+                father = rd.get("FATHER_SN")
+                raw_conflicts.append(
+                    {
+                        "vendor_sn": vsn_clean,
+                        "tray_sn": tray,
+                        "father_sn": None if father is None else str(father),
+                        "sub_model_name": str(rd.get("SUB_MODEL_NAME") or ""),
+                    }
+                )
+    finally:
+        cur.close()
+
+    if not raw_conflicts:
+        return []
+
+    by_tray = {}
+    for c in raw_conflicts:
+        by_tray.setdefault(c["tray_sn"], []).append(c)
+
+    enriched = []
+    for tray_sn, conflicts_in_tray in by_tray.items():
+        try:
+            cols_t, rows_t = fetch_assy_tree(conn, tray_sn)
+            if not rows_t:
+                for c in conflicts_in_tray:
+                    c["child_count"] = 0
+                    enriched.append(c)
+                continue
+            numbered_list, _ = build_numbered_tree_preserve_order(cols_t, rows_t)
+        except (ValueError, Exception):
+            for c in conflicts_in_tray:
+                c["child_count"] = 0
+                enriched.append(c)
+            continue
+
+        for c in conflicts_in_tray:
+            vsn_upper = c["vendor_sn"].strip().upper()
+            child_count = 0
+            for _, nk, row, _, _, _ in numbered_list:
+                row_vsn = str(nk[1] or "").strip().upper()
+                row_flag = str(row.get("ASSY_FLAG") or "").strip().upper()
+                if row_vsn == vsn_upper and row_flag == "Y":
+                    subtree = collect_subtree_nodes(numbered_list, nk)
+                    child_count += max(0, len(subtree) - 1)
+            c["child_count"] = child_count
+            enriched.append(c)
+
+    return enriched
+
+
+def dekit_vendor_from_other_tray(conn, tray_sn, vendor_sn, emp, auto_commit=False):
+    """
+    Dekit vendor_sn and all descendants on another tray.
+    Uses skip_missing=True for cross-tray race conditions.
+    """
+    cols, rows = fetch_assy_tree(conn, tray_sn)
+    if not rows:
+        return 0, ""
+
+    numbered_list, _ = build_numbered_tree_preserve_order(cols, rows)
+
+    target_keys = []
+    vsn_want = vendor_sn.strip().upper()
+    for _, nk, row, _, _, _ in numbered_list:
+        row_vsn = str(nk[1] or "").strip().upper()
+        row_flag = str(row.get("ASSY_FLAG") or "").strip().upper()
+        if row_vsn == vsn_want and row_flag == "Y":
+            target_keys.append(nk)
+
+    if not target_keys:
+        return 0, ""
+
+    all_keys = set()
+    for root_key in target_keys:
+        for nk in collect_subtree_nodes(numbered_list, root_key):
+            all_keys.add(nk)
+
+    if not all_keys:
+        return 0, ""
+
+    depth_map = {nk: depth for _, nk, _, _, _, depth in numbered_list}
+    flag_map = {nk: row for _, nk, row, _, _, _ in numbered_list}
+    node_keys_for_dekit = [
+        nk
+        for nk in sorted(all_keys, key=lambda k: depth_map.get(k, 0), reverse=True)
+        if str(flag_map.get(nk, {}).get("ASSY_FLAG") or "").upper() == "Y"
+    ]
+
+    if not node_keys_for_dekit:
+        return 0, ""
+
+    return dekit_nodes(
+        conn,
+        tray_sn,
+        node_keys_for_dekit,
+        emp,
+        auto_commit=auto_commit,
+        skip_missing=True,
+    )

@@ -1,9 +1,8 @@
 ---
 description: Repair debug UI modes and Oracle fail flow
-globs: "{templates/debug_repair.html,fa_debug/routes.py,sfis_tool/repair_*.py,sfis_tool/oracle_sp.py,sfis_tool/sql_queries.py}"
+globs: fa_debug/routes.py,sfis_tool/repair_*.py,sfis_tool/oracle_sp.py
 alwaysApply: false
 ---
-
 # Repair Debug UI Rule
 
 - UI current node must follow IT Jump semantics: display and highlight `NEXT_STATION`.

@@ -700,6 +700,7 @@ def api_repair_execute():
     dekit_keys = data.get("dekit_keys") or []
     action = (data.get("action") or "repair").strip().lower()
     force_continue = data.get("force_continue") is True
+    force_dekit_other_tray = data.get("force_dekit_other_tray") is True
     request_id = (data.get("request_id") or "").strip()
 
     cached = _get_cached_repair_response(sn, request_id)
@@ -721,7 +722,9 @@ def api_repair_execute():
             get_jump_param_from_route,
         )
         from sfis_tool.change_ok import (
+            check_vendor_in_other_trays,
             dekit_nodes,
+            dekit_vendor_from_other_tray,
             insert_assy_row,
             validate_kit_request,
             validate_tree_integrity,
@@ -807,6 +810,77 @@ def api_repair_execute():
                 ok_req, errors, depth_map_raw = validate_kit_request(conn, sn, kit_list)
                 if not ok_req:
                     return jsonify({"ok": False, "error": errors[0], "errors": errors}), 400
+
+                new_vsns = [
+                    (item.get("new_vendor_sn") or "").strip()
+                    for item in kit_list
+                    if (item.get("new_vendor_sn") or "").strip()
+                ]
+                cross_conflicts = check_vendor_in_other_trays(conn, new_vsns, sn)
+                if cross_conflicts and not force_dekit_other_tray:
+                    return jsonify({
+                        "ok": False,
+                        "cross_tray_conflict": True,
+                        "conflicts": cross_conflicts,
+                        "error": "Vendor SN already kitted in another tray.",
+                    })
+
+                other_tray_locks = []
+                if cross_conflicts and force_dekit_other_tray:
+                    other_tray_sns = sorted(
+                        dict.fromkeys(c["tray_sn"] for c in cross_conflicts if c.get("tray_sn"))
+                    )
+                    for other_sn in other_tray_sns:
+                        if str(other_sn).upper() == sn.upper():
+                            continue
+                        other_lock = _get_sn_lock(other_sn)
+                        if not other_lock.acquire(blocking=False):
+                            for lk in other_tray_locks:
+                                try:
+                                    lk.release()
+                                except Exception:
+                                    pass
+                            return jsonify({
+                                "ok": False,
+                                "error": (
+                                    f"Tray {other_sn} is currently being processed. "
+                                    "Please try again."
+                                ),
+                            })
+                        other_tray_locks.append(other_lock)
+
+                    try:
+                        fresh = check_vendor_in_other_trays(conn, new_vsns, sn)
+                        fresh_vsns = list(
+                            dict.fromkeys(c["vendor_sn"] for c in fresh if c.get("vendor_sn"))
+                        )
+                        fresh_trays = list(
+                            dict.fromkeys(c["tray_sn"] for c in fresh if c.get("tray_sn"))
+                        )
+                        for ct in fresh_trays:
+                            for cv in fresh_vsns:
+                                _total, derr = dekit_vendor_from_other_tray(
+                                    conn, ct, cv, emp, auto_commit=False
+                                )
+                                if derr:
+                                    conn.rollback()
+                                    return jsonify({
+                                        "ok": False,
+                                        "error": (
+                                            f"Cross-tray dekit failed: {cv} in tray {ct}: {derr}"
+                                        ),
+                                        "step": "cross_tray_dekit",
+                                    })
+                    except Exception:
+                        conn.rollback()
+                        raise
+                    finally:
+                        for lk in other_tray_locks:
+                            try:
+                                lk.release()
+                            except Exception:
+                                pass
+
                 if not force_continue:
                     from sfis_tool.qa_lock import check_ppid_lock
                     vendor_sns = list(dict.fromkeys([(item.get("old_vendor_sn") or "").strip() for item in kit_list if (item.get("old_vendor_sn") or "").strip()]))
