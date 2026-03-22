@@ -91,6 +91,16 @@ def build_repair_chain(base):
     return [f"{base}_DI", f"{base}_DO", f"{base}_RI", f"{base}_RO", f"R_{base}"]
 
 
+def get_dido_suffix_from_node(node):
+    """Return DI/DO/RI/RO suffix from group/station name, or empty string."""
+    if not node:
+        return ""
+    base, suffix = _parse_base_and_suffix(normalize_station_name(node))
+    if suffix in ("DI", "DO", "RI", "RO"):
+        return suffix
+    return ""
+
+
 def build_r_only_targets(base, route_groups):
     """Build R_xxx target options for repair_r_only mode."""
     out = []

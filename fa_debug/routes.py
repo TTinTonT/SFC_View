@@ -415,6 +415,33 @@ def api_repair_options():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@bp.route("/api/debug/repair/debug-reason-codes", methods=["GET"])
+def api_debug_reason_codes():
+    """Fetch reason codes from C_REASON_CODE_T for DO station (DEBUG filter)."""
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.sql_queries import REASON_CODE_DEBUG_LIST
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute(REASON_CODE_DEBUG_LIST)
+                rows = cur.fetchall()
+                return jsonify({
+                    "ok": True,
+                    "reason_codes": [
+                        {"code": row[0], "desc": row[1] or ""}
+                        for row in rows
+                    ],
+                })
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/api/debug/repair/wip", methods=["GET"])
 def api_repair_wip():
     """Check WIP for SN: get_station_and_next, validate_next_station_r, check_has_unrepaired. Returns wip dict or error."""
@@ -461,6 +488,7 @@ def api_repair_flow_state():
             detect_repair_mode,
             build_repair_chain,
             build_r_only_targets,
+            get_dido_suffix_from_node,
         )
         conn = get_conn()
         try:
@@ -479,6 +507,7 @@ def api_repair_flow_state():
             repair_chain_nodes = build_repair_chain(base) if ui_mode == "repair_dido" else []
             r_only_targets = build_r_only_targets(base, groups_ordered) if ui_mode == "repair_r_only" else []
             current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            current_dido_station = get_dido_suffix_from_node(current_node) if ui_mode == "repair_dido" else ""
             tvi_idx = groups_ordered.index("T_VI") if "T_VI" in groups_ordered else -1
             current_idx = groups_ordered.index(current_node) if current_node in groups_ordered else -1
             all_pass = bool(tvi_idx >= 0 and current_idx >= tvi_idx)
@@ -493,8 +522,308 @@ def api_repair_flow_state():
                 "ui_mode": ui_mode,
                 "repair_chain_nodes": repair_chain_nodes,
                 "r_only_targets": r_only_targets,
+                "current_dido_station": current_dido_station,
+                "base": base or "",
                 "all_pass": all_pass,
             })
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/di-next", methods=["POST"])
+def api_repair_di_next():
+    """Jump DI -> DO. Requires current station to be base_DI."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    base = (data.get("base") or "").strip()
+    if not sn or not base:
+        return jsonify({"ok": False, "error": "sn and base required"}), 400
+    emp_no = (data.get("emp_no") or "").strip() or "SJOP"
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.repair_ok import get_group_info, jump_routing
+        from sfis_tool.repair_flow import get_dido_suffix_from_node
+        conn = get_conn()
+        try:
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."})
+            wip = dict(zip(_WIP_KEYS, row))
+            current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            if get_dido_suffix_from_node(current_node) != "DI":
+                return jsonify({"ok": False, "error": "SN must be at DI station for this action."}), 400
+            target_group = f"{base} DO"
+            v_line = wip.get("LINE_NAME") or ""
+            info = get_group_info(conn, v_line, target_group)
+            if not info:
+                target_group = f"{base}_DO"
+                info = get_group_info(conn, v_line, target_group)
+            if not info:
+                return jsonify({"ok": False, "error": "GetGroupInfo not found for target; cannot jump."})
+            ok = jump_routing(
+                conn, sn,
+                info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
+                emp_no, in_station_time=None
+            )
+            if not ok:
+                return jsonify({"ok": False, "error": "UPDATE affected no rows."})
+            row2 = get_station_and_next(conn, sn)
+            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+            return jsonify({"ok": True, "wip": _serialize_wip(wip2)})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/ri-next", methods=["POST"])
+def api_repair_ri_next():
+    """Jump RI -> RO. Requires current station to be base_RI."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    base = (data.get("base") or "").strip()
+    if not sn or not base:
+        return jsonify({"ok": False, "error": "sn and base required"}), 400
+    emp_no = (data.get("emp_no") or "").strip() or "SJOP"
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.repair_ok import get_group_info, jump_routing
+        from sfis_tool.repair_flow import get_dido_suffix_from_node
+        conn = get_conn()
+        try:
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."})
+            wip = dict(zip(_WIP_KEYS, row))
+            current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            if get_dido_suffix_from_node(current_node) != "RI":
+                return jsonify({"ok": False, "error": "SN must be at RI station for this action."}), 400
+            target_group = f"{base} RO"
+            v_line = wip.get("LINE_NAME") or ""
+            info = get_group_info(conn, v_line, target_group)
+            if not info:
+                target_group = f"{base}_RO"
+                info = get_group_info(conn, v_line, target_group)
+            if not info:
+                return jsonify({"ok": False, "error": "GetGroupInfo not found for target; cannot jump."})
+            ok = jump_routing(
+                conn, sn,
+                info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
+                emp_no, in_station_time=None
+            )
+            if not ok:
+                return jsonify({"ok": False, "error": "UPDATE affected no rows."})
+            row2 = get_station_and_next(conn, sn)
+            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+            return jsonify({"ok": True, "wip": _serialize_wip(wip2)})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/do-pass", methods=["POST"])
+def api_repair_do_pass():
+    """DO station Pass (outstore pass): update repair log + jump to base station."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    base = (data.get("base") or "").strip()
+    reason_code = (data.get("reason_code") or "").strip()
+    remark = (data.get("remark") or "").strip()
+    emp = (data.get("emp") or "").strip() or "SJOP"
+    if not sn or not base or not reason_code:
+        return jsonify({"ok": False, "error": "sn, base, and reason_code required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.repair_ok import (
+            get_group_info,
+            jump_routing,
+            get_jump_param_from_route,
+            execute_repair_ok,
+            check_has_unrepaired,
+        )
+        from sfis_tool.repair_flow import get_dido_suffix_from_node
+        from sfis_tool.sql_queries import REASON_CODE_DEBUG_VALIDATE
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(REASON_CODE_DEBUG_VALIDATE, {"rc": reason_code})
+            row = cur.fetchone()
+            cur.close()
+            if not row or row[0] == 0:
+                return jsonify({"ok": False, "error": "Invalid reason code for DO station."}), 400
+
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."})
+            wip = dict(zip(_WIP_KEYS, row))
+            current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            if get_dido_suffix_from_node(current_node) != "DO":
+                return jsonify({"ok": False, "error": "SN must be at DO station for this action."}), 400
+            if not check_has_unrepaired(conn, sn):
+                return jsonify({"ok": False, "error": "No un-repaired record."})
+
+            repair_station = wip.get("STATION_NAME") or current_node
+            n, ok_repair, err, _ = execute_repair_ok(
+                conn, sn, repair_station, emp, reason_code,
+                duty_station="TEST FIXTURE", remark=remark or "DO Pass",
+                repair_action="RETEST", duty_type="RETEST", auto_commit=False
+            )
+            if not ok_repair or n == 0:
+                conn.rollback()
+                return jsonify({"ok": False, "error": err or "Repair update failed."})
+            v_line = wip.get("LINE_NAME") or ""
+            jump_param = get_jump_param_from_route(conn, sn, base)
+            info = get_group_info(conn, v_line, jump_param)
+            if not info:
+                conn.rollback()
+                return jsonify({"ok": False, "error": "GetGroupInfo not found for base; cannot jump."})
+            ok = jump_routing(
+                conn, sn,
+                info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
+                emp, in_station_time=None, auto_commit=False
+            )
+            if not ok:
+                conn.rollback()
+                return jsonify({"ok": False, "error": "UPDATE affected no rows."})
+            conn.commit()
+            row2 = get_station_and_next(conn, sn)
+            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+            return jsonify({"ok": True, "wip": _serialize_wip(wip2)})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/do-fail", methods=["POST"])
+def api_repair_do_fail():
+    """DO station Fail (outstore fail): fail SN via NEW_TEST_INPUT_Z, moves to RI."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    base = (data.get("base") or "").strip()
+    reason_code = (data.get("reason_code") or "").strip()
+    emp = (data.get("emp") or "").strip() or "SJOP"
+    if not sn or not base or not reason_code:
+        return jsonify({"ok": False, "error": "sn, base, and reason_code required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.repair_ok import get_group_info
+        from sfis_tool.oracle_sp import call_new_test_input_z
+        from sfis_tool.repair_flow import get_dido_suffix_from_node
+        from sfis_tool.sql_queries import REASON_CODE_DEBUG_VALIDATE
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(REASON_CODE_DEBUG_VALIDATE, {"rc": reason_code})
+            row = cur.fetchone()
+            cur.close()
+            if not row or row[0] == 0:
+                return jsonify({"ok": False, "error": "Invalid reason code for DO station."}), 400
+
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."})
+            wip = dict(zip(_WIP_KEYS, row))
+            current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            if get_dido_suffix_from_node(current_node) != "DO":
+                return jsonify({"ok": False, "error": "SN must be at DO station for this action."}), 400
+            line = wip.get("LINE_NAME") or ""
+            info = get_group_info(conn, line, current_node)
+            if not info:
+                return jsonify({"ok": False, "error": "Cannot resolve station for fail input."}), 400
+            ok, res = call_new_test_input_z(
+                conn, sn, reason_code, emp,
+                info["LINE_NAME"], info["SECTION_NAME"], info["STATION_NAME"], info["GROUP_NAME"]
+            )
+            if not ok:
+                return jsonify({"ok": False, "error": res or "NEW_TEST_INPUT_Z failed"}), 400
+            row2 = get_station_and_next(conn, sn)
+            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+            return jsonify({"ok": True, "message": "Fail input updated.", "res": res, "wip": _serialize_wip(wip2)})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/repair/ro-next", methods=["POST"])
+def api_repair_ro_next():
+    """RO station Next: update repair log + jump to FLA."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    base = (data.get("base") or "").strip()
+    reason_code = (data.get("reason_code") or "").strip()
+    remark = (data.get("remark") or "").strip()
+    emp = (data.get("emp") or "").strip() or "SJOP"
+    if not sn or not base:
+        return jsonify({"ok": False, "error": "sn and base required"}), 400
+    if not reason_code:
+        return jsonify({"ok": False, "error": "reason_code required for RO Next."}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.repair_ok import (
+            get_group_info,
+            jump_routing,
+            get_jump_param_from_route,
+            execute_repair_ok,
+            check_has_unrepaired,
+        )
+        from sfis_tool.repair_flow import get_dido_suffix_from_node
+        from sfis_tool.sql_queries import REASON_CODE_DEBUG_VALIDATE
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(REASON_CODE_DEBUG_VALIDATE, {"rc": reason_code})
+            row = cur.fetchone()
+            cur.close()
+            if not row or row[0] == 0:
+                return jsonify({"ok": False, "error": "Invalid reason code for RO Next."}), 400
+
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."})
+            wip = dict(zip(_WIP_KEYS, row))
+            current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            if get_dido_suffix_from_node(current_node) != "RO":
+                return jsonify({"ok": False, "error": "SN must be at RO station for this action."}), 400
+            if not check_has_unrepaired(conn, sn):
+                return jsonify({"ok": False, "error": "No un-repaired record."})
+
+            repair_station = wip.get("STATION_NAME") or current_node
+            n, ok_repair, err, _ = execute_repair_ok(
+                conn, sn, repair_station, emp, reason_code,
+                duty_station="TEST FIXTURE", remark=remark or "RO Next",
+                repair_action="RETEST", duty_type="RETEST", auto_commit=False
+            )
+            if not ok_repair or n == 0:
+                conn.rollback()
+                return jsonify({"ok": False, "error": err or "Repair update failed."})
+            v_line = wip.get("LINE_NAME") or ""
+            jump_param = get_jump_param_from_route(conn, sn, "FLA")
+            info = get_group_info(conn, v_line, jump_param)
+            if not info:
+                conn.rollback()
+                return jsonify({"ok": False, "error": "GetGroupInfo not found for FLA; cannot jump."})
+            ok = jump_routing(
+                conn, sn,
+                info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
+                emp, in_station_time=None, auto_commit=False
+            )
+            if not ok:
+                conn.rollback()
+                return jsonify({"ok": False, "error": "UPDATE affected no rows."})
+            conn.commit()
+            row2 = get_station_and_next(conn, sn)
+            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+            return jsonify({"ok": True, "wip": _serialize_wip(wip2)})
         finally:
             conn.close()
     except Exception as e:

@@ -97,7 +97,41 @@
       </div>
     </div>
 
+    <div id="dido-next-section" class="hidden mb-4">
+      <p class="text-sm text-[var(--color-muted)] mb-2">Click Next to advance to the next station in the chain.</p>
+      <button type="button" id="btn-dido-next" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Next</button>
+    </div>
+
+    <div id="do-form-section" class="hidden mb-4">
+      <div class="grid grid-cols-2 gap-2 max-w-2xl text-sm">
+        <label>Reason Code</label>
+        <select id="sel-do-reason" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]">
+          <option value="">-- Select --</option>
+        </select>
+        <label>Reason Desc</label>
+        <input type="text" id="input-do-reason-desc" readonly class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] opacity-80">
+      </div>
+      <div class="mt-2 max-w-2xl">
+        <label class="block text-sm font-medium mb-1">Remark</label>
+        <textarea id="input-do-remark" class="w-full px-3 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]" rows="2" placeholder="DO remark"></textarea>
+      </div>
+      <div class="mt-3 flex gap-2">
+        <button type="button" id="btn-do-pass" class="btn-neon-green">Pass</button>
+        <button type="button" id="btn-do-fail" class="btn-neon-red">Fail</button>
+      </div>
+    </div>
+
     <div id="form-section" class="hidden mb-4">
+      <div id="ro-next-wrap" class="hidden mb-3">
+        <p class="text-sm text-[var(--color-muted)] mb-2">RO station: Next (jump to FLA) or Repair below.</p>
+        <div class="flex gap-2 items-center flex-wrap">
+          <select id="sel-ro-next-reason" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-sm">
+            <option value="">-- Select reason --</option>
+          </select>
+          <input type="text" id="input-ro-next-remark" placeholder="Remark" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-sm w-48">
+          <button type="button" id="btn-ro-next" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Next (to FLA)</button>
+        </div>
+      </div>
       <div class="grid grid-cols-2 gap-2 max-w-2xl text-sm">
         <label>Reason Code</label><select id="sel-reason" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
         <label>Repair Action</label><select id="sel-action" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
@@ -214,7 +248,21 @@
     var btnFailClose = document.getElementById('btn-fail-close');
     var ecValidMsg = document.getElementById('ec-valid-msg');
 
+    var didoNextSection = document.getElementById('dido-next-section');
+    var btnDidoNext = document.getElementById('btn-dido-next');
+    var doFormSection = document.getElementById('do-form-section');
+    var selDoReason = document.getElementById('sel-do-reason');
+    var inputDoReasonDesc = document.getElementById('input-do-reason-desc');
+    var inputDoRemark = document.getElementById('input-do-remark');
+    var btnDoPass = document.getElementById('btn-do-pass');
+    var btnDoFail = document.getElementById('btn-do-fail');
+    var roNextWrap = document.getElementById('ro-next-wrap');
+    var selRoNextReason = document.getElementById('sel-ro-next-reason');
+    var inputRoNextRemark = document.getElementById('input-ro-next-remark');
+    var btnRoNext = document.getElementById('btn-ro-next');
+
     var options = { reason_codes: [], repair_actions: [], duty_types: [] };
+    var debugReasonCodes = [];
     var flowState = null;
     var selectedRTarget = null;
     var ecValidated = false;
@@ -255,14 +303,14 @@
       requestPending = true;
       loadingText.textContent = msg || 'Processing...';
       loadingOverlay.classList.remove('hidden');
-      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail].forEach(function (b) {
+      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext].forEach(function (b) {
         if (b) b.disabled = true;
       });
     }
     function unlockUI() {
       requestPending = false;
       loadingOverlay.classList.add('hidden');
-      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail].forEach(function (b) {
+      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext].forEach(function (b) {
         if (b) b.disabled = false;
       });
       if (hasInvalidDuplicate) {
@@ -298,7 +346,13 @@
       resultMsg.textContent = msg || '';
       resultMsg.classList.toggle('hidden', !msg);
     }
+    function normalizeNodeForMatch(name) {
+      if (!name) return '';
+      return String(name).trim().toUpperCase().replace(/[\s-]+/g, '_').replace(/_+/g, '_');
+    }
     function drawFlow(container, nodes, currentNode) {
+      var normalized = normalizeNodeForMatch(currentNode);
+      var currentForHighlight = normalized && nodes.indexOf(normalized) >= 0 ? normalized : currentNode;
       container.innerHTML = '';
       for (var i = 0; i < nodes.length; i++) {
         if (i > 0) {
@@ -308,7 +362,7 @@
           container.appendChild(arr);
         }
         var n = document.createElement('span');
-        n.className = 'flow-node' + (nodes[i] === currentNode ? ' current' : '');
+        n.className = 'flow-node' + (nodes[i] === currentForHighlight ? ' current' : '');
         n.textContent = nodes[i];
         container.appendChild(n);
       }
@@ -316,6 +370,9 @@
     function resetView() {
       flowSection.classList.add('hidden');
       formSection.classList.add('hidden');
+      didoNextSection.classList.add('hidden');
+      doFormSection.classList.add('hidden');
+      roNextWrap.classList.add('hidden');
       treeSection.classList.add('hidden');
       mainFlowRow.innerHTML = '';
       repairChainRow.innerHTML = '';
@@ -606,11 +663,49 @@
       } else if (data.ui_mode === 'repair_dido') {
         repairChainRow.classList.remove('hidden');
         drawFlow(repairChainRow, data.repair_chain_nodes || [], current);
-        formSection.classList.remove('hidden');
+        var didoStation = (data.current_dido_station || '').toUpperCase();
+        var base = (data.base || '').trim();
+        didoNextSection.classList.add('hidden');
+        doFormSection.classList.add('hidden');
+        formSection.classList.add('hidden');
+        roNextWrap.classList.add('hidden');
+        if (didoStation === 'DI' || didoStation === 'RI') {
+          didoNextSection.classList.remove('hidden');
+          btnDidoNext.dataset.station = didoStation;
+          btnDidoNext.dataset.base = base;
+        } else if (didoStation === 'DO') {
+          doFormSection.classList.remove('hidden');
+          loadDebugReasonCodes().then(function () {
+            selDoReason.innerHTML = '<option value="">-- Select --</option>' + (debugReasonCodes || []).map(function (r) {
+              var d = String(r.desc || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+              return '<option value="' + (r.code || '') + '" data-desc="' + d + '">' + (r.code || '') + '</option>';
+            }).join('');
+            selDoReason.dataset.base = base;
+            selDoReason.value = '';
+            inputDoReasonDesc.value = '';
+            inputDoRemark.value = '';
+          });
+        } else if (didoStation === 'RO') {
+          formSection.classList.remove('hidden');
+          roNextWrap.classList.remove('hidden');
+          loadDebugReasonCodes().then(function () {
+            selRoNextReason.innerHTML = '<option value="">-- Select reason --</option>' + (debugReasonCodes || []).map(function (r) { return '<option value="' + (r.code || '') + '">' + (r.code || '') + '</option>'; }).join('');
+            selRoNextReason.dataset.base = base;
+          });
+        } else {
+          formSection.classList.remove('hidden');
+        }
       } else if (data.ui_mode === 'repair_r_only') {
         renderRBranches(data.r_only_targets || []);
         formSection.classList.remove('hidden');
       }
+    }
+    function loadDebugReasonCodes() {
+      return api('/api/debug/repair/debug-reason-codes').then(function (res) {
+        if (res.json && res.json.ok) debugReasonCodes = res.json.reason_codes || [];
+        else debugReasonCodes = [];
+        return debugReasonCodes;
+      }).catch(function () { debugReasonCodes = []; return []; });
     }
     function loadOptions() {
       return api('/api/debug/repair/options').then(function (res) {
@@ -859,11 +954,87 @@
       doRepair('FLA');
     }
 
+    function onDidoNext() {
+      if (requestPending) return;
+      var sn = (inputSn.value || '').trim();
+      var base = (btnDidoNext.dataset.base || '').trim();
+      var station = (btnDidoNext.dataset.station || '').toUpperCase();
+      if (!sn || !base) { showErr('Missing SN or base.'); return; }
+      var endpoint = station === 'DI' ? '/api/debug/repair/di-next' : '/api/debug/repair/ri-next';
+      lockUI('Moving to next station...');
+      api(endpoint, { method: 'POST', body: { sn: sn, base: base, emp_no: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' } }).then(function (res) {
+        if (!res.json.ok) { showErr(res.json.error || 'Next failed'); return; }
+        showOk('Moved to next station.');
+        unlockUI();
+        doSearch();
+      }).catch(function (e) { showErr(e && e.message ? e.message : 'Request failed'); }).finally(function () { unlockUI(); });
+    }
+    function onDoPass() {
+      if (requestPending) return;
+      var sn = (inputSn.value || '').trim();
+      var base = (selDoReason.dataset.base || '').trim();
+      var reasonCode = (selDoReason.value || '').trim();
+      if (!sn || !base || !reasonCode) { showErr('Please select a reason code.'); return; }
+      lockUI('DO Pass...');
+      api('/api/debug/repair/do-pass', {
+        method: 'POST',
+        body: { sn: sn, base: base, reason_code: reasonCode, remark: (inputDoRemark.value || '').trim(), emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+      }).then(function (res) {
+        if (!res.json.ok) { showErr(res.json.error || 'DO Pass failed'); return; }
+        showOk('DO Pass completed.');
+        unlockUI();
+        doSearch();
+      }).catch(function (e) { showErr(e && e.message ? e.message : 'Request failed'); }).finally(function () { unlockUI(); });
+    }
+    function onDoFail() {
+      if (requestPending) return;
+      var sn = (inputSn.value || '').trim();
+      var base = (selDoReason.dataset.base || '').trim();
+      var reasonCode = (selDoReason.value || '').trim();
+      if (!sn || !base || !reasonCode) { showErr('Please select a reason code.'); return; }
+      lockUI('DO Fail...');
+      api('/api/debug/repair/do-fail', {
+        method: 'POST',
+        body: { sn: sn, base: base, reason_code: reasonCode, emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+      }).then(function (res) {
+        if (!res.json.ok) { showErr(res.json.error || 'DO Fail failed'); return; }
+        showOk('DO Fail completed.');
+        unlockUI();
+        doSearch();
+      }).catch(function (e) { showErr(e && e.message ? e.message : 'Request failed'); }).finally(function () { unlockUI(); });
+    }
+    function onRoNext() {
+      if (requestPending) return;
+      var sn = (inputSn.value || '').trim();
+      var base = (selRoNextReason.dataset.base || '').trim();
+      var reasonCode = (selRoNextReason.value || '').trim();
+      if (!sn || !base || !reasonCode) { showErr('Please select a reason code for RO Next.'); return; }
+      lockUI('RO Next...');
+      api('/api/debug/repair/ro-next', {
+        method: 'POST',
+        body: { sn: sn, base: base, reason_code: reasonCode, remark: (inputRoNextRemark.value || '').trim(), emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+      }).then(function (res) {
+        if (!res.json.ok) { showErr(res.json.error || 'RO Next failed'); return; }
+        showOk('RO Next completed.');
+        unlockUI();
+        doSearch();
+      }).catch(function (e) { showErr(e && e.message ? e.message : 'Request failed'); }).finally(function () { unlockUI(); });
+    }
+
+    selDoReason.addEventListener('change', function () {
+      var opt = selDoReason.options[selDoReason.selectedIndex];
+      inputDoReasonDesc.value = opt && opt.getAttribute ? (opt.getAttribute('data-desc') || '') : '';
+    });
+
     btnSearch.addEventListener('click', doSearch);
     inputSn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (!requestPending) doSearch(); } });
     btnPass.addEventListener('click', onPass);
     btnFail.addEventListener('click', openFailModal);
     btnRepair.addEventListener('click', function () { doRepair(selectedRTarget || ''); });
+    btnDidoNext.addEventListener('click', onDidoNext);
+    btnDoPass.addEventListener('click', onDoPass);
+    btnDoFail.addEventListener('click', onDoFail);
+    btnRoNext.addEventListener('click', onRoNext);
     treeDekit.addEventListener('click', doDekit);
     treeKitting.addEventListener('click', function () { doKitting(false, false); });
     btnValidateEc.addEventListener('click', validateEc);

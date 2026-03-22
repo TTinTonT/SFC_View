@@ -3,6 +3,8 @@
 Repair OK: execute_repair_ok, check_has_unrepaired, get_group_info, jump_routing,
 resolve_jump_target, get_jump_param_from_route.
 """
+import re
+
 import oracledb
 
 from .config import REPAIR_ACTION_RECORD_MAP
@@ -76,13 +78,17 @@ def get_group_info(conn, v_line, v_group):
 
 
 def resolve_jump_target(reason_code, current_group):
-    """RC36 -> FLA. RC500 / R_xxx -> bỏ R_."""
+    """RC36 -> FLA. RC500 / R_xxx -> base. For base_RO: RC36->FLA, RC500->base."""
     rc = (reason_code or "").strip().upper()
-    cg = (current_group or "").strip()
+    cg = (current_group or "").strip().upper()
     if rc == "RC36":
         return "FLA"
     if cg.startswith("R_"):
         return cg[2:]
+    # base_RO (e.g. FLA_RO, AST_RO): RC500 -> strip _RO/-RO to get original base
+    m = re.match(r"^([A-Z0-9]+)[_\-]RO$", cg)
+    if m:
+        return m.group(1) or "FLA"
     return cg or "FLA"
 
 
