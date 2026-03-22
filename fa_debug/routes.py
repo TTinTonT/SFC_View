@@ -541,6 +541,23 @@ def api_repair_pass_jump():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def _dt_to_cali(val):
+    """Convert datetime to America/Los_Angeles formatted string, or return empty."""
+    if val is None:
+        return ""
+    try:
+        import pytz
+        ca_tz = pytz.timezone("America/Los_Angeles")
+        if hasattr(val, "isoformat"):
+            dt = val
+            if dt.tzinfo is None:
+                dt = pytz.UTC.localize(dt)
+            return dt.astimezone(ca_tz).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        pass
+    return str(val) if val else ""
+
+
 @bp.route("/api/debug/repair/fail-history", methods=["GET"])
 def api_repair_fail_history():
     """Get fail history for SN from R_REPAIR_T + C_ERROR_CODE_T."""
@@ -556,12 +573,15 @@ def api_repair_fail_history():
             try:
                 cur.execute(REPAIR_FAIL_HISTORY, {"sn": sn})
                 cols = [d[0] for d in cur.description]
+                col_idx = {c: i for i, c in enumerate(cols)}
                 rows = []
                 for row in cur.fetchall():
                     item = {}
                     for idx, col in enumerate(cols):
                         val = row[idx]
                         item[col] = val.isoformat() if hasattr(val, "isoformat") else val
+                    item["TEST_TIME_CALI"] = _dt_to_cali(row[col_idx["TEST_TIME"]] if "TEST_TIME" in col_idx else None)
+                    item["REPAIR_TIME_CALI"] = _dt_to_cali(row[col_idx["REPAIR_TIME"]] if "REPAIR_TIME" in col_idx else None)
                     rows.append(item)
                 return jsonify({"ok": True, "rows": rows})
             finally:

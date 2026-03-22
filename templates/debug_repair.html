@@ -156,7 +156,7 @@
       </div>
       <table class="table-compact mb-2">
         <thead>
-          <tr><th>Test time</th><th>Group</th><th>Error</th><th>Desc</th><th></th></tr>
+          <tr><th>Test time (Cali)</th><th>Repair time (Cali)</th><th>Group</th><th>Type</th><th>Error</th><th>Desc</th><th></th></tr>
         </thead>
         <tbody id="fail-history-body"></tbody>
       </table>
@@ -669,15 +669,15 @@
       ecValidated = false;
       ecValidMsg.textContent = '';
       failEcInput.value = '';
-      failHistoryBody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+      failHistoryBody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
       failModal.classList.remove('hidden');
       api('/api/debug/repair/fail-history?sn=' + encodeURIComponent(sn)).then(function (res) {
-        if (!res.json.ok) { failHistoryBody.innerHTML = '<tr><td colspan="5">Error</td></tr>'; return; }
+        if (!res.json.ok) { failHistoryBody.innerHTML = '<tr><td colspan="7">Error</td></tr>'; return; }
         var rows = res.json.rows || [];
         failHistoryBody.innerHTML = rows.map(function (r, idx) {
           var ec = (r.ERROR_CODE_MASTER || r.ERROR_CODE_IN_REPAIR || '');
-          return '<tr><td>' + (r.TEST_TIME || '') + '</td><td>' + (r.GROUP_NAME || '') + '</td><td>' + (ec || '') + '</td><td>' + (r.ERROR_DESC || '') + '</td><td><button type="button" data-idx="' + idx + '" class="pick-ec px-2 py-1 rounded border border-[var(--color-border)]">Pick</button></td></tr>';
-        }).join('') || '<tr><td colspan="5">No history</td></tr>';
+          return '<tr><td>' + (r.TEST_TIME_CALI || '') + '</td><td>' + (r.REPAIR_TIME_CALI || '') + '</td><td>' + (r.GROUP_NAME || '') + '</td><td>' + (r.RECORD_TYPE || '') + '</td><td>' + (ec || '') + '</td><td>' + (r.ERROR_DESC || '') + '</td><td><button type="button" data-idx="' + idx + '" class="pick-ec px-2 py-1 rounded border border-[var(--color-border)]">Pick</button></td></tr>';
+        }).join('') || '<tr><td colspan="7">No history</td></tr>';
         failHistoryBody.querySelectorAll('.pick-ec').forEach(function (btn) {
           btn.addEventListener('click', function () {
             var idx = parseInt(this.getAttribute('data-idx'), 10);
