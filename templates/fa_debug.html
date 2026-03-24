@@ -330,6 +330,7 @@
             <a href="/" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Analytics</a>
             <a href="/debug/repair" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Repair</a>
             <a href="/debug/kitting" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">IT Kitting</a>
+            <a href="/debug/kitting-sql" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">IT Kitting SQL</a>
             {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Setting</a>{% endif %}
             <a href="/debug/my-settings" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">My settings</a>
             <form method="post" action="/api/auth/logout" style="display: inline;" onsubmit="return confirm('Log out?');">

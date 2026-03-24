@@ -48,6 +48,10 @@
   .loading-box { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1rem 1.4rem; font-weight: 600; }
   .dup-banner { margin: 0.5rem 0; padding: 0.6rem 0.8rem; border: 2px solid #dc2626; border-radius: 8px; background: rgba(220,38,38,0.12); color: #b91c1c; font-size: 0.875rem; }
   .tree-row-selected-root { background: rgba(234, 179, 8, 0.45) !important; box-shadow: inset 0 0 0 1px rgba(180, 83, 9, 0.6); }
+  .tree-copy-cell { white-space: nowrap; }
+  .tree-copy-cell span { display: inline; }
+  .tree-copy-btn { padding: 0.15rem 0.3rem; font-size: 0.7rem; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); cursor: pointer; margin-left: 0.25rem; }
+  .tree-copy-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .flag-badge { display: inline-block; min-width: 1.2rem; text-align: center; border-radius: 999px; padding: 0 0.35rem; font-size: 0.7rem; font-weight: 700; margin-left: 0.25rem; }
   .flag-y { background: rgba(22,163,74,0.2); color: #166534; }
   .flag-n { background: rgba(220,38,38,0.2); color: #991b1b; }
@@ -64,6 +68,7 @@
       <a href="/debug/repair" class="nav-btn active">Repair</a>
       <a href="/debug/jump-station" class="nav-btn">IT Jump</a>
       <a href="/debug/kitting" class="nav-btn">IT Kitting</a>
+      <a href="/debug/kitting-sql" class="nav-btn">IT Kitting SQL</a>
       <a href="/" class="nav-btn">Analytics</a>
       <form method="post" action="/api/auth/logout" style="display: inline;">
         <button type="submit" class="btn-logout">Logout</button>
@@ -425,6 +430,8 @@
       var LINE_W = 22;
       var BAR_W = 11;
       treeTbody.innerHTML = visible.map(function (node) {
+        var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+        var copyBtn = function (text) { return '<button type="button" class="tree-copy-btn" data-copy="' + esc(text) + '">Copy</button>'; };
         var rowClass = node.assy_flag === 'N' ? 'tree-row-flag-n' : 'tree-row-flag-y';
         if (selectedNums.has(node.num)) rowClass += ' tree-row-selected';
         if (node.num === selectedRootNum) rowClass += ' tree-row-selected-root';
@@ -444,8 +451,8 @@
         return '<tr class="' + rowClass + '" data-num="' + node.num + '" data-vendor-sn="' + (node.vendor_sn || '') + '" data-father-sn="' + (node.father_sn != null ? node.father_sn : '') + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '">' +
           '<td class="tree-td-num py-1 pr-2" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + (node.num || '') + '<span class="flag-badge ' + (String(node.assy_flag || '').toUpperCase() === 'N' ? 'flag-n' : 'flag-y') + '">' + (String(node.assy_flag || '').toUpperCase() || 'Y') + '</span></td>' +
           '<td class="py-1 pr-2">' + (node.sub_model_name || '') + '</td>' +
-          '<td class="py-1 pr-2">' + (node.father_sn || '') + '</td>' +
-          '<td class="py-1 pr-2">' + (node.vendor_sn || '') + '</td>' +
+          '<td class="py-1 pr-2 tree-copy-cell"><span>' + (node.father_sn || '') + '</span>' + copyBtn(node.father_sn || '') + '</td>' +
+          '<td class="py-1 pr-2 tree-copy-cell"><span>' + (node.vendor_sn || '') + '</span>' + copyBtn(node.vendor_sn || '') + '</td>' +
           '<td class="py-1"><input type="text" class="tree-new-sn tree-new-sn-input ' + (selectedNums.has(node.num) ? 'in-scope' : 'out-scope') + '" data-num="' + node.num + '" data-parent-num="' + (node.parent_num != null ? node.parent_num : '') + '" placeholder="' + (selectedNums.has(node.num) ? 'Required - enter new SN' : 'New SN') + '"></td>' +
           '<td class="py-1 pr-2">' + (node.stack || '') + '</td>' +
           '<td class="py-1 pr-2">' + (node.in_station_time || '') + '</td>' +
@@ -1041,6 +1048,30 @@
     btnUpdateFail.addEventListener('click', updateFail);
     btnFailClose.addEventListener('click', function () { failModal.classList.add('hidden'); });
     treeTbody.addEventListener('click', function (e) {
+      var copyBtn = e.target.closest('.tree-copy-btn');
+      if (copyBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        var text = copyBtn.getAttribute('data-copy') || '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { showOk('Copied'); }, function () { showErr('Copy failed'); });
+        } else {
+          try {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showOk('Copied');
+          } catch (err) {
+            showErr('Copy failed');
+          }
+        }
+        return;
+      }
       if (e.target.closest('.tree-new-sn-input')) return;
       var tg = e.target.closest('.tree-toggle[data-num]');
       if (tg) {

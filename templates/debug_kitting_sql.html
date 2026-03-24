@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IT Kitting – Debug</title>
+  <title>IT Kitting SQL - Debug</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/css/theme_shared.css">
   <style>
@@ -15,7 +15,6 @@
   .nav-btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; text-decoration: none; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.875rem; }
   .nav-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .nav-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .nav-links form { display: inline; }
   .nav-links .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
   .nav-links .btn-logout:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .msg-error { color: #dc2626; }
@@ -32,12 +31,18 @@
   .tree-input { width: 100%; min-width: 12rem; min-height: 2rem; padding: 0.35rem 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); font: inherit; resize: none; overflow: hidden; field-sizing: content; }
   .filter-highlight { background-color: #22c55e; color: #fff; border-radius: 2px; padding: 0 1px; }
   .tree-row-selected { background: #fef08a; }
-  .tree-row-required { background: #fef3c7; }
+  .tree-row-clickable.tree-row-selected { background: #fef08a !important; }
+  .tree-row-required { background: #fef3c7 !important; }
   .tree-row-clickable { cursor: pointer; }
   .tree-copy-cell { white-space: nowrap; }
   .tree-copy-cell span { display: inline; }
   .tree-copy-btn { padding: 0.15rem 0.3rem; font-size: 0.7rem; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); cursor: pointer; margin-left: 0.25rem; }
   .tree-copy-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .tree-row-flag-y { background: rgba(22, 163, 74, 0.15); }
+  .tree-row-flag-n { background: rgba(220, 38, 38, 0.15); }
+  .flag-badge { display: inline-block; min-width: 1.2rem; text-align: center; border-radius: 999px; padding: 0 0.35rem; font-size: 0.7rem; font-weight: 700; margin-left: 0.25rem; }
+  .flag-y { background: rgba(22,163,74,0.2); color: #166534; }
+  .flag-n { background: rgba(220,38,38,0.2); color: #991b1b; }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100; }
   .modal-overlay.show { display: flex; }
   .modal-box { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 560px; width: 90%; max-height: 90vh; overflow-y: auto; }
@@ -45,10 +50,11 @@
   .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1.5rem; font-size: 0.875rem; }
   .modal-grid .form-row { display: flex; flex-direction: column; gap: 0.2rem; }
   .modal-grid label { font-weight: 600; color: var(--color-muted); }
-  .modal-grid input, .modal-grid textarea { padding: 0.35rem 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); color: var(--color-text); }
+  .modal-grid input { padding: 0.35rem 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); color: var(--color-text); }
   .modal-buttons { margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end; }
   .modal-buttons .btn-save { background: #16a34a; color: white; }
   .modal-buttons .btn-cancel { background: #dc2626; color: white; }
+  .sub-title { font-size: 0.95rem; font-weight: 600; margin: 0.75rem 0; }
   </style>
 </head>
 <body>
@@ -59,14 +65,14 @@
       <a href="/debug/setting" class="nav-btn">Setting</a>
       <a href="/debug/repair" class="nav-btn">Repair</a>
       <a href="/debug/jump-station" class="nav-btn">IT Jump</a>
-      <a href="/debug/kitting" class="nav-btn active">IT Kitting</a>
-      <a href="/debug/kitting-sql" class="nav-btn">IT Kitting SQL</a>
+      <a href="/debug/kitting" class="nav-btn">IT Kitting</a>
+      <a href="/debug/kitting-sql" class="nav-btn active">IT Kitting SQL</a>
       <a href="/" class="nav-btn">Analytics</a>
       <form method="post" action="/api/auth/logout" style="display: inline;">
         <button type="submit" class="btn-logout">Logout</button>
       </form>
     </div>
-    <h1>IT Kitting</h1>
+    <h1>IT Kitting SQL</h1>
 
     <div class="mb-4">
       <label class="block text-sm font-medium mb-1">Serial Number</label>
@@ -74,10 +80,14 @@
         <input type="text" id="input-sn" class="flex-1 max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter SN">
         <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
       </div>
-      <div class="flex gap-2 mt-2">
+      <div class="flex items-center gap-3 mt-2">
         <button type="button" id="btn-edit" class="kitting-action-btn" disabled>Edit</button>
         <button type="button" id="btn-copy" class="kitting-action-btn" disabled>Copy</button>
         <button type="button" id="btn-delete" class="kitting-action-btn" disabled>Delete</button>
+        <label class="text-sm flex items-center gap-1 ml-2">
+          <input type="checkbox" id="chk-show-dekitted">
+          Show dekitted parts
+        </label>
       </div>
       <p id="sn-error" class="text-sm msg-error mt-1 hidden"></p>
     </div>
@@ -98,6 +108,7 @@
             <th class="text-left py-2 pr-2">SN</th>
             <th class="text-left py-2 pr-2">Father SN</th>
             <th class="text-left py-2 pr-2">Vendor SN</th>
+            <th class="text-left py-2 pr-2">Flag</th>
             <th class="text-left py-2 pr-2" style="min-width: 14rem;">New Vendor SN</th>
             <th class="text-left py-2 pr-2">Sub model name</th>
             <th class="text-left py-2">Rev</th>
@@ -129,15 +140,19 @@
   var treeSection = document.getElementById('tree-section');
   var treeTbody = document.getElementById('tree-tbody');
   var resultMsg = document.getElementById('result-msg');
+  var chkShowDekitted = document.getElementById('chk-show-dekitted');
 
   var sessionData = [];
   var treeNodes = [];
   var collapsedSet = new Set();
   var childrenByNum = {};
+  var childrenByNumY = {};
   var selectedRowNum = null;
   var newVendorByNum = {};
   var modalMode = 'edit';
   var filterText = '';
+
+  var EDIT_MODAL_FIELDS = ['ROWID','SERIAL_NUMBER','MO_NUMBER','MODEL_NAME','REV','FATHER_SN','LINE_NAME','IN_STATION_TIME','SUB_MODEL_NAME','SUB_REV','VENDOR_SN','CUST_PN','CUST_REV','ASSY_ORD','ASSY_FLAG','ASSY_QTY','EMP_NO','GROUP_NAME','CUST_NO','LEVEL_GRADE','LEVEL_NO','PPID_MODEL','SUB_PPID','SLOT','PPID_HEADER','REV_FLAG','DEBUG_FLAG','ASSY_SEQ','DATE_CODE','REFERENCE_TIME','STACK'];
 
   function escapeHtml(s) {
     if (s == null) return '';
@@ -162,14 +177,12 @@
     return out;
   }
 
-  var EDIT_MODAL_FIELDS = ['ROWID','SERIAL_NUMBER','MO_NUMBER','MODEL_NAME','REV','FATHER_SN','LINE_NAME','IN_STATION_TIME','SUB_MODEL_NAME','SUB_REV','VENDOR_SN','CUST_PN','CUST_REV','ASSY_ORD','ASSY_FLAG','ASSY_QTY','EMP_NO','GROUP_NAME','CUST_NO','LEVEL_GRADE','LEVEL_NO','PPID_MODEL','SUB_PPID','SLOT','PPID_HEADER','REV_FLAG','DEBUG_FLAG','ASSY_SEQ','DATE_CODE','REFERENCE_TIME','STACK'];
-
   function api(path) {
-    var url = path.startsWith('/') ? path : '/api/debug/kitting/' + path;
+    var url = path.startsWith('/') ? path : '/api/debug/kitting-sql/' + path;
     return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); });
   }
   function apiPost(path, body) {
-    var url = path.startsWith('/') ? path : '/api/debug/kitting/' + path;
+    var url = path.startsWith('/') ? path : '/api/debug/kitting-sql/' + path;
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
   }
 
@@ -193,20 +206,21 @@
 
   function buildTree(rows) {
     if (!rows || !rows.length) return [];
-    var vendorSet = new Set(rows.map(function (r) { return (r.VENDOR_SN || ''); }));
-    var byVendor = {};
-    rows.forEach(function (r, idx) {
-      byVendor[r.VENDOR_SN || ''] = { row: r, idx: idx, num: idx + 1 };
+    var sorted = rows.slice().sort(function (a, b) {
+      var fa = String(a.ASSY_FLAG || 'Y').toUpperCase() === 'Y' ? 0 : 1;
+      var fb = String(b.ASSY_FLAG || 'Y').toUpperCase() === 'Y' ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      return (a.ASSY_SEQ || 0) - (b.ASSY_SEQ || 0);
     });
+    var vendorSet = new Set(sorted.map(function (r) { return (r.VENDOR_SN || ''); }));
     var roots = [];
     var childrenOf = {};
-    rows.forEach(function (r, idx) {
+    sorted.forEach(function (r, idx) {
       var vsn = r.VENDOR_SN || '';
       var father = r.FATHER_SN;
       var node = { row: r, idx: idx, num: idx + 1, vendor_sn: vsn, father_sn: father };
-      if (!father || !vendorSet.has(father)) {
-        roots.push(node);
-      } else {
+      if (!father || !vendorSet.has(father)) roots.push(node);
+      else {
         if (!childrenOf[father]) childrenOf[father] = [];
         childrenOf[father].push(node);
       }
@@ -216,9 +230,12 @@
       childrenOf[k].sort(function (a, b) { return (a.row.ASSY_ORD || 0) - (b.row.ASSY_ORD || 0); });
     });
     var flat = [];
+    var walkedVendor = new Set();
     function walk(n, depth) {
       n.depth = depth;
       flat.push(n);
+      if (walkedVendor.has(n.vendor_sn)) return;
+      walkedVendor.add(n.vendor_sn);
       var kids = childrenOf[n.vendor_sn] || [];
       kids.forEach(function (c) { walk(c, depth + 1); });
     }
@@ -226,31 +243,35 @@
     return flat;
   }
 
-  function hasChildren(num) {
-    return (childrenByNum[num] || []).length > 0;
-  }
-
+  function hasChildren(num) { return (childrenByNum[num] || []).length > 0; }
+  function hasChildrenY(num) { return (childrenByNumY[num] || []).length > 0; }
   function getDescendants(num) {
     var out = [];
-    var kids = childrenByNum[num] || [];
-    kids.forEach(function (c) {
+    (childrenByNum[num] || []).forEach(function (c) {
       out.push(c.num);
       out = out.concat(getDescendants(c.num));
     });
     return out;
   }
-
+  function getDescendantsY(num) {
+    var out = [];
+    (childrenByNumY[num] || []).forEach(function (c) {
+      out.push(c.num);
+      out = out.concat(getDescendantsY(c.num));
+    });
+    return out;
+  }
   function getRequiredHighlightSet() {
     var set = new Set();
     treeNodes.forEach(function (node) {
       if ((newVendorByNum[node.num] || '').trim() === '') return;
       set.add(node.num);
-      getDescendants(node.num).forEach(function (n) { set.add(n); });
+      getDescendantsY(node.num).forEach(function (n) { set.add(n); });
     });
     return set;
   }
 
-  function updateRequiredHighlights() {
+  function updateHighlights() {
     var reqSet = getRequiredHighlightSet();
     treeTbody.querySelectorAll('tr[data-num]').forEach(function (tr) {
       var num = parseInt(tr.getAttribute('data-num'), 10);
@@ -262,6 +283,7 @@
   function renderTree() {
     var LINE_W = 22;
     var BAR_W = 11;
+    var requiredSet = getRequiredHighlightSet();
     treeTbody.innerHTML = treeNodes.map(function (node) {
       var depth = node.depth || 0;
       var parentNum = null;
@@ -274,7 +296,7 @@
       while (pn != null) {
         if (collapsedSet.has(pn)) { hidden = true; break; }
         var parentNode = treeNodes.find(function (n) { return n.num === pn; });
-        pn = parentNode ? (treeNodes.find(function (n) { return n.vendor_sn === parentNode.father_sn }) || {}).num : null;
+        pn = parentNode ? (treeNodes.find(function (n) { return n.vendor_sn === parentNode.father_sn; }) || {}).num : null;
       }
       if (hidden) return '';
       var numCellStyle = 'padding-left: ' + (8 + depth * LINE_W) + 'px;';
@@ -287,37 +309,33 @@
       var hbarStyle = depth > 0 ? 'left: ' + ((depth - 1) * LINE_W) + 'px; width: ' + BAR_W + 'px;' : '';
       var hbarHtml = depth > 0 ? '<span class="tree-hbar" style="' + hbarStyle + '"></span>' : '';
       var toggleHtml = hasChildren(node.num)
-        ? '<span class="tree-toggle" data-num="' + node.num + '" title="Expand/Collapse">' + (collapsedSet.has(node.num) ? '&#9654;' : '&#9660;') + '</span>'
+        ? '<span class="tree-toggle" data-num="' + node.num + '">' + (collapsedSet.has(node.num) ? '&#9654;' : '&#9660;') + '</span>'
         : '<span class="tree-toggle" style="visibility:hidden">&#9660;</span>';
-      var sn = node.row.SERIAL_NUMBER || '';
-      var fatherSn = node.row.FATHER_SN || '';
-      var vendorSn = node.row.VENDOR_SN || '';
-      var subModel = node.row.SUB_MODEL_NAME || '';
-      var rev = node.row.REV || node.row.SUB_REV || '';
+      var flag = String(node.row.ASSY_FLAG || 'Y').toUpperCase();
+      if (flag === 'N' && !chkShowDekitted.checked) return '';
       var selClass = (selectedRowNum === node.num) ? ' tree-row-selected' : '';
-      var reqClass = getRequiredHighlightSet().has(node.num) ? ' tree-row-required' : '';
+      var reqClass = requiredSet.has(node.num) ? ' tree-row-required' : '';
       var esc = function (s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
-      var copyBtn = function (text) { return '<button type="button" class="tree-copy-btn" data-copy="' + esc(text) + '" title="Copy">Copy</button>'; };
-      return '<tr data-num="' + node.num + '" class="tree-row-clickable' + selClass + reqClass + '">' +
+      var copyBtn = function (text) { return '<button type="button" class="tree-copy-btn" data-copy="' + esc(text) + '">Copy</button>'; };
+      return '<tr data-num="' + node.num + '" class="tree-row-clickable ' + (flag === 'N' ? 'tree-row-flag-n' : 'tree-row-flag-y') + selClass + reqClass + '">' +
         '<td class="tree-td-num py-1 pr-2" style="' + numCellStyle + '">' + toggleHtml + hbarHtml + highlightFilter(node.num, filterText) + '</td>' +
-        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(sn, filterText) + '</span>' + copyBtn(sn) + '</td>' +
-        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(fatherSn, filterText) + '</span>' + copyBtn(fatherSn) + '</td>' +
-        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(vendorSn, filterText) + '</span>' + copyBtn(vendorSn) + '</td>' +
-        '<td class="py-1 pr-2"><textarea class="tree-input" data-num="' + node.num + '" rows="1" placeholder=""></textarea></td>' +
-        '<td class="py-1 pr-2">' + highlightFilter(subModel, filterText) + '</td>' +
-        '<td class="py-1">' + highlightFilter(rev, filterText) + '</td></tr>';
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(node.row.SERIAL_NUMBER || '', filterText) + '</span>' + copyBtn(node.row.SERIAL_NUMBER || '') + '</td>' +
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(node.row.FATHER_SN || '', filterText) + '</span>' + copyBtn(node.row.FATHER_SN || '') + '</td>' +
+        '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(node.row.VENDOR_SN || '', filterText) + '</span>' + copyBtn(node.row.VENDOR_SN || '') + '</td>' +
+        '<td class="py-1 pr-2"><span class="flag-badge ' + (flag === 'N' ? 'flag-n' : 'flag-y') + '">' + flag + '</span></td>' +
+        '<td class="py-1 pr-2"><textarea class="tree-input" data-num="' + node.num + '" rows="1"></textarea></td>' +
+        '<td class="py-1 pr-2">' + highlightFilter(node.row.SUB_MODEL_NAME || '', filterText) + '</td>' +
+        '<td class="py-1">' + highlightFilter((node.row.REV || node.row.SUB_REV || ''), filterText) + '</td>' +
+        '</tr>';
     }).filter(Boolean).join('');
 
     treeTbody.querySelectorAll('.tree-input').forEach(function (ta) {
       var num = parseInt(ta.getAttribute('data-num'), 10);
       ta.value = newVendorByNum[num] || '';
-      function resize() {
-        ta.style.height = 'auto';
-        ta.style.height = (ta.scrollHeight + 2) + 'px';
-      }
+      function resize() { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; }
       ta.addEventListener('input', function () {
         newVendorByNum[num] = ta.value;
-        updateRequiredHighlights();
+        updateHighlights();
         resize();
       });
       ta.addEventListener('focus', resize);
@@ -336,25 +354,30 @@
       return;
     }
     btnSearch.disabled = true;
-    api('assy-data?sn=' + encodeURIComponent(sn)).then(function (res) {
+    api('assy-data?sn=' + encodeURIComponent(sn) + '&assy_flag=all').then(function (res) {
       btnSearch.disabled = false;
       if (!res.ok) {
         snError.textContent = res.error || 'Error';
         snError.classList.remove('hidden');
         treeSection.classList.add('hidden');
-        showMsg(false, res.error);
+        showMsg(false, res.error || 'Error');
         return;
       }
       sessionData = res.rows || [];
       treeNodes = buildTree(sessionData);
       childrenByNum = {};
+      childrenByNumY = {};
       treeNodes.forEach(function (n) {
-        if (n.father_sn) {
-          var p = treeNodes.find(function (x) { return x.vendor_sn === n.father_sn; });
-          if (p) {
-            if (!childrenByNum[p.num]) childrenByNum[p.num] = [];
-            childrenByNum[p.num].push(n);
-          }
+        if (!n.father_sn) return;
+        var p = treeNodes.find(function (x) { return x.vendor_sn === n.father_sn; });
+        if (!p) return;
+        if (!childrenByNum[p.num]) childrenByNum[p.num] = [];
+        childrenByNum[p.num].push(n);
+        var flagN = String(n.row.ASSY_FLAG || 'Y').toUpperCase();
+        var flagP = String(p.row.ASSY_FLAG || 'Y').toUpperCase();
+        if (flagN === 'Y' && flagP === 'Y') {
+          if (!childrenByNumY[p.num]) childrenByNumY[p.num] = [];
+          childrenByNumY[p.num].push(n);
         }
       });
       collapsedSet.clear();
@@ -365,7 +388,9 @@
       document.getElementById('btn-edit').disabled = true;
       document.getElementById('btn-copy').disabled = true;
       document.getElementById('btn-delete').disabled = true;
-      showMsg(true, 'Loaded ' + sessionData.length + ' rows.');
+      var yCount = sessionData.filter(function (r) { return String(r.ASSY_FLAG || 'Y').toUpperCase() === 'Y'; }).length;
+      var nCount = sessionData.length - yCount;
+      showMsg(true, 'Loaded Y=' + yCount + ', N=' + nCount + ' rows.');
     }).catch(function () {
       btnSearch.disabled = false;
       snError.textContent = 'Request failed';
@@ -376,9 +401,8 @@
   }
 
   btnSearch.addEventListener('click', doSearch);
-  inputSn.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
-  });
+  inputSn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+  chkShowDekitted.addEventListener('change', function () { renderTree(); });
 
   treeSection.addEventListener('click', function (e) {
     var copyBtn = e.target.closest('.tree-copy-btn');
@@ -399,7 +423,9 @@
           document.execCommand('copy');
           document.body.removeChild(ta);
           showMsg(true, 'Copied');
-        } catch (err) { showMsg(false, 'Copy failed'); }
+        } catch (err) {
+          showMsg(false, 'Copy failed');
+        }
       }
       return;
     }
@@ -407,8 +433,7 @@
     if (tg) {
       e.preventDefault();
       var num = parseInt(tg.getAttribute('data-num'), 10);
-      if (collapsedSet.has(num)) collapsedSet.delete(num);
-      else collapsedSet.add(num);
+      if (collapsedSet.has(num)) collapsedSet.delete(num); else collapsedSet.add(num);
       renderTree();
       return;
     }
@@ -423,25 +448,9 @@
   });
 
   var filterInputEl = document.getElementById('filter-input');
-  if (filterInputEl) {
-    filterInputEl.addEventListener('input', function () {
-      filterText = (filterInputEl.value || '').trim();
-      renderTree();
-    });
-    filterInputEl.addEventListener('keyup', function () {
-      filterText = (filterInputEl.value || '').trim();
-      renderTree();
-    });
-  }
-
-  document.getElementById('tree-expand-all').addEventListener('click', function () {
-    collapsedSet.clear();
-    renderTree();
-  });
-  document.getElementById('tree-collapse-all').addEventListener('click', function () {
-    Object.keys(childrenByNum).forEach(function (num) { collapsedSet.add(parseInt(num, 10)); });
-    renderTree();
-  });
+  if (filterInputEl) filterInputEl.addEventListener('input', function () { filterText = (filterInputEl.value || '').trim(); renderTree(); });
+  document.getElementById('tree-expand-all').addEventListener('click', function () { collapsedSet.clear(); renderTree(); });
+  document.getElementById('tree-collapse-all').addEventListener('click', function () { Object.keys(childrenByNum).forEach(function (n) { collapsedSet.add(parseInt(n, 10)); }); renderTree(); });
 
   function treeStructureKey(num) {
     var kids = childrenByNum[num] || [];
@@ -455,90 +464,56 @@
       var v = (newVendorByNum[node.num] || '').trim();
       if (v !== '') rowsWithInput.push({ node: node, newVendor: v });
     });
-    if (rowsWithInput.length === 0) {
-      showMsg(false, 'No New Vendor SN entered.');
-      return;
-    }
+    if (!rowsWithInput.length) { showMsg(false, 'No New Vendor SN entered.'); return; }
     for (var i = 0; i < rowsWithInput.length; i++) {
       var r = rowsWithInput[i];
-      if (hasChildren(r.node.num)) {
-        var desc = getDescendants(r.node.num);
-        for (var j = 0; j < desc.length; j++) {
-          if ((newVendorByNum[desc[j]] || '').trim() === '') {
-            showMsg(false, 'Row ' + r.node.num + ' has children. All family members must have New Vendor SN filled.');
-            return;
-          }
+      if (!hasChildrenY(r.node.num)) continue;
+      var desc = getDescendantsY(r.node.num);
+      for (var j = 0; j < desc.length; j++) {
+        if ((newVendorByNum[desc[j]] || '').trim() === '') {
+          showMsg(false, 'Row ' + r.node.num + ' has children. All family members must have New Vendor SN.');
+          return;
         }
       }
     }
     var byVendor = {};
-    treeNodes.forEach(function (n) { byVendor[n.vendor_sn] = n; });
+    treeNodes.forEach(function (n) {
+      if (String(n.row.ASSY_FLAG || 'Y').toUpperCase() !== 'Y') return;
+      byVendor[n.vendor_sn] = n;
+    });
     rowsWithInput.sort(function (a, b) { return (a.node.depth || 0) - (b.node.depth || 0); });
     var oldToNew = {};
     var updates = [];
     var swapPairs = [];
-    for (var i = 0; i < rowsWithInput.length; i++) {
-      var r = rowsWithInput[i];
-      var node = r.node;
-      var newV = r.newVendor;
+    for (var k = 0; k < rowsWithInput.length; k++) {
+      var rr = rowsWithInput[k];
+      var node = rr.node;
+      var newV = rr.newVendor;
       var oldV = node.vendor_sn || '';
       if (newV === oldV) continue;
       var existing = byVendor[newV];
       if (!existing || existing.num === node.num) {
         oldToNew[oldV] = newV;
-        updates.push({
-          node: node, newVendor: newV, type: 'replace',
-          vendorSn: newV,
-          fatherSn: (function () {
-            var f = node.father_sn || '';
-            return oldToNew[f] !== undefined ? oldToNew[f] : f;
-          })(),
-          empNo: 'T81047'
-        });
+        updates.push({ node: node, vendorSn: newV, fatherSn: (function () { var f = node.father_sn || ''; return oldToNew[f] !== undefined ? oldToNew[f] : f; })(), empNo: 'T81047' });
       } else {
         var S = existing;
-        if (treeStructureKey(node.num) !== treeStructureKey(S.num)) {
-          showMsg(false, 'Part structure khác nhau, không thể swap.');
-          return;
-        }
+        if (treeStructureKey(node.num) !== treeStructureKey(S.num)) { showMsg(false, 'Part structure mismatch, cannot swap.'); return; }
         swapPairs.push({ R: node, S: S, newVendorR: newV, newVendorS: oldV });
       }
     }
     for (var oldV in oldToNew) {
-      var newV = oldToNew[oldV];
       treeNodes.forEach(function (child) {
+        if (String(child.row.ASSY_FLAG || 'Y').toUpperCase() !== 'Y') return;
         if ((child.father_sn || '') !== oldV) return;
         var already = updates.some(function (u) { return u.node.num === child.num; });
         if (already) return;
-        updates.push({
-          node: child, vendorSn: child.vendor_sn || '', fatherSn: newV, empNo: 'T81047'
-        });
+        updates.push({ node: child, vendorSn: child.vendor_sn || '', fatherSn: oldToNew[oldV], empNo: 'T81047' });
       });
     }
-    for (var i = 0; i < swapPairs.length; i++) {
-      var pair = swapPairs[i];
-      var R = pair.R, S = pair.S;
-      var newR = pair.newVendorR, newS = pair.newVendorS;
-      updates.push({
-        node: R, newVendor: newR, type: 'swap',
-        vendorSn: newS, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (S.father_sn || '') : (R.father_sn || ''),
-        empNo: 'T81047'
-      });
-      updates.push({
-        node: S, newVendor: newS, type: 'swap',
-        vendorSn: newR, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (R.father_sn || '') : (S.father_sn || ''),
-        empNo: 'T81047'
-      });
-      var kidsR = childrenByNum[R.num] || [];
-      var kidsS = childrenByNum[S.num] || [];
-      var newRsn = newS, newSsn = newR;
-      for (var k = 0; k < kidsR.length; k++) {
-        var cR = kidsR[k], cS = kidsS[k];
-        var newCR = (newVendorByNum[cS.num] || '').trim();
-        var newCS = (newVendorByNum[cR.num] || '').trim();
-        updates.push({ node: cR, vendorSn: newCS, fatherSn: newRsn, empNo: 'T81047' });
-        updates.push({ node: cS, vendorSn: newCR, fatherSn: newSsn, empNo: 'T81047' });
-      }
+    for (var p = 0; p < swapPairs.length; p++) {
+      var pair = swapPairs[p], R = pair.R, S = pair.S, newR = pair.newVendorR, newS = pair.newVendorS;
+      updates.push({ node: R, vendorSn: newS, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (S.father_sn || '') : (R.father_sn || ''), empNo: 'T81047' });
+      updates.push({ node: S, vendorSn: newR, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (R.father_sn || '') : (S.father_sn || ''), empNo: 'T81047' });
     }
     var byRowid = {};
     updates.forEach(function (u) {
@@ -549,38 +524,22 @@
     deduped.sort(function (a, b) { return (a.node.depth || 0) - (b.node.depth || 0); });
     var btn = document.getElementById('btn-batch-update');
     btn.disabled = true;
-    var tableSelected = 'select a.rowid,a.* from sfism4.r_assy_component_T a where a.assy_flag =\'Y\'';
     var idx = 0;
     function runNext() {
-      if (idx >= deduped.length) {
-        btn.disabled = false;
-        showSuccessBanner();
-        newVendorByNum = {};
-        doSearch();
-        return;
-      }
+      if (idx >= deduped.length) { btn.disabled = false; showSuccessBanner(); newVendorByNum = {}; doSearch(); return; }
       var u = deduped[idx];
       var selectData = {};
-      Object.keys(u.node.row).forEach(function (k) { selectData[k] = u.node.row[k]; });
+      Object.keys(u.node.row).forEach(function (f) { selectData[f] = u.node.row[f]; });
       selectData.VENDOR_SN = u.vendorSn;
       selectData.FATHER_SN = u.fatherSn;
       selectData.EMP_NO = u.empNo;
-      apiPost('table-config-update', { selectData: selectData, tableSelected: tableSelected }).then(function (res) {
-        if (res && res.ok) {
-          idx++;
-          runNext();
-        } else {
-          btn.disabled = false;
-          showMsg(false, res && res.error ? res.error : 'Update failed at row ' + u.node.num);
-        }
-      }).catch(function () {
-        btn.disabled = false;
-        showMsg(false, 'Update failed');
-      });
+      apiPost('update', { selectData: selectData }).then(function (res) {
+        if (res && res.ok) { idx++; runNext(); }
+        else { btn.disabled = false; showMsg(false, (res && res.error) || ('Update failed at row ' + u.node.num)); }
+      }).catch(function () { btn.disabled = false; showMsg(false, 'Update failed'); });
     }
     runNext();
   }
-
   document.getElementById('btn-batch-update').addEventListener('click', doBatchUpdate);
 
   function buildModalForm() {
@@ -592,119 +551,58 @@
   }
   buildModalForm();
 
-  function openEditModal() {
+  function openEditModal(mode) {
     if (!selectedRowNum) return;
-    modalMode = 'edit';
+    modalMode = mode || 'edit';
     var node = treeNodes.find(function (n) { return n.num === selectedRowNum; });
     if (!node) return;
-    var titleEl = document.getElementById('modal-edit-title');
-    if (titleEl) titleEl.textContent = 'Edit';
-    var row = node.row;
+    document.getElementById('modal-edit-title').textContent = modalMode === 'copy' ? 'Copy row' : 'Edit';
     EDIT_MODAL_FIELDS.forEach(function (key) {
       var el = document.getElementById('edit-' + key);
-      if (el) el.value = (row[key] != null ? row[key] : '') + '';
+      if (el) el.value = (node.row[key] != null ? node.row[key] : '') + '';
     });
     document.getElementById('modal-edit').classList.add('show');
   }
-
-  function openCopyModal() {
-    if (!selectedRowNum) return;
-    modalMode = 'copy';
-    var node = treeNodes.find(function (n) { return n.num === selectedRowNum; });
-    if (!node) return;
-    var titleEl = document.getElementById('modal-edit-title');
-    if (titleEl) titleEl.textContent = 'Copy row';
-    var row = node.row;
-    EDIT_MODAL_FIELDS.forEach(function (key) {
-      var el = document.getElementById('edit-' + key);
-      if (el) el.value = (row[key] != null ? row[key] : '') + '';
-    });
-    document.getElementById('modal-edit').classList.add('show');
-  }
-
   function closeEditModal() {
     document.getElementById('modal-edit').classList.remove('show');
-    var titleEl = document.getElementById('modal-edit-title');
-    if (titleEl) titleEl.textContent = 'Edit';
+    document.getElementById('modal-edit-title').textContent = 'Edit';
     modalMode = 'edit';
   }
 
-  document.getElementById('btn-edit').addEventListener('click', openEditModal);
-  document.getElementById('btn-copy').addEventListener('click', openCopyModal);
+  document.getElementById('btn-edit').addEventListener('click', function () { openEditModal('edit'); });
+  document.getElementById('btn-copy').addEventListener('click', function () { openEditModal('copy'); });
+  document.getElementById('modal-btn-cancel').addEventListener('click', closeEditModal);
+  document.getElementById('modal-edit').addEventListener('click', function (e) { if (e.target === document.getElementById('modal-edit')) closeEditModal(); });
 
   document.getElementById('btn-delete').addEventListener('click', function () {
     if (!selectedRowNum) return;
     var node = treeNodes.find(function (n) { return n.num === selectedRowNum; });
     if (!node) return;
-    if (!confirm('Delete row này?')) return;
-    var tableSelected = 'select a.rowid,a.* from sfism4.r_assy_component_T a where a.assy_flag =\'Y\'';
-    apiPost('table-config-delete', { selectData: node.row, tableSelected: tableSelected }).then(function (res) {
-      if (res && res.ok) {
-        showMsg(true, 'Đã delete row số ' + selectedRowNum);
-        doSearch();
-      } else {
-        showMsg(false, res && res.error ? res.error : 'Delete failed');
-      }
-    }).catch(function () {
-      showMsg(false, 'Delete failed');
-    });
+    if (!confirm('Delete selected row?')) return;
+    apiPost('delete', { selectData: node.row }).then(function (res) {
+      if (res && res.ok) { showMsg(true, 'Deleted row ' + selectedRowNum); doSearch(); }
+      else showMsg(false, (res && res.error) || 'Delete failed');
+    }).catch(function () { showMsg(false, 'Delete failed'); });
   });
-
-  document.getElementById('modal-btn-cancel').addEventListener('click', closeEditModal);
 
   document.getElementById('modal-btn-save').addEventListener('click', function () {
     if (!selectedRowNum) return;
     var node = treeNodes.find(function (n) { return n.num === selectedRowNum; });
     if (!node) return;
-    var orig = node.row;
     var selectData = {};
-    Object.keys(orig).forEach(function (k) { selectData[k] = orig[k]; });
+    Object.keys(node.row).forEach(function (k) { selectData[k] = node.row[k]; });
     EDIT_MODAL_FIELDS.forEach(function (key) {
       var el = document.getElementById('edit-' + key);
       var v = el ? el.value : '';
       selectData[key] = (key === 'ASSY_ORD' || key === 'ASSY_QTY' || key === 'LEVEL_NO' || key === 'ASSY_SEQ') && v !== '' ? (parseFloat(v) || 0) : v;
     });
     var btn = document.getElementById('modal-btn-save');
-    var tableSelected = 'select a.rowid,a.* from sfism4.r_assy_component_T a where a.assy_flag =\'Y\'';
     btn.disabled = true;
-    var apiPath = modalMode === 'copy' ? 'table-config-insert' : 'table-config-update';
-    apiPost(apiPath, { selectData: selectData, tableSelected: tableSelected }).then(function (res) {
+    apiPost(modalMode === 'copy' ? 'insert' : 'update', { selectData: selectData }).then(function (res) {
       btn.disabled = false;
-      if (res && res.ok) {
-        closeEditModal();
-        if (modalMode === 'copy') {
-          showMsg(true, 'Đã add row số ' + selectedRowNum);
-          doSearch();
-        } else {
-          showSuccessBanner();
-          var idx = sessionData.findIndex(function (r) { return (r.ROWID || '') === (orig.ROWID || ''); });
-          if (idx >= 0) {
-            Object.keys(selectData).forEach(function (k) { sessionData[idx][k] = selectData[k]; });
-            treeNodes = buildTree(sessionData);
-            childrenByNum = {};
-            treeNodes.forEach(function (n) {
-              if (n.father_sn) {
-                var p = treeNodes.find(function (x) { return x.vendor_sn === n.father_sn; });
-                if (p) {
-                  if (!childrenByNum[p.num]) childrenByNum[p.num] = [];
-                  childrenByNum[p.num].push(n);
-                }
-              }
-            });
-            renderTree();
-          }
-        }
-      } else {
-        showMsg(false, res && res.error ? res.error : 'Save failed');
-      }
-    }).catch(function () {
-      btn.disabled = false;
-      showMsg(false, 'Save failed');
-    });
-  });
-
-  document.getElementById('modal-edit').addEventListener('click', function (e) {
-    if (e.target === document.getElementById('modal-edit')) closeEditModal();
+      if (res && res.ok) { closeEditModal(); showSuccessBanner(); doSearch(); }
+      else showMsg(false, (res && res.error) || 'Save failed');
+    }).catch(function () { btn.disabled = false; showMsg(false, 'Save failed'); });
   });
 })();
   </script>

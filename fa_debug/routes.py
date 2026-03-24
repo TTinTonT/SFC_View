@@ -5,6 +5,7 @@ import json
 import os
 import threading
 import time
+from decimal import Decimal
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, redirect, render_template, request
@@ -158,6 +159,12 @@ def debug_kitting():
     return render_template("debug_kitting.html", current_user=getattr(request, "current_user", None))
 
 
+@bp.route("/debug/kitting-sql")
+def debug_kitting_sql():
+    """IT Kitting SQL page: assy tree by direct Oracle SQL."""
+    return render_template("debug_kitting_sql.html", current_user=getattr(request, "current_user", None))
+
+
 # --- IT Kitting API (proxy to external table_config_search_data) ---
 _TABLE_CONFIG_COLUMNS2_KEYS = [
     "ROWID", "SERIAL_NUMBER", "MO_NUMBER", "MODEL_NAME", "REV", "FATHER_SN", "LINE_NAME", "IN_STATION_TIME",
@@ -166,6 +173,196 @@ _TABLE_CONFIG_COLUMNS2_KEYS = [
     "SUB_PPID_MODEL", "SUB_PPID", "PPID", "SLOT", "PPID_HEADER", "FACTORY_ID", "SUB_PPID_REV", "PO_LINE",
     "PO", "REV_FLAG", "DEBUG_FLAG", "ASSY_SEQ", "DATE_CODE", "REFERENCE_TIME", "STACK",
 ]
+
+
+def _serialize_oracle_value(v):
+    if v is None:
+        return None
+    if isinstance(v, Decimal):
+        try:
+            return int(v) if v == v.to_integral_value() else float(v)
+        except Exception:
+            return float(v)
+    if isinstance(v, datetime):
+        return v.strftime("%Y/%m/%d %H:%M:%S")
+    if hasattr(v, "read"):
+        try:
+            return str(v.read())
+        except Exception:
+            return str(v)
+    if hasattr(v, "isoformat"):
+        try:
+            return v.isoformat()
+        except Exception:
+            return str(v)
+    return v
+
+
+def _serialize_oracle_row(cols, row):
+    out = {}
+    for i, c in enumerate(cols):
+        try:
+            key = c[0] if isinstance(c, tuple) else c
+        except Exception:
+            key = c
+        out[str(key).upper()] = _serialize_oracle_value(row[i] if i < len(row) else None)
+    return out
+
+
+def _split_rows_by_flag(rows):
+    rows_y = []
+    rows_n = []
+    for r in rows or []:
+        flag = str((r or {}).get("ASSY_FLAG") or "").upper()
+        if flag == "N":
+            rows_n.append(r)
+        else:
+            rows_y.append(r)
+    return rows_y, rows_n
+
+
+def _sanitize_select_data(select_data):
+    allowed = set(_TABLE_CONFIG_COLUMNS2_KEYS)
+    out = {}
+    for k, v in (select_data or {}).items():
+        ku = str(k or "").upper()
+        if ku == "ROWID":
+            out["ROWID"] = v
+            continue
+        if ku in allowed:
+            out[ku] = v
+    return out
+
+
+@bp.route("/api/debug/kitting-sql/assy-data", methods=["GET"])
+def api_kitting_sql_assy_data():
+    """Fetch assy data from Oracle for IT Kitting SQL page."""
+    sn = (request.args.get("sn") or "").strip().upper()
+    assy_flag = (request.args.get("assy_flag") or "Y").strip().lower()
+    if assy_flag not in ("y", "n", "all"):
+        assy_flag = "y"
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.sql_queries import KITTING_SQL_SEARCH
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            try:
+                bind_flag = None if assy_flag == "all" else assy_flag.upper()
+                cur.execute(KITTING_SQL_SEARCH, {"sn": sn, "assy_flag": bind_flag})
+                cols = [d[0] for d in (cur.description or [])]
+                rows = cur.fetchall() or []
+                out_rows = [_serialize_oracle_row(cols, r) for r in rows]
+                return jsonify({"ok": True, "rows": out_rows})
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Oracle connection failed: {e}"}), 500
+
+
+@bp.route("/api/debug/kitting-sql/update", methods=["POST"])
+def api_kitting_sql_update():
+    """Update one assy row by ROWID for IT Kitting SQL page."""
+    data = request.get_json(silent=True) or {}
+    select_data_raw = data.get("selectData")
+    if not select_data_raw or not isinstance(select_data_raw, dict):
+        return jsonify({"ok": False, "error": "selectData required"}), 400
+    select_data = _sanitize_select_data(select_data_raw)
+    rowid = (select_data.get("ROWID") or "").strip()
+    if not rowid:
+        return jsonify({"ok": False, "error": "ROWID required"}), 400
+    update_items = [(k, v) for k, v in select_data.items() if k != "ROWID"]
+    if not update_items:
+        return jsonify({"ok": False, "error": "No updatable fields"}), 400
+    set_sql = ", ".join([f"{k} = :{k}" for k, _ in update_items])
+    sql = f"UPDATE SFISM4.R_ASSY_COMPONENT_T SET {set_sql} WHERE ROWID = :ROWID"
+    binds = {k: v for k, v in update_items}
+    binds["ROWID"] = rowid
+    try:
+        from sfis_tool.db import get_conn
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute(sql, binds)
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"ok": False, "error": "Row not found. Please search again."}), 404
+                conn.commit()
+                return jsonify({"ok": True})
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/kitting-sql/insert", methods=["POST"])
+def api_kitting_sql_insert():
+    """Insert one assy row for IT Kitting SQL page."""
+    data = request.get_json(silent=True) or {}
+    select_data_raw = data.get("selectData")
+    if not select_data_raw or not isinstance(select_data_raw, dict):
+        return jsonify({"ok": False, "error": "selectData required"}), 400
+    select_data = _sanitize_select_data(select_data_raw)
+    insert_items = [(k, v) for k, v in select_data.items() if k != "ROWID"]
+    if not insert_items:
+        return jsonify({"ok": False, "error": "No insert fields"}), 400
+    cols_sql = ", ".join([k for k, _ in insert_items])
+    vals_sql = ", ".join([f":{k}" for k, _ in insert_items])
+    sql = f"INSERT INTO SFISM4.R_ASSY_COMPONENT_T ({cols_sql}) VALUES ({vals_sql})"
+    binds = {k: v for k, v in insert_items}
+    try:
+        from sfis_tool.db import get_conn
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute(sql, binds)
+                conn.commit()
+                return jsonify({"ok": True})
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/kitting-sql/delete", methods=["POST"])
+def api_kitting_sql_delete():
+    """Delete one assy row by ROWID for IT Kitting SQL page."""
+    data = request.get_json(silent=True) or {}
+    select_data_raw = data.get("selectData")
+    if not select_data_raw or not isinstance(select_data_raw, dict):
+        return jsonify({"ok": False, "error": "selectData required"}), 400
+    rowid = (select_data_raw.get("ROWID") or "").strip()
+    if not rowid:
+        return jsonify({"ok": False, "error": "ROWID required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.sql_queries import KITTING_SQL_DELETE
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute(KITTING_SQL_DELETE, {"rowid": rowid})
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return jsonify({"ok": False, "error": "Row not found. Please search again."}), 404
+                conn.commit()
+                return jsonify({"ok": True})
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/debug/kitting/assy-data", methods=["GET"])
