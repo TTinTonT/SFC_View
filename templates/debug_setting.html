@@ -12,6 +12,7 @@
   .nav-links { margin-bottom: 1rem; }
   .nav-links a { color: var(--color-primary); text-decoration: none; margin-right: 1rem; }
   .nav-links a:hover { text-decoration: underline; }
+  .nav-links a.disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
   .nav-links .btn-logout { background: none; border: none; padding: 0; font-size: inherit; color: var(--color-primary); cursor: pointer; text-decoration: none; }
   .nav-links .btn-logout:hover { text-decoration: underline; }
   .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
@@ -43,11 +44,12 @@
 </head>
 <body>
   <div class="nav-links">
-    <a href="/debug">Debug</a>
-    <a href="/debug/repair">Repair</a>
-    <a href="/debug/jump-station">IT Jump</a>
-    <a href="/debug/kitting">IT Kitting</a>
-    <a href="/debug/kitting-sql">IT Kitting SQL</a>
+    {% set ap = allowed_pages or [] %}
+    <a href="/debug" class="{{ 'disabled' if 'debug' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
+    <a href="/debug/repair" class="{{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
+    <a href="/debug/jump-station" class="{{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
+    <a href="/debug/kitting" class="{{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
+    <a href="/debug/kitting-sql" class="{{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
     <a href="/">Analytics</a>
     <form method="post" action="/api/auth/logout" style="display: inline;">
       <button type="submit" class="btn-logout">Logout</button>
@@ -150,6 +152,28 @@
     </div>
   </div>
 
+  <div id="pages-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Page permissions – <span id="pages-modal-username"></span></h3>
+      <p class="hint">Select which pages this user can access. New users have no access by default.</p>
+      <div style="margin-bottom: 0.5rem;">
+        <button type="button" class="btn-sm" id="pages-select-all">Select All</button>
+        <button type="button" class="btn-sm" id="pages-clear-all">Clear All</button>
+      </div>
+      <div id="pages-checkboxes">
+        <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-debug" value="debug"> Debug (main page)</label>
+        <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-repair" value="repair"> Repair</label>
+        <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-jump-station" value="jump-station"> IT Jump</label>
+        <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-kitting" value="kitting"> IT Kitting</label>
+        <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-kitting-sql" value="kitting-sql"> IT Kitting SQL</label>
+      </div>
+      <div style="margin-top: 0.75rem;">
+        <button type="button" class="btn-sm" id="pages-save">Save</button>
+        <button type="button" class="btn-sm" id="pages-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div class="panel">
     <h2>Login history</h2>
     <p class="text-sm mb-2" style="color: var(--color-muted);">Last 7 days only. 10 rows per page. Rows in yellow = login from different device.</p>
@@ -215,6 +239,7 @@
               '<button type="button" class="btn-sm btn-modify-ip" data-id="' + u.id + '" data-ip="' + (allowedIp !== 'All' && allowedIp !== '-' ? allowedIp : '') + '">Modify IP</button>' +
               '<button type="button" class="btn-sm btn-allow-all" data-id="' + u.id + '" data-allow="' + (u.allow_all_ip ? '1' : '0') + '">' + (u.allow_all_ip ? 'Disallow all IP' : 'Allow all IP') + '</button>' +
               '<button type="button" class="btn-sm btn-time-window" data-id="' + u.id + '" data-start="' + (startT || '00:00') + '" data-end="' + (endT || '00:00') + '">Time window</button>' +
+              '<button type="button" class="btn-sm btn-pages" data-id="' + u.id + '" data-username="' + ((u.username || '').replace(/"/g, '&quot;')) + '">Pages</button>' +
               (u.locked ? '<button type="button" class="btn-sm btn-unlock" data-id="' + u.id + '">Unlock</button>' : '') +
               '<button type="button" class="btn-sm danger btn-delete" data-id="' + u.id + '">Delete</button>' +
             '</td></tr>';
@@ -278,7 +303,46 @@
           api('/api/debug/setting/user/delete', { method: 'POST', body: { user_id: parseInt(btn.dataset.id, 10) } }).then(function(d) { if (d.ok) loadUsers(); else alert(d.error); });
         };
       });
+      document.querySelectorAll('.btn-pages').forEach(function(btn) {
+        btn.onclick = function() {
+          var uid = parseInt(btn.dataset.id, 10);
+          var username = (btn.dataset.username || '').replace(/&quot;/g, '"');
+          document.getElementById('pages-modal').dataset.userId = uid;
+          document.getElementById('pages-modal-username').textContent = username || 'User #' + uid;
+          api('/api/debug/setting/user/permissions?user_id=' + uid).then(function(d) {
+            var pages = (d.ok && d.pages) ? d.pages : [];
+            ['debug','repair','jump-station','kitting','kitting-sql'].forEach(function(k) {
+              var cb = document.getElementById('page-' + k);
+              if (cb) cb.checked = pages.indexOf(k) !== -1;
+            });
+            document.getElementById('pages-modal').classList.add('show');
+          });
+        };
+      });
     }
+
+    var pageKeys = ['debug','repair','jump-station','kitting','kitting-sql'];
+    document.getElementById('pages-select-all').onclick = function() {
+      pageKeys.forEach(function(k) { var cb = document.getElementById('page-' + k); if (cb) cb.checked = true; });
+    };
+    document.getElementById('pages-clear-all').onclick = function() {
+      pageKeys.forEach(function(k) { var cb = document.getElementById('page-' + k); if (cb) cb.checked = false; });
+    };
+    document.getElementById('pages-cancel').onclick = function() {
+      document.getElementById('pages-modal').classList.remove('show');
+    };
+    document.getElementById('pages-modal').onclick = function(e) {
+      if (e.target === this) this.classList.remove('show');
+    };
+    document.getElementById('pages-save').onclick = function() {
+      var uid = document.getElementById('pages-modal').dataset.userId;
+      if (!uid) return;
+      var pages = pageKeys.filter(function(k) { var cb = document.getElementById('page-' + k); return cb && cb.checked; });
+      api('/api/debug/setting/user/permissions', { method: 'POST', body: { user_id: parseInt(uid, 10), pages: pages } }).then(function(d) {
+        if (d.ok) { document.getElementById('pages-modal').classList.remove('show'); loadUsers(); }
+        else alert(d.error || 'Failed');
+      });
+    };
 
     function loadRegistrations() {
       api('/api/debug/setting/registrations').then(function(data) {

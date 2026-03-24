@@ -13,23 +13,64 @@ from flask import Blueprint, jsonify, redirect, render_template, request
 from analytics.service import run_analytics_query
 from config.app_config import ANALYTICS_CACHE_DIR, TABLE_CONFIG_API_URL, TABLE_CONFIG_COOKIE
 from config.debug_config import LOOKBACK_HOURS, POLL_INTERVAL_SEC
-from fa_debug.auth import get_current_user
+from fa_debug.auth import get_current_user, get_user_page_permissions, set_user_page_permissions
+from fa_debug.auth_db import connect_auth_db, ensure_auth_db
 from fa_debug.logic import prepare_debug_rows
 
 bp = Blueprint("fa_debug", __name__, url_prefix="", template_folder="../templates")
 
+_URL_TO_PAGE = [
+    ("/debug/repair", "repair"),
+    ("/api/debug/repair/", "repair"),
+    ("/debug/jump-station", "jump-station"),
+    ("/api/debug/jump-station/", "jump-station"),
+    ("/debug/kitting-sql", "kitting-sql"),
+    ("/api/debug/kitting-sql/", "kitting-sql"),
+    ("/debug/kitting", "kitting"),
+    ("/api/debug/kitting/", "kitting"),
+    ("/api/debug-query", "debug"),
+    ("/api/debug-data", "debug"),
+    ("/api/fa-debug/", "debug"),
+    ("/debug", "debug"),
+]
+
+
+def _url_to_page_key(path: str) -> str | None:
+    """Return page_key for path, or None if no permission check needed (my-settings, setting, unknown)."""
+    if path in ("/debug/my-settings", "/debug/setting"):
+        return None
+    for prefix, key in _URL_TO_PAGE:
+        if path == prefix or (len(path) > len(prefix) and path.startswith(prefix)):
+            return key
+    return None
+
 
 @bp.before_request
 def require_auth():
-    """All fa_debug routes require valid auth token. Redirect to /login or 401."""
+    """All fa_debug routes require valid auth token. Check page permissions. Redirect to /login or 401/403."""
     user = get_current_user(request)
-    if user is not None:
-        request.current_user = user
-        return None
-    accept = request.headers.get("Accept") or ""
-    if "text/html" in accept:
-        return redirect("/login")
-    return jsonify({"ok": False, "error": "Authentication required"}), 401
+    if user is None:
+        accept = request.headers.get("Accept") or ""
+        if "text/html" in accept:
+            return redirect("/login")
+        return jsonify({"ok": False, "error": "Authentication required"}), 401
+    request.current_user = user
+    path = (request.path or "").rstrip("/") or "/"
+    page_key = _url_to_page_key(path)
+    is_admin = (user.get("role") or "").lower() == "admin"
+    ensure_auth_db()
+    conn = connect_auth_db()
+    try:
+        allowed_pages = get_user_page_permissions(conn, user["id"]) if not is_admin else {"debug", "repair", "jump-station", "kitting", "kitting-sql"}
+    finally:
+        conn.close()
+    request.allowed_pages = allowed_pages
+    if page_key is not None and not is_admin and page_key not in allowed_pages:
+        accept = request.headers.get("Accept") or ""
+        if "text/html" in accept:
+            return redirect("/debug")
+        return jsonify({"ok": False, "error": "Permission denied for this page"}), 403
+    return None
 
 _upload_history_path = os.path.join(ANALYTICS_CACHE_DIR, "agent_upload_history.json")
 _upload_history_lock = threading.Lock()
@@ -138,31 +179,31 @@ def debug_page():
     """Serve FA Debug Place page."""
     from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
     user = getattr(request, "current_user", None)
-    return render_template("fa_debug.html", ws_terminal_url=WS_TERMINAL_URL, upload_url=UPLOAD_URL, current_user=user)
+    return render_template("fa_debug.html", ws_terminal_url=WS_TERMINAL_URL, upload_url=UPLOAD_URL, current_user=user, allowed_pages=getattr(request, "allowed_pages", set()))
 
 
 @bp.route("/debug/repair")
 def debug_repair():
     """Repair page: SN search, WIP, tree, form, execute."""
-    return render_template("debug_repair.html", current_user=getattr(request, "current_user", None))
+    return render_template("debug_repair.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
 
 
 @bp.route("/debug/jump-station")
 def debug_jump_station():
     """IT Jump page: move station flow UI."""
-    return render_template("debug_jump_station.html", current_user=getattr(request, "current_user", None))
+    return render_template("debug_jump_station.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
 
 
 @bp.route("/debug/kitting")
 def debug_kitting():
     """IT Kitting page: assy tree from external table_config API."""
-    return render_template("debug_kitting.html", current_user=getattr(request, "current_user", None))
+    return render_template("debug_kitting.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
 
 
 @bp.route("/debug/kitting-sql")
 def debug_kitting_sql():
     """IT Kitting SQL page: assy tree by direct Oracle SQL."""
-    return render_template("debug_kitting_sql.html", current_user=getattr(request, "current_user", None))
+    return render_template("debug_kitting_sql.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
 
 
 # --- IT Kitting API (proxy to external table_config_search_data) ---
@@ -1553,7 +1594,7 @@ def api_repair_execute():
 @bp.route("/debug/my-settings")
 def debug_my_settings():
     """User self-service: change password, change username."""
-    return render_template("debug_my_settings.html", current_user=getattr(request, "current_user", None))
+    return render_template("debug_my_settings.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
 
 
 def _setting_admin():
@@ -1569,7 +1610,7 @@ def debug_setting():
     """Admin-only Setting: users, registrations, IPs."""
     if _setting_admin() is None:
         return jsonify({"error": "Forbidden"}), 403
-    return render_template("debug_setting.html", current_user=getattr(request, "current_user", None))
+    return render_template("debug_setting.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
 
 
 @bp.route("/api/debug/setting/users", methods=["GET"])
@@ -1592,7 +1633,60 @@ def api_setting_users():
             u["locked"] = u.get("locked_until_ts") and int(u["locked_until_ts"]) > int(__import__("time").time())
             cur2 = conn.execute("SELECT ip FROM user_allowed_ips WHERE user_id = ?", (u["id"],))
             u["allowed_ips"] = [r["ip"] for r in cur2.fetchall()]
+            u["allowed_pages"] = list(get_user_page_permissions(conn, u["id"]))
         return jsonify({"ok": True, "users": users})
+    finally:
+        conn.close()
+
+
+@bp.route("/api/debug/setting/user/permissions", methods=["GET"])
+def api_setting_user_permissions_get():
+    """Get user's page permissions (admin only)."""
+    if _setting_admin() is None:
+        return jsonify({"error": "Forbidden"}), 403
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"error": "user_id required"}), 400
+    try:
+        user_id = int(user_id)
+    except ValueError:
+        return jsonify({"error": "invalid user_id"}), 400
+    conn = connect_auth_db()
+    try:
+        cur = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+        if cur.fetchone() is None:
+            return jsonify({"error": "User not found"}), 404
+        pages = list(get_user_page_permissions(conn, user_id))
+        return jsonify({"ok": True, "pages": sorted(pages)})
+    finally:
+        conn.close()
+
+
+@bp.route("/api/debug/setting/user/permissions", methods=["POST"])
+def api_setting_user_permissions_post():
+    """Set user's page permissions (admin only)."""
+    if _setting_admin() is None:
+        return jsonify({"error": "Forbidden"}), 403
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+    pages = data.get("pages")
+    if user_id is None:
+        return jsonify({"error": "user_id required"}), 400
+    try:
+        user_id = int(user_id)
+    except (ValueError, TypeError):
+        return jsonify({"error": "invalid user_id"}), 400
+    if pages is None:
+        pages = []
+    elif not isinstance(pages, list):
+        return jsonify({"error": "pages must be a list"}), 400
+    conn = connect_auth_db()
+    try:
+        cur = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+        if cur.fetchone() is None:
+            return jsonify({"error": "User not found"}), 404
+        set_user_page_permissions(conn, user_id, pages)
+        return jsonify({"ok": True})
     finally:
         conn.close()
 
@@ -1760,6 +1854,7 @@ def api_setting_delete_user():
     from fa_debug.auth_db import connect_auth_db
     conn = connect_auth_db()
     try:
+        conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM user_allowed_ips WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM login_log WHERE user_id = ?", (user_id,))
@@ -1998,7 +2093,11 @@ def api_setting_create_user():
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         if initial_ip and not allow_all_ip:
             conn.execute("INSERT OR IGNORE INTO user_allowed_ips (user_id, ip) VALUES (?, ?)", (new_id, initial_ip))
-        conn.commit()
+        pages = data.get("pages")
+        if isinstance(pages, list):
+            set_user_page_permissions(conn, new_id, pages)
+        else:
+            conn.commit()
         return jsonify({"ok": True, "user_id": new_id})
     finally:
         conn.close()

@@ -125,6 +125,7 @@
     align-items: center;
     gap: 0.4rem;
   }
+  .btn-ghost.disabled, .btn-mini.disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
   main { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem; }
   .panel {
     background: var(--color-surface);
@@ -327,10 +328,11 @@
         <div class="header-row">
           <h1>FA Debug Place</h1>
           <div class="header-actions">
+            {% set ap = allowed_pages or [] %}
             <a href="/" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Analytics</a>
-            <a href="/debug/repair" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Repair</a>
-            <a href="/debug/kitting" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">IT Kitting</a>
-            <a href="/debug/kitting-sql" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">IT Kitting SQL</a>
+            <a href="/debug/repair" class="btn-ghost btn-mini {{ 'disabled' if 'repair' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
+            <a href="/debug/kitting" class="btn-ghost btn-mini {{ 'disabled' if 'kitting' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
+            <a href="/debug/kitting-sql" class="btn-ghost btn-mini {{ 'disabled' if 'kitting-sql' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
             {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Setting</a>{% endif %}
             <a href="/debug/my-settings" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">My settings</a>
             <form method="post" action="/api/auth/logout" style="display: inline;" onsubmit="return confirm('Log out?');">

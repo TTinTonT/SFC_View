@@ -210,12 +210,14 @@ def login_flow(username: str, password: str, ip: str) -> Tuple[bool, Optional[st
         if not user:
             record_login_attempt(conn, None, username, ip, False)
             return False, "Invalid username or password", None
-        if is_user_locked(conn, user["id"]):
+        is_admin = (user.get("role") or "").lower() == "admin"
+        if not is_admin and is_user_locked(conn, user["id"]):
             record_login_attempt(conn, user["id"], username, ip, False)
             return False, "Account locked. Contact admin or wait 1 hour.", None
         if not check_password(user, password):
             record_login_attempt(conn, user["id"], username, ip, False)
-            maybe_lock_user(conn, user["id"])
+            if not is_admin:
+                maybe_lock_user(conn, user["id"])
             return False, "Invalid username or password", None
         if not in_allowed_time_window(user):
             record_login_attempt(conn, user["id"], username, ip, False)
@@ -232,6 +234,31 @@ def login_flow(username: str, password: str, ip: str) -> Tuple[bool, Optional[st
         return True, None, user
     finally:
         conn.close()
+
+
+VALID_PAGE_KEYS = frozenset({"debug", "repair", "jump-station", "kitting", "kitting-sql"})
+
+
+def get_user_page_permissions(conn, user_id: int) -> set:
+    """Return set of page_key strings the user is allowed to access."""
+    cur = conn.execute(
+        "SELECT page_key FROM user_page_permissions WHERE user_id = ?",
+        (user_id,),
+    )
+    return {row["page_key"] for row in cur.fetchall() if row["page_key"] in VALID_PAGE_KEYS}
+
+
+def set_user_page_permissions(conn, user_id: int, page_keys: list) -> None:
+    """Replace user's page permissions. page_keys: list of page_key strings."""
+    conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
+    for pk in page_keys:
+        pk = (pk or "").strip().lower()
+        if pk in VALID_PAGE_KEYS:
+            conn.execute(
+                "INSERT OR IGNORE INTO user_page_permissions (user_id, page_key) VALUES (?, ?)",
+                (user_id, pk),
+            )
+    conn.commit()
 
 
 def get_current_user(request) -> Optional[Dict]:

