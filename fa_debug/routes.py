@@ -31,6 +31,7 @@ _URL_TO_PAGE = [
     ("/api/debug-query", "debug"),
     ("/api/debug-data", "debug"),
     ("/api/fa-debug/", "debug"),
+    ("/api/etf/online-test/", "debug"),
     ("/debug", "debug"),
 ]
 
@@ -74,6 +75,48 @@ def require_auth():
 
 _upload_history_path = os.path.join(ANALYTICS_CACHE_DIR, "agent_upload_history.json")
 _upload_history_lock = threading.Lock()
+
+_default_online_test_pn_bases = [
+    "VR200_L10",
+]
+_crabber_test_pn_path = os.path.join(ANALYTICS_CACHE_DIR, "crabber_test_pns.json")
+
+
+def _load_custom_pn_bases():
+    if not os.path.isfile(_crabber_test_pn_path):
+        return []
+    try:
+        with open(_crabber_test_pn_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return [str(x).strip() for x in data if str(x).strip()]
+        return [str(x).strip() for x in (data.get("custom") or data.get("extra") or []) if str(x).strip()]
+    except Exception:
+        return []
+
+
+def _save_custom_pn_bases(custom_list):
+    os.makedirs(os.path.dirname(_crabber_test_pn_path), exist_ok=True)
+    with open(_crabber_test_pn_path, "w", encoding="utf-8") as f:
+        json.dump({"custom": custom_list}, f, indent=2, ensure_ascii=False)
+
+
+def _merge_pn_base_list():
+    """Return list of dicts: [{base, is_default}, ...]."""
+    custom = _load_custom_pn_bases()
+    seen: set = set()
+    out: list = []
+    for p in _default_online_test_pn_bases:
+        u = (p or "").strip()
+        if u and u.upper() not in seen:
+            seen.add(u.upper())
+            out.append({"base": u, "is_default": True})
+    for p in custom:
+        u = (p or "").strip()
+        if u and u.upper() not in seen:
+            seen.add(u.upper())
+            out.append({"base": u, "is_default": False})
+    return out
 
 _debug_cache_lock = threading.Lock()
 _debug_cache = None
@@ -2266,6 +2309,327 @@ def api_debug_log_path():
         return jsonify({"ok": True, "path": path})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e), "path": None}), 502
+
+
+@bp.route("/api/etf/online-test/wip", methods=["GET"])
+def api_etf_online_test_wip():
+    """Tray Online Test: WIP, next station, filtered station list, repair flag."""
+    sn = (request.args.get("sn") or "").strip().upper()
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.jump_route import get_route_list, filter_test_stations_between_fillcoolant_tvi
+        from sfis_tool.repair_flow import build_groups_ordered
+        from sfis_tool.repair_ok import check_has_unrepaired
+        conn = get_conn()
+        try:
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."}), 404
+            wip = dict(zip(_WIP_KEYS, row))
+            current_group = (wip.get("GROUP_NAME") or "").strip()
+            if current_group in ("PACKING", "SHIPPING"):
+                return jsonify({"ok": False, "error": "SN is at PACKING/SHIPPING."}), 400
+            route_cols, route_rows = get_route_list(conn, sn)
+            route = _route_items(route_cols, route_rows)
+            groups_ordered = build_groups_ordered(route)
+            filtered_stations = filter_test_stations_between_fillcoolant_tvi(groups_ordered)
+            has_unrepaired = bool(check_has_unrepaired(conn, sn))
+            next_station = (wip.get("NEXT_STATION") or "").strip()
+            if has_unrepaired:
+                button_label = "Retest"
+            elif next_station:
+                button_label = f"Test {next_station}"
+            else:
+                button_label = "Online Test"
+            default_station = next_station if next_station in filtered_stations else (
+                filtered_stations[0] if filtered_stations else ""
+            )
+            return jsonify({
+                "ok": True,
+                "wip": _serialize_wip(wip),
+                "next_station": next_station,
+                "group_name": wip.get("GROUP_NAME") or "",
+                "line_name": wip.get("LINE_NAME") or "",
+                "filtered_stations": filtered_stations,
+                "default_station": default_station,
+                "is_repair": has_unrepaired,
+                "button_label": button_label,
+            })
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/online-test/reason-codes", methods=["GET"])
+def api_etf_online_test_reason_codes():
+    """DEBUG reason codes for Online Test repair step (same as repair page DO/RO)."""
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.sql_queries import REASON_CODE_DEBUG_LIST
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute(REASON_CODE_DEBUG_LIST)
+                rows = cur.fetchall()
+                return jsonify({
+                    "ok": True,
+                    "reason_codes": [{"code": row[0], "desc": row[1] or ""} for row in rows],
+                })
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/online-test/pn-list", methods=["GET", "POST", "DELETE"])
+def api_etf_online_test_pn_list():
+    """PN base list for Crabber. GET=list, POST=add base, DELETE=remove custom base."""
+    if request.method == "GET":
+        return jsonify({"ok": True, "bases": _merge_pn_base_list()})
+
+    data = request.get_json(silent=True) or {}
+
+    if request.method == "DELETE":
+        base = (data.get("base") or data.get("pn") or "").strip()
+        if not base:
+            return jsonify({"ok": False, "error": "base required"}), 400
+        custom = _load_custom_pn_bases()
+        before = len(custom)
+        custom = [c for c in custom if c.upper() != base.upper()]
+        if len(custom) < before:
+            _save_custom_pn_bases(custom)
+        return jsonify({"ok": True, "bases": _merge_pn_base_list()})
+
+    base = (data.get("base") or data.get("pn") or "").strip()
+    if not base:
+        return jsonify({"ok": False, "error": "base required"}), 400
+    existing = {b["base"].upper() for b in _merge_pn_base_list()}
+    if base.upper() in existing:
+        return jsonify({"ok": True, "bases": _merge_pn_base_list()})
+    custom = _load_custom_pn_bases()
+    if base.upper() not in {c.upper() for c in custom}:
+        custom.append(base)
+        _save_custom_pn_bases(custom)
+    return jsonify({"ok": True, "bases": _merge_pn_base_list()})
+
+
+@bp.route("/api/etf/online-test/repair", methods=["POST"])
+def api_etf_online_test_repair():
+    """Close open repair and jump back for retest (DO/RO/R_only / fallback)."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    reason_code = (data.get("reason_code") or "").strip()
+    remark = (data.get("remark") or "Retest").strip()
+    emp = (data.get("emp") or "").strip() or "SJOP"
+    if not sn or not reason_code:
+        return jsonify({"ok": False, "error": "sn and reason_code required"}), 400
+    sn_lock = _get_sn_lock(sn)
+    if not sn_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "error": "SN is being processed. Please wait."}), 409
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+        from sfis_tool.repair_ok import (
+            check_has_unrepaired,
+            execute_repair_ok,
+            get_group_info,
+            jump_routing,
+            get_jump_param_from_route,
+            resolve_jump_target,
+        )
+        from sfis_tool.repair_flow import detect_repair_mode, get_dido_suffix_from_node
+        from sfis_tool.sql_queries import REASON_CODE_DEBUG_VALIDATE
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(REASON_CODE_DEBUG_VALIDATE, {"rc": reason_code})
+            vrow = cur.fetchone()
+            cur.close()
+            if not vrow or vrow[0] == 0:
+                return jsonify({"ok": False, "error": "Invalid DEBUG reason code."}), 400
+            row = get_station_and_next(conn, sn)
+            if not row:
+                return jsonify({"ok": False, "error": "No WIP for this SN."}), 400
+            wip = dict(zip(_WIP_KEYS, row))
+            if not check_has_unrepaired(conn, sn):
+                return jsonify({"ok": False, "error": "No open repair record."}), 400
+            current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+            mode = detect_repair_mode(wip)
+            suffix = get_dido_suffix_from_node(current_node)
+            ui_mode = mode.get("ui_mode") or "main_line"
+            base = (mode.get("base") or "").strip()
+            jump_target = None
+            if ui_mode == "repair_dido":
+                if suffix == "DO":
+                    if not base:
+                        return jsonify({"ok": False, "error": "Cannot resolve repair base."}), 400
+                    jump_target = base
+                elif suffix == "RO":
+                    jump_target = "FLA"
+                else:
+                    return jsonify({
+                        "ok": False,
+                        "error": "Use the Repair page to advance DI/RI before Retest.",
+                    }), 400
+            elif ui_mode == "repair_r_only":
+                jump_target = resolve_jump_target(reason_code, (wip.get("GROUP_NAME") or "").strip())
+            else:
+                jump_target = resolve_jump_target(reason_code, (wip.get("GROUP_NAME") or "").strip())
+            repair_station = wip.get("STATION_NAME") or current_node
+            n, ok_repair, err, repair_time = execute_repair_ok(
+                conn, sn, repair_station, emp, reason_code,
+                duty_station="TEST FIXTURE", remark=remark,
+                repair_action="RETEST", duty_type="RETEST", auto_commit=False
+            )
+            if not ok_repair or n == 0:
+                conn.rollback()
+                return jsonify({"ok": False, "error": err or "Repair update failed."}), 400
+            v_line = wip.get("LINE_NAME") or ""
+            jump_param = get_jump_param_from_route(conn, sn, jump_target)
+            info = get_group_info(conn, v_line, jump_param)
+            if not info:
+                conn.rollback()
+                return jsonify({"ok": False, "error": "GetGroupInfo failed for jump target."}), 400
+            ok = jump_routing(
+                conn, sn,
+                info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
+                emp, in_station_time=repair_time, auto_commit=False,
+            )
+            if not ok:
+                conn.rollback()
+                return jsonify({"ok": False, "error": "Jump updated 0 rows."}), 400
+            conn.commit()
+            row2 = get_station_and_next(conn, sn)
+            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+            return jsonify({"ok": True, "wip": _serialize_wip(wip2), "jump_target": jump_target})
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        try:
+            sn_lock.release()
+        except Exception:
+            pass
+
+
+@bp.route("/api/etf/online-test/prepare", methods=["POST"])
+def api_etf_online_test_prepare():
+    """Crabber: PN mapping, SP units, shelf scan list -> machines + shelf_proc_data."""
+    data = request.get_json(silent=True) or {}
+    pn_name = (data.get("pn_name") or data.get("pn") or "").strip()
+    if not pn_name:
+        return jsonify({"ok": False, "error": "pn_name required"}), 400
+    try:
+        from config.debug_config import CRABBER_USER_ID
+        from crabber.online_test import (
+            check_pn_mapping,
+            check_sp_units,
+            get_shelf_scan_item_list,
+            parse_first_pn_mapping,
+            pick_default_units,
+        )
+        user_id = str(CRABBER_USER_ID or "41").strip()
+        is_rd = bool(data.get("is_rd"))
+        raw_map = check_pn_mapping(pn_name, user_id, is_rd=is_rd)
+        mfg_id, opt_pn = parse_first_pn_mapping(raw_map)
+        if mfg_id is None:
+            return jsonify({"ok": False, "error": "check_pn_mapping: could not resolve mfg_id", "raw": raw_map}), 400
+        try:
+            mfg_id = int(mfg_id)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid opt_mfg_id from mapping"}), 400
+        sp_units = check_sp_units(pn_name, user_id, mfg_id, is_rd=is_rd)
+        units = pick_default_units(sp_units)
+        try:
+            units = int(data.get("units") or units)
+        except (TypeError, ValueError):
+            units = int(units)
+        shelf = get_shelf_scan_item_list(pn_name, mfg_id, user_id, units, is_rd=is_rd)
+        if not isinstance(shelf, dict):
+            return jsonify({"ok": False, "error": "Unexpected shelf response", "raw": shelf}), 502
+        machines = shelf.get("machines") or []
+        scan_items = shelf.get("scan_items") or []
+        env_items = shelf.get("env_items") or []
+        shelf_proc_data = shelf.get("shelf_proc_data") or {}
+        sfc_ext = (
+            shelf.get("sfc_ext")
+            or shelf_proc_data.get("sfc_ext")
+            or ((shelf.get("mfg_project") or {}).get("sfc_ext") if isinstance(shelf.get("mfg_project"), dict) else None)
+            or ((shelf.get("mfg_station") or {}).get("sfc_ext") if isinstance(shelf.get("mfg_station"), dict) else None)
+            or ""
+        )
+        return jsonify({
+            "ok": True,
+            "pn_name": pn_name,
+            "opt_pn_name": opt_pn,
+            "mfg_id": mfg_id,
+            "units": units,
+            "sp_units": sp_units,
+            "machines": machines,
+            "scan_items": scan_items,
+            "env_items": env_items,
+            "shelf_proc_data": shelf_proc_data,
+            "sfc_ext": sfc_ext,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/online-test/start", methods=["POST"])
+def api_etf_online_test_start():
+    """Crabber: check machine, close terminals, process_sfc, quota, getControllers, send_list."""
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip()
+    pn_name = (data.get("pn_name") or data.get("pn") or "").strip()
+    emp = (data.get("emp") or data.get("employee_id") or "").strip() or "SJOP"
+    machine_id = data.get("machine_id")
+    shelf_proc_data = data.get("shelf_proc_data") or {}
+    scan_items = data.get("scan_items") or []
+    env_items = data.get("env_items") or []
+    sfc_ext = data.get("sfc_ext") or ""
+    units = data.get("units")
+    if not sn or not pn_name:
+        return jsonify({"ok": False, "error": "sn and pn_name required"}), 400
+    if machine_id is None:
+        return jsonify({"ok": False, "error": "machine_id required"}), 400
+    try:
+        machine_id = int(machine_id)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "machine_id must be int"}), 400
+    if not isinstance(shelf_proc_data, dict) or not shelf_proc_data.get("id"):
+        return jsonify({"ok": False, "error": "shelf_proc_data with id required"}), 400
+    try:
+        units = int(units) if units is not None else 1
+    except (TypeError, ValueError):
+        units = 1
+    try:
+        from config.debug_config import CRABBER_USER_ID
+        from crabber.online_test import build_scan_code_map, run_start_test_sequence
+        user_id = str(CRABBER_USER_ID or "41").strip()
+        scan_map = build_scan_code_map(scan_items, env_items, sn.strip().upper(), emp)
+        trial_run = bool(data.get("trial_run"))
+        result = run_start_test_sequence(
+            machine_id=machine_id,
+            shelf_proc_data=shelf_proc_data,
+            units=units,
+            pn_name=pn_name,
+            owner=emp,
+            user_id=user_id,
+            scan_code_map=scan_map,
+            sfc_ext=sfc_ext,
+            trial_run=trial_run,
+        )
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/debug-data", methods=["GET"])

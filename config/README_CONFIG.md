@@ -36,6 +36,8 @@ Priority: `ENV` → `SITE_PROFILES[SITE]` → `DEFAULT`.
 | **Crabber** | | |
 | CRABBER_BASE_URL | Crabber API base | `http://10.16.138.66:8000` |
 | CRABBER_TOKEN | API token | |
+| CRABBER_USER_ID | Crabber `user_id` query param (Online Test) | `41` |
+| CRABBER_SITENAME | `sitename` for thread quota check | `SanJose` |
 | **ETF** | | |
 | SFC_TRAY_STATUS_URL | Tray status API | `http://10.16.137.115/SFCAPI/SFC/Test_Fixture_Status` |
 | SFC_LEVEL_GRADE | Level grade (e.g. L10) | `L10` |

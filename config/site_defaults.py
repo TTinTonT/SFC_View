@@ -38,6 +38,8 @@ DEFAULT = {
     # Crabber API
     "CRABBER_BASE_URL": "http://10.16.138.66:8000",
     "CRABBER_TOKEN": "06939a6ac0ed828115deba6a6bed85de77c715bb",
+    "CRABBER_USER_ID": "41",
+    "CRABBER_SITENAME": "SanJose",
     # ETF
     "SFC_TRAY_STATUS_URL": "http://10.16.137.115/SFCAPI/SFC/Test_Fixture_Status",
     "SFC_LEVEL_GRADE": "L10",

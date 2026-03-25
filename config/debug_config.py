@@ -31,3 +31,5 @@ HOST_SSH_PASSWORD = os.environ.get("HOST_SSH_PASSWORD", get_default("HOST_SSH_PA
 # get_node_info: GET /api/get_node_info/?node_log_id=XXX
 CRABBER_BASE_URL = os.environ.get("CRABBER_BASE_URL", get_default("CRABBER_BASE_URL")).rstrip("/")
 CRABBER_TOKEN = os.environ.get("CRABBER_TOKEN", get_default("CRABBER_TOKEN"))
+CRABBER_USER_ID = str(os.environ.get("CRABBER_USER_ID", get_default("CRABBER_USER_ID") or "41")).strip()
+CRABBER_SITENAME = (os.environ.get("CRABBER_SITENAME", get_default("CRABBER_SITENAME") or "SanJose")).strip()

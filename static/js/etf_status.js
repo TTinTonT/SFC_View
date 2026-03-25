@@ -200,6 +200,31 @@
     return div.innerHTML;
   }
 
+  function copyText(text) {
+    const value = String(text || "");
+    if (!value) return Promise.resolve(false);
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(value).then(() => true).catch(() => false);
+    }
+    const ta = document.createElement("textarea");
+    ta.value = value;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch (_) {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    return Promise.resolve(ok);
+  }
+
   /** Parse SFC last end time "YYYY/MM/DD HH:mm:ss" to Date (local). Returns null if invalid. */
   function parseLastEndTime(s) {
     if (!s || typeof s !== "string") return null;
@@ -466,7 +491,7 @@
 
     if (displayRows.length === 0 && expandedPanels.size === 0) {
       const msg = isSearchMode && searchInFlight ? "Searching..." : "No DUTs";
-      tbody.innerHTML = '<tr><td colspan="9" style="color: var(--color-muted); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
+      tbody.innerHTML = '<tr><td colspan="10" style="color: var(--color-muted); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
       return;
     }
 
@@ -543,6 +568,7 @@
               <label class="sn-menu-item"><input type="checkbox" data-action="bmc" ${flags.bmc ? "checked" : ""}> BMC Terminal</label>
               ${!sysIpNA ? '<label class="sn-menu-item"><input type="checkbox" data-action="host" ' + (flags.host ? "checked" : "") + '> Host Terminal</label>' : ""}
             </div>
+            <button type="button" class="sn-copy-btn" data-sn="${escapeHtml(r.sn)}" title="Copy SN">Copy</button>
             <button type="button" class="pin-btn etf-pin-btn pin-icon-btn" data-row-key="${escapeHtml(rowKey)}" data-sn="${escapeHtml(r.sn)}" title="${isPinned ? "Unpin" : "Pin"}"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg></button>
           </div>
         </div></td>
@@ -554,6 +580,7 @@
         <td class="etf-td"><div class="etf-cell-inner">${escapeHtml(sfcSlot)}</div></td>
         <td class="etf-td last-end-cell" data-last-end="${escapeHtml(rawLastEnd)}"><div class="etf-cell-inner etf-cell-inner--time"><span class="last-end-value">${lastEndDisplay}</span></div></td>
         <td class="etf-td"><div class="etf-cell-inner" title="${sfcRemarkVal}">${sfcRemarkVal}</div></td>
+        <td class="etf-td etf-td-action">${r.sn ? (`<button type="button" class="etf-online-test-btn" data-sn="${escapeHtml(r.sn)}" title="Online test / Retest">Test</button>`) : '<span style="color:var(--color-muted);font-size:0.8rem">—</span>'}</td>
       </tr>`);
 
       if ((flags.ai || flags.term || flags.bmc || flags.host) && !savedPanels.has(rowKey)) {
@@ -565,7 +592,7 @@
         const titleLabel = titleLabelFromFlags(effectiveFlags);
         const termHeight = terminalHeightFromFlags(effectiveFlags);
         htmlParts.push(`<tr class="sn-debug-row" data-row-key="${escapeHtml(rowKey)}">
-          <td colspan="9" class="sn-debug-panel" data-row-key="${escapeHtml(rowKey)}">
+          <td colspan="10" class="sn-debug-panel" data-row-key="${escapeHtml(rowKey)}">
             <div class="sn-debug-panel-inner">
               <div class="sn-debug-header">
                 <span class="sn-debug-title">${escapeHtml(snDisplay)} – ${escapeHtml(titleLabel)}</span>
@@ -588,7 +615,7 @@
     disconnectedRowKeys.forEach((rowKey) => {
       const snDisplay = panelRowKeyToSn.get(rowKey) || rowKey;
       htmlParts.push(`<tr class="sn-disconnected-row" data-row-key="${escapeHtml(rowKey)}">
-        <td colspan="9" style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; color: var(--color-text); font-size: 0.9rem;">
+        <td colspan="10" style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; color: var(--color-text); font-size: 0.9rem;">
           <span style="font-weight: 600;">SN: ${escapeHtml(snDisplay)}</span> — Tray disconnected / cannot ping. Terminal output preserved. Close when done.
         </td>
       </tr>`);
@@ -652,6 +679,31 @@
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         onPinSn(btn.dataset.rowKey || "", btn.dataset.sn || "");
+      });
+    });
+
+    tbody.querySelectorAll(".etf-online-test-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openOnlineTest((btn.dataset.sn || "").trim());
+      });
+    });
+
+    tbody.querySelectorAll(".sn-copy-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const sn = (btn.dataset.sn || "").trim();
+        if (!sn) return;
+        copyText(sn).then((ok) => {
+          const oldTitle = btn.title || "Copy SN";
+          btn.title = ok ? "Copied!" : "Copy failed";
+          const oldText = btn.textContent;
+          btn.textContent = ok ? "Copied" : "Retry";
+          setTimeout(() => {
+            btn.title = oldTitle;
+            btn.textContent = oldText || "Copy";
+          }, 900);
+        });
       });
     });
 
@@ -778,12 +830,12 @@
             nextUpdateEl.textContent = nextUpdateSec + "s";
           }, 1000);
         } else if (data.error) {
-          tbody.innerHTML = '<tr><td colspan="13" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(data.error) + "</td></tr>";
+          tbody.innerHTML = '<tr><td colspan="10" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(data.error) + "</td></tr>";
         }
       })
       .catch((err) => {
         const msg = (err && err.message && err.message.includes('fetch')) ? "Cannot connect to server. Check if backend is running (python app.py)" : String(err);
-        tbody.innerHTML = '<tr><td colspan="13" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
+        tbody.innerHTML = '<tr><td colspan="10" style="color: var(--color-danger); text-align: center; padding: 2rem;">' + escapeHtml(msg) + "</td></tr>";
       })
       .finally(() => {
         if (isRescan) {
@@ -838,6 +890,324 @@
       schedulePoll();
     }, POLL_INTERVAL_MS);
   }
+
+  let otCtx = { sn: "", wip: null, prepare: null, emp: "SJOP", selectedMachineId: null };
+
+  function otShowStep(step) {
+    const steps = ["loading", "repair", "config", "machines", "result"];
+    steps.forEach((s) => {
+      const el = document.getElementById("etf-ot-step-" + s);
+      if (el) el.style.display = s === step ? "block" : "none";
+    });
+  }
+
+  function closeOnlineTestModal() {
+    const modal = document.getElementById("etf-online-test-modal");
+    if (modal) modal.setAttribute("aria-hidden", "true");
+  }
+
+  function otShowResult(ok, msg, detail) {
+    otShowStep("result");
+    const el = document.getElementById("etf-ot-result-msg");
+    if (el) {
+      el.textContent = msg;
+      el.style.color = ok ? "#16a34a" : "#dc2626";
+    }
+    const det = document.getElementById("etf-ot-result-detail");
+    if (det) det.textContent = detail || "";
+  }
+
+  function loadOtReasonCodes() {
+    return fetch("/api/etf/online-test/reason-codes")
+      .then((r) => r.json())
+      .then((data) => {
+        const sel = document.getElementById("etf-ot-reason");
+        if (!sel || !data.ok || !data.reason_codes) return;
+        sel.innerHTML = data.reason_codes.map((x) =>
+          "<option value=\"" + escapeHtml(x.code) + "\">" + escapeHtml(x.code + " — " + (x.desc || "")) + "</option>"
+        ).join("");
+      });
+  }
+
+  function otUpdatePnPreview() {
+    const base = (document.getElementById("etf-ot-pn")?.value || "").trim();
+    const station = (document.getElementById("etf-ot-station")?.value || "").trim();
+    const preview = document.getElementById("etf-ot-pn-preview");
+    if (preview) preview.textContent = (base && station) ? "PN \u2192 " + base + "_" + station : "";
+    const delBtn = document.getElementById("etf-ot-pn-del");
+    if (delBtn) {
+      const sel = document.getElementById("etf-ot-pn");
+      const opt = sel?.options[sel.selectedIndex];
+      delBtn.style.display = (opt && opt.dataset.custom === "1") ? "" : "none";
+    }
+  }
+
+  function otRenderBases(bases) {
+    const pn = document.getElementById("etf-ot-pn");
+    if (!pn) return;
+    pn.innerHTML = bases.map((b) =>
+      "<option value=\"" + escapeHtml(b.base) + "\" data-custom=\"" + (b.is_default ? "0" : "1") + "\">"
+      + escapeHtml(b.base) + (b.is_default ? "" : " (custom)") + "</option>"
+    ).join("");
+    otUpdatePnPreview();
+  }
+
+  function showOtConfig() {
+    const d = otCtx.wip;
+    const hint = document.getElementById("etf-ot-config-hint");
+    if (hint) hint.textContent = "Next station: " + (d.next_station || "-") + ". Select station then PN base.";
+    const snRo = document.getElementById("etf-ot-sn-ro");
+    if (snRo) snRo.value = otCtx.sn;
+    const empEl = document.getElementById("etf-ot-emp");
+    if (empEl && !empEl.value) empEl.value = "SJOP";
+    const st = document.getElementById("etf-ot-station");
+    if (st) {
+      st.innerHTML = (d.filtered_stations || []).map((g) =>
+        "<option value=\"" + escapeHtml(g) + "\"" + (g === d.default_station ? " selected" : "") + ">" + escapeHtml(g) + "</option>"
+      ).join("");
+    }
+    return fetch("/api/etf/online-test/pn-list")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok && data.bases) otRenderBases(data.bases);
+        otShowStep("config");
+      });
+  }
+
+  function renderOtMachineList() {
+    const filEl = document.getElementById("etf-ot-machine-filter");
+    const filterRaw = (filEl && filEl.value) || "";
+    const filter = filterRaw.trim().toLowerCase();
+    const list = document.getElementById("etf-ot-machine-list");
+    if (!list || !otCtx.prepare) return;
+    const machines = otCtx.prepare.machines || [];
+    const filtered = !filter
+      ? machines
+      : machines.filter((m) => {
+        const t = (
+          (m.text || "") + " " + (m.key || "") + " " + String(m.value || "") + " " +
+          (m.user || "") + " " + (m.occupier || "")
+        ).toLowerCase();
+        return t.indexOf(filter) >= 0;
+      });
+    list.innerHTML = filtered.map((m) => {
+      const id = m.value;
+      const occ = (m.user || m.occupier || "").trim();
+      const occHtml = occ ? "<span class=\"occ\">In use: " + escapeHtml(occ) + "</span>" : "";
+      return "<div class=\"etf-ot-machine-item\" data-mid=\"" + escapeHtml(String(id)) + "\"><strong>#" +
+        escapeHtml(String(id)) + "</strong> " + escapeHtml(m.text || m.key || "") + " " + occHtml + "</div>";
+    }).join("");
+    list.querySelectorAll(".etf-ot-machine-item").forEach((el) => {
+      el.addEventListener("click", () => {
+        list.querySelectorAll(".etf-ot-machine-item").forEach((x) => x.classList.remove("selected"));
+        el.classList.add("selected");
+        otCtx.selectedMachineId = parseInt(el.dataset.mid, 10);
+        const picked = document.getElementById("etf-ot-machine-picked");
+        if (picked) picked.textContent = "Selected machine ID: " + otCtx.selectedMachineId;
+        const startBtn = document.getElementById("etf-ot-start");
+        if (startBtn) startBtn.disabled = isNaN(otCtx.selectedMachineId);
+      });
+    });
+  }
+
+  function openOnlineTest(sn) {
+    const modal = document.getElementById("etf-online-test-modal");
+    if (!modal || !sn) return;
+    otCtx = { sn: sn.trim().toUpperCase(), wip: null, prepare: null, emp: "SJOP", selectedMachineId: null };
+    modal.setAttribute("aria-hidden", "false");
+    otShowStep("loading");
+    fetch("/api/etf/online-test/wip?sn=" + encodeURIComponent(otCtx.sn))
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.ok) {
+          otShowResult(false, data.error || "WIP request failed", "");
+          return;
+        }
+        otCtx.wip = data;
+        const title = document.getElementById("etf-ot-title");
+        if (title) title.textContent = data.button_label || "Online Test";
+        if (data.is_repair) {
+          loadOtReasonCodes().then(() => {
+            const badge = document.getElementById("etf-ot-repair-badge");
+            if (badge) badge.textContent = "Retest (repair)";
+            const remark = document.getElementById("etf-ot-remark");
+            if (remark) remark.value = "Retest";
+            const reEm = document.getElementById("etf-ot-repair-emp");
+            if (reEm && !reEm.value) reEm.value = "SJOP";
+            otShowStep("repair");
+          });
+        } else {
+          showOtConfig().catch((e) => otShowResult(false, String(e.message || e), ""));
+        }
+      })
+      .catch((e) => otShowResult(false, String(e.message || e), ""));
+  }
+
+  (function bindOnlineTestModal() {
+    document.getElementById("etf-ot-close")?.addEventListener("click", closeOnlineTestModal);
+    document.getElementById("etf-ot-done")?.addEventListener("click", closeOnlineTestModal);
+    document.querySelector("#etf-online-test-modal .etf-ot-backdrop")?.addEventListener("click", closeOnlineTestModal);
+
+    document.getElementById("etf-ot-repair-run")?.addEventListener("click", () => {
+      const reason = document.getElementById("etf-ot-reason")?.value || "";
+      const remark = document.getElementById("etf-ot-remark")?.value || "Retest";
+      const emp = document.getElementById("etf-ot-repair-emp")?.value || "SJOP";
+      if (!reason) {
+        window.alert("Select reason code");
+        return;
+      }
+      fetch("/api/etf/online-test/repair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sn: otCtx.sn, reason_code: reason, remark, emp }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data.ok) {
+            window.alert(data.error || "Repair failed");
+            return;
+          }
+          return fetch("/api/etf/online-test/wip?sn=" + encodeURIComponent(otCtx.sn)).then((r) => r.json());
+        })
+        .then((data) => {
+          if (!data || !data.ok) return;
+          otCtx.wip = data;
+          const t = document.getElementById("etf-ot-title");
+          if (t) t.textContent = data.button_label || "Online Test";
+          return showOtConfig();
+        })
+        .catch((e) => window.alert(String(e)));
+    });
+
+    document.getElementById("etf-ot-pn")?.addEventListener("change", otUpdatePnPreview);
+    document.getElementById("etf-ot-station")?.addEventListener("change", otUpdatePnPreview);
+
+    document.getElementById("etf-ot-pn-add")?.addEventListener("click", () => {
+      const inp = document.getElementById("etf-ot-pn-new");
+      const v = (inp && inp.value || "").trim();
+      if (!v) return;
+      fetch("/api/etf/online-test/pn-list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base: v }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data.ok || !data.bases) return;
+          otRenderBases(data.bases);
+          const pn = document.getElementById("etf-ot-pn");
+          if (pn) pn.value = v;
+          otUpdatePnPreview();
+          if (inp) inp.value = "";
+        });
+    });
+
+    document.getElementById("etf-ot-pn-del")?.addEventListener("click", () => {
+      const pn = document.getElementById("etf-ot-pn");
+      const base = (pn?.value || "").trim();
+      if (!base) return;
+      const opt = pn.options[pn.selectedIndex];
+      if (!opt || opt.dataset.custom !== "1") {
+        window.alert("Cannot remove a default base.");
+        return;
+      }
+      if (!window.confirm("Remove custom base \"" + base + "\"?")) return;
+      fetch("/api/etf/online-test/pn-list", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base: base }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data.ok || !data.bases) return;
+          otRenderBases(data.bases);
+        });
+    });
+
+    document.getElementById("etf-ot-prepare")?.addEventListener("click", () => {
+      const base = (document.getElementById("etf-ot-pn")?.value || "").trim();
+      const station = (document.getElementById("etf-ot-station")?.value || "").trim();
+      const emp = document.getElementById("etf-ot-emp")?.value || "SJOP";
+      if (!base) {
+        window.alert("Select a PN base");
+        return;
+      }
+      if (!station) {
+        window.alert("Select a station");
+        return;
+      }
+      const pn = base + "_" + station;
+      otCtx.emp = emp;
+      fetch("/api/etf/online-test/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pn_name: pn }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data.ok) {
+            window.alert(data.error || "Prepare failed");
+            return;
+          }
+          otCtx.prepare = data;
+          otCtx.selectedMachineId = null;
+          const fil = document.getElementById("etf-ot-machine-filter");
+          if (fil) fil.value = "";
+          const picked = document.getElementById("etf-ot-machine-picked");
+          if (picked) picked.textContent = "";
+          const startBtn = document.getElementById("etf-ot-start");
+          if (startBtn) startBtn.disabled = true;
+          renderOtMachineList();
+          otShowStep("machines");
+        })
+        .catch((e) => window.alert(String(e)));
+    });
+
+    document.getElementById("etf-ot-back-config")?.addEventListener("click", () => {
+      otShowStep("config");
+    });
+
+    document.getElementById("etf-ot-start")?.addEventListener("click", () => {
+      const p = otCtx.prepare;
+      if (!p || otCtx.selectedMachineId == null || isNaN(otCtx.selectedMachineId)) return;
+      const body = {
+        sn: otCtx.sn,
+        pn_name: p.pn_name,
+        emp: otCtx.emp || document.getElementById("etf-ot-emp")?.value || "SJOP",
+        machine_id: otCtx.selectedMachineId,
+        shelf_proc_data: p.shelf_proc_data,
+        scan_items: p.scan_items,
+        env_items: p.env_items,
+        sfc_ext: p.sfc_ext || "",
+        units: p.units,
+      };
+      fetch("/api/etf/online-test/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data.ok) {
+            otShowResult(false, data.error || "Start failed", "");
+            return;
+          }
+          let detail = "";
+          try {
+            detail = JSON.stringify(data.steps || data, null, 2);
+            if (detail.length > 5000) detail = detail.slice(0, 5000) + "…";
+          } catch (e2) {
+            detail = String(e2);
+          }
+          otShowResult(true, "Started. Log ID: " + (data.log_id != null ? data.log_id : "(see detail)"), detail);
+        })
+        .catch((e) => otShowResult(false, String(e.message || e), ""));
+    });
+
+    document.getElementById("etf-ot-machine-filter")?.addEventListener("input", () => {
+      renderOtMachineList();
+    });
+  })();
 
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".sn-cell")) closeAllMenus();
@@ -903,7 +1273,7 @@
         renderTable(cached.rows);
         lastUpdatedEl.textContent = cached.last_updated || "-";
       } else {
-        tbody.innerHTML = '<tr><td colspan="9" style="color: var(--color-muted); text-align: center; padding: 2rem;">Loading...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="color: var(--color-muted); text-align: center; padding: 2rem;">Loading...</td></tr>';
       }
       fetchData(false);
       schedulePoll();

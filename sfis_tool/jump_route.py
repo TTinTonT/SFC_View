@@ -28,6 +28,25 @@ def get_route_list(conn, sn):
     return cols, rows
 
 
+def filter_test_stations_between_fillcoolant_tvi(groups_ordered):
+    """
+    Keep route groups strictly after FILL_COOLANT and strictly before T_VI (exclude both).
+    Same rule as IT Jump station picker for online test (BAT..FCT segment varies by route).
+    """
+    if not groups_ordered:
+        return []
+    groups = [(g or "").strip() for g in groups_ordered if (g or "").strip()]
+    try:
+        fc_idx = groups.index("FILL_COOLANT")
+    except ValueError:
+        fc_idx = -1
+    try:
+        tvi_idx = groups.index("T_VI")
+    except ValueError:
+        tvi_idx = len(groups)
+    return groups[fc_idx + 1 : tvi_idx]
+
+
 def get_station_order_and_next(conn, sn):
     """Return (order, current_group, next_group). order = list of GROUP_NAME in route sequence."""
     cols, rows = get_route_list(conn, sn)
