@@ -1291,6 +1291,7 @@ def api_repair_assy_tree():
                     "vendor_sn": vendor_sn,
                     "father_sn": father_sn,
                     "sub_model_name": (row.get("SUB_MODEL_NAME") or ""),
+                    "model_name": (row.get("MODEL_NAME") or ""),
                     "in_station_time": (row.get("IN_STATION_TIME") or ""),
                     "stack": (row.get("STACK") or ""),
                     "assy_flag": assy_flag,

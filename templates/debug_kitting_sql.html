@@ -110,9 +110,10 @@
             <th class="text-left py-2 pr-2">SN</th>
             <th class="text-left py-2 pr-2">Father SN</th>
             <th class="text-left py-2 pr-2">Vendor SN</th>
+            <th class="text-left py-2 pr-2">Sub model</th>
+            <th class="text-left py-2 pr-2">Model name</th>
             <th class="text-left py-2 pr-2">Flag</th>
             <th class="text-left py-2 pr-2" style="min-width: 14rem;">New Vendor SN</th>
-            <th class="text-left py-2 pr-2">Sub model name</th>
             <th class="text-left py-2">Rev</th>
           </tr>
         </thead>
@@ -324,9 +325,10 @@
         '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(node.row.SERIAL_NUMBER || '', filterText) + '</span>' + copyBtn(node.row.SERIAL_NUMBER || '') + '</td>' +
         '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(node.row.FATHER_SN || '', filterText) + '</span>' + copyBtn(node.row.FATHER_SN || '') + '</td>' +
         '<td class="py-1 pr-2 tree-copy-cell"><span>' + highlightFilter(node.row.VENDOR_SN || '', filterText) + '</span>' + copyBtn(node.row.VENDOR_SN || '') + '</td>' +
+        '<td class="py-1 pr-2">' + highlightFilter(node.row.SUB_MODEL_NAME || '', filterText) + '</td>' +
+        '<td class="py-1 pr-2">' + highlightFilter(node.row.MODEL_NAME || '', filterText) + '</td>' +
         '<td class="py-1 pr-2"><span class="flag-badge ' + (flag === 'N' ? 'flag-n' : 'flag-y') + '">' + flag + '</span></td>' +
         '<td class="py-1 pr-2"><textarea class="tree-input" data-num="' + node.num + '" rows="1"></textarea></td>' +
-        '<td class="py-1 pr-2">' + highlightFilter(node.row.SUB_MODEL_NAME || '', filterText) + '</td>' +
         '<td class="py-1">' + highlightFilter((node.row.REV || node.row.SUB_REV || ''), filterText) + '</td>' +
         '</tr>';
     }).filter(Boolean).join('');
