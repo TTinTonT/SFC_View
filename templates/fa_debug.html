@@ -402,6 +402,7 @@
             {% set ap = allowed_pages or [] %}
             <a href="/" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Analytics</a>
             <a href="/debug/repair" class="btn-ghost btn-mini {{ 'disabled' if 'repair' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
+            <a href="/debug/testing" class="btn-ghost btn-mini {{ 'disabled' if 'testing' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
             <a href="/debug/kitting" class="btn-ghost btn-mini {{ 'disabled' if 'kitting' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
             <a href="/debug/kitting-sql" class="btn-ghost btn-mini {{ 'disabled' if 'kitting-sql' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
             {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Setting</a>{% endif %}
@@ -633,6 +634,7 @@
   <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js" defer></script>
   <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} };</script>
   <script src="/static/js/fa_debug.js" defer></script>
+  <script src="/static/js/etf_online_test_modal.js" defer></script>
   <script src="/static/js/etf_status.js" defer></script>
 </body>
 </html>

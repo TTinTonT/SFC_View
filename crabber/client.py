@@ -150,6 +150,121 @@ def _find_log_report_path(obj: Any) -> Optional[str]:
     return None
 
 
+def _derive_crabber_display_result(raw_result: str, node_log_event: str) -> str:
+    """Map node_log_event to UI result; empty event means finished test — use API result (Pass/Fail/…)."""
+    ev = (node_log_event or "").strip().upper()
+    if ev == "TPSQ":
+        return "Canceled"
+    if ev == "PROC":
+        return "Testing"
+    return (raw_result or "").strip()
+
+
+def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> dict:
+    """
+    List test log rows for SN from Crabber search_log_items (no per-row node detail fetch).
+
+    Returns {ok, tests, error?, raw_total?}. Each test row:
+      station, result (display: Canceled / Testing / API Pass|Fail|…),
+      test_time (legacy: same as start time source), log_time (ISO UTC, prefer API log_time),
+      sfc_event_date (ISO UTC when test finished / SFC posted; empty while PROC/TPSQ or missing),
+      node_log_id, pn, machine, phase, project, node_log_event (raw, for UI polling).
+    """
+    base, token = _get_config()
+    result: dict = {"ok": False, "tests": [], "error": None}
+    if not base or not (sn or "").strip():
+        result["error"] = "CRABBER_BASE_URL empty or sn empty"
+        return result
+    sn = sn.strip()
+    search_url = (
+        f"{base}/api/search_log_items/"
+        f"?cur_page=1&project=&station=&phase=&precondition=&label_data=&result=All"
+        f"&spid=&machine=&pn=&from_date=&to_date=&sfc=&cal_total=false&is_trial=false"
+        f"&sn={sn}"
+    )
+    try:
+        r = requests.get(search_url, headers=_headers(token), timeout=timeout)
+        if not r.ok:
+            result["error"] = f"HTTP {r.status_code}"
+            return result
+        search_resp = r.json()
+    except Exception as e:
+        result["error"] = str(e)
+        return result
+
+    items = _extract_items_list(search_resp) or []
+    if not items:
+        result["ok"] = True
+        result["tests"] = []
+        result["raw_total"] = search_resp.get("total_logs") if isinstance(search_resp, dict) else 0
+        return result
+
+    out = []
+    n = 0
+    for it in items:
+        if n >= limit:
+            break
+        if not isinstance(it, dict):
+            continue
+        node_log_id = (
+            it.get("node_log_id")
+            or it.get("nodeLogId")
+            or it.get("log_id")
+            or it.get("id")
+        )
+        node_log_event = str(
+            it.get("node_log_event") or it.get("nodeLogEvent") or ""
+        ).strip()
+        raw_res = str(it.get("result") or it.get("Result") or "").strip()
+        log_time_iso = str(it.get("log_time") or it.get("LogTime") or "").strip()
+        test_time = log_time_iso or str(
+            it.get("test_time")
+            or it.get("end_time")
+            or it.get("time")
+            or it.get("start_time")
+            or it.get("create_time")
+            or ""
+        ).strip()
+        if not log_time_iso:
+            log_time_iso = test_time
+        sfc_raw = it.get("sfc_event_date") or it.get("sfcEventDate")
+        sfc_event_date = str(sfc_raw).strip() if sfc_raw is not None and str(sfc_raw).strip() else ""
+        pn = str(
+            it.get("pn_name")
+            or it.get("pnName")
+            or it.get("pn")
+            or it.get("PN")
+            or it.get("part_number")
+            or ""
+        ).strip()
+        out.append(
+            {
+                "station": str(it.get("station") or it.get("Station") or "").strip(),
+                "result": _derive_crabber_display_result(raw_res, node_log_event),
+                "test_time": test_time,
+                "log_time": log_time_iso,
+                "sfc_event_date": sfc_event_date,
+                "node_log_id": str(node_log_id).strip() if node_log_id else "",
+                "pn": pn,
+                "machine": str(
+                    it.get("machine") or it.get("machine_name") or it.get("Machine") or ""
+                ).strip(),
+                "phase": str(it.get("phase") or it.get("Phase") or "").strip(),
+                "project": str(it.get("project") or it.get("Project") or "").strip(),
+                "node_log_event": node_log_event,
+            }
+        )
+        n += 1
+
+    result["ok"] = True
+    result["tests"] = out
+    if isinstance(search_resp, dict) and search_resp.get("total_logs") is not None:
+        result["raw_total"] = search_resp.get("total_logs")
+    else:
+        result["raw_total"] = len(items)
+    return result
+
+
 def fetch_log_report_path(sn: str, timeout: int = 15) -> Optional[str]:
     """
     Fetch Log Report File Path for SN.

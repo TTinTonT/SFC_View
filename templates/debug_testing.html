@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Testing – Debug</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* height set in post-theme_shared block so long pages scroll correctly */
+  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
+  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 100%; width: 100%; margin: 0 auto; }
+  .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .nav-btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; text-decoration: none; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; }
+  .nav-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .nav-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+  .nav-btn.disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
+  .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
+  .section-title { font-size: 1rem; font-weight: 700; margin: 1.5rem 0 0.75rem; color: var(--color-text); border-bottom: 1px solid var(--color-border); padding-bottom: 0.35rem; }
+  .section-title:first-of-type { margin-top: 0; }
+  .msg-error { color: #dc2626; }
+  .msg-ok { color: #16a34a; }
+  .hidden { display: none !important; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; font-size: 0.875rem; }
+  .summary-card { border: 1px solid var(--color-border); border-radius: 10px; padding: 0.65rem 0.75rem; background: var(--color-bg); }
+  .summary-card .k { color: var(--color-muted); font-size: 0.72rem; text-transform: uppercase; }
+  .flow-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0; min-height: 3rem; }
+  .flow-node { display: inline-flex; align-items: center; justify-content: center; min-width: 6rem; padding: 0.4rem 0.9rem; border-radius: 10px; border: 2px solid var(--color-border); background: var(--color-surface); font-weight: 600; font-size: 0.875rem; }
+  .flow-node.current { border-color: var(--color-primary); background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.15); }
+  .flow-arrow { color: var(--color-muted); font-size: 1.25rem; user-select: none; }
+  .flow-branch { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal-box { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 44rem; width: 94%; max-height: 80vh; overflow: auto; }
+  .table-compact { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .table-compact th, .table-compact td { border-bottom: 1px solid var(--color-border); padding: 0.4rem 0.25rem; text-align: left; }
+  .ec-valid { color: #16a34a; font-weight: 600; }
+  .tree-row-flag-y { background: rgba(22, 163, 74, 0.15); }
+  .tree-row-flag-n { background: rgba(220, 38, 38, 0.15); }
+  .tree-row-selected { background: rgba(234, 179, 8, 0.45) !important; }
+  .tree-td-num { white-space: nowrap; position: relative; vertical-align: middle; }
+  .tree-toggle { display: inline-block; width: 1.2em; cursor: pointer; user-select: none; font-size: 0.75em; color: var(--color-text); margin-right: 2px; }
+  .tree-hbar { position: absolute; top: 50%; height: 2px; background: var(--color-border); display: block; }
+  .tree-new-sn-input { min-width: 28ch; width: 28ch; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); box-sizing: border-box; }
+  .btn-primary-like { padding: 0.5rem 0.9rem; border-radius: 0.5rem; font-weight: 600; color: #fff; background: var(--color-primary); border: 1px solid var(--color-primary); }
+  .btn-neon-green { padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-weight: 700; color: #001a08; background: #39ff14; border: 1px solid #39ff14; box-shadow: 0 0 10px rgba(57,255,20,0.55); }
+  .btn-neon-red { padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-weight: 700; color: #2a0000; background: #ff3131; border: 1px solid #ff3131; box-shadow: 0 0 10px rgba(255,49,49,0.55); }
+  .btn-warning-like { padding: 0.5rem 0.9rem; border-radius: 0.5rem; font-weight: 700; color: #2a1a00; background: #facc15; border: 1px solid #facc15; }
+  .loading-overlay { position: fixed; inset: 0; z-index: 120; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; }
+  .loading-box { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1rem 1.4rem; font-weight: 600; }
+  .dup-banner { margin: 0.5rem 0; padding: 0.6rem 0.8rem; border: 2px solid #dc2626; border-radius: 8px; background: rgba(220,38,38,0.12); color: #b91c1c; font-size: 0.875rem; }
+  .tree-row-selected-root { background: rgba(234, 179, 8, 0.45) !important; box-shadow: inset 0 0 0 1px rgba(180, 83, 9, 0.6); }
+  .tree-copy-cell { white-space: nowrap; }
+  .tree-copy-btn { padding: 0.15rem 0.3rem; font-size: 0.7rem; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); cursor: pointer; margin-left: 0.25rem; }
+  .flag-badge { display: inline-block; min-width: 1.2rem; text-align: center; border-radius: 999px; padding: 0 0.35rem; font-size: 0.7rem; font-weight: 700; margin-left: 0.25rem; }
+  .flag-y { background: rgba(22,163,74,0.2); color: #166534; }
+  .flag-n { background: rgba(220,38,38,0.2); color: #991b1b; }
+  .selection-summary { font-size: 0.82rem; color: var(--color-muted); }
+  .tree-new-sn-input.in-scope { border-color: rgba(180, 83, 9, 0.8); }
+  .tree-new-sn-input.out-scope { opacity: 0.65; }
+  .term-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  @media (max-width: 900px) { .term-grid { grid-template-columns: 1fr; } }
+  .term-cell { border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; background: #1e1e1e; }
+  .term-cell-h { padding: 0.35rem 0.5rem; background: #2d2d2d; color: #94a3b8; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+  /* Outer = fixed frame; inner pane = exact pixel box xterm FitAddon measures (avoids flex + fit mismatch). */
+  .sn-debug-terminal { min-height: 240px; height: 368px; position: relative; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; padding-bottom: 8px; }
+  .sn-debug-terminal-pane { flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; overflow: hidden; }
+  /* Shrink xterm fit box (not viewport padding) so last row + cursor stay inside the painted area */
+  .sn-debug-terminal-pane.terminal-pure-xterm { padding-bottom: 22px; box-sizing: border-box; }
+  .sn-debug-terminal .xterm { width: 100% !important; flex: 1 !important; min-height: 0; }
+  .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; }
+  .sn-debug-ai-controls { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+  .sn-debug-ai-controls .sn-debug-btn { background: #3d3d3d; color: #94a3b8; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; border: none; cursor: pointer; }
+  .sn-debug-ai-controls .sn-debug-btn:hover { background: var(--color-primary); color: white; }
+  .etf-online-test-btn { padding: 0.35rem 0.65rem; font-size: 0.8rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--color-primary); background: var(--color-surface); color: var(--color-primary); cursor: pointer; }
+  .etf-online-test-btn:hover { background: var(--color-primary); color: #fff; }
+  .etf-ot-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .etf-ot-modal[aria-hidden="true"] { display: none !important; }
+  .etf-ot-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+  .etf-ot-dialog { position: relative; z-index: 1; width: 100%; max-width: 520px; max-height: 90vh; overflow: auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+  .etf-ot-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--color-border); }
+  .etf-ot-title { font-size: 1.1rem; font-weight: 700; margin: 0; color: var(--color-text); }
+  .etf-ot-close { background: none; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--color-muted); }
+  .etf-ot-body { padding: 1rem; }
+  .etf-ot-step label { display: block; margin-top: 0.65rem; }
+  .etf-ot-label { font-size: 0.78rem; font-weight: 600; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .etf-ot-input, .etf-ot-textarea { width: 100%; margin-top: 0.25rem; padding: 0.45rem 0.55rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-size: 0.875rem; }
+  .etf-ot-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; align-items: center; }
+  .etf-ot-row .etf-ot-flex { flex: 1; min-width: 140px; margin-top: 0; }
+  .etf-ot-muted { color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+  .etf-ot-badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 6px; background: rgba(99, 102, 241, 0.15); color: var(--color-primary); font-weight: 600; font-size: 0.8rem; margin-bottom: 0.5rem; }
+  .etf-ot-actions { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+  .etf-ot-btn { padding: 0.45rem 0.85rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+  .etf-ot-btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+  .etf-ot-btn-danger { background: #dc2626; border-color: #dc2626; color: #fff; min-width: 28px; padding: 0 6px; font-size: 1rem; }
+  .etf-ot-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .etf-ot-machine-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; margin-top: 0.35rem; background: var(--color-bg); }
+  .etf-ot-machine-item { padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--color-border); cursor: pointer; font-size: 0.82rem; }
+  .etf-ot-machine-item:last-child { border-bottom: none; }
+  .etf-ot-machine-item:hover { background: var(--color-hover); }
+  .etf-ot-machine-item.selected { background: rgba(99, 102, 241, 0.12); outline: 2px solid var(--color-primary); }
+  .etf-ot-machine-item .occ { color: #c2410c; font-size: 0.75rem; }
+  .etf-ot-pre { font-size: 0.7rem; max-height: 160px; overflow: auto; background: var(--color-bg); padding: 0.5rem; border-radius: 6px; white-space: pre-wrap; word-break: break-all; }
+  /* After theme_shared (height:100% on html,body): let the document grow so you can scroll to the bottom of the terminal grid */
+  html { height: auto; min-height: 100%; }
+  body {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding-bottom: max(4rem, 2rem + env(safe-area-inset-bottom, 0px));
+  }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="nav-links">
+      {% set ap = allowed_pages or [] %}
+      <a href="/debug" class="nav-btn {{ 'disabled' if 'debug' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
+      {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="nav-btn">Setting</a>{% endif %}
+      <a href="/debug/repair" class="nav-btn {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
+      <a href="/debug/testing" class="nav-btn active {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
+      <a href="/debug/jump-station" class="nav-btn {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
+      <a href="/debug/kitting" class="nav-btn {{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
+      <a href="/debug/kitting-sql" class="nav-btn {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
+      <a href="/" class="nav-btn">Analytics</a>
+      <form method="post" action="/api/auth/logout" style="display: inline;">
+        <button type="submit" class="btn-logout">Logout</button>
+      </form>
+    </div>
+
+    <h1 class="text-2xl font-bold mb-3">Testing (SN)</h1>
+    <div class="mb-4">
+      <label class="block text-sm font-medium mb-1">Serial Number</label>
+      <div class="flex gap-2 flex-wrap">
+        <input type="text" id="input-sn" class="flex-1 min-w-[15rem] max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter SN">
+        <label class="text-sm flex items-center gap-2">Employee ID
+          <input type="text" id="input-emp-top" value="SJOP" class="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] w-40">
+        </label>
+        <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
+        <button type="button" id="btn-online-test" class="etf-online-test-btn self-center">Online test</button>
+      </div>
+      <p id="sn-error" class="mt-1 text-sm msg-error hidden"></p>
+    </div>
+
+    <h2 class="section-title">Summary</h2>
+    <div id="summary-area" class="summary-grid text-sm">
+      <div class="summary-card"><div class="k">Tray / Room</div><div id="sum-room">—</div></div>
+      <div class="summary-card"><div class="k">PN (tray)</div><div id="sum-pn-tray">—</div></div>
+      <div class="summary-card"><div class="k">Next station</div><div id="sum-wip">—</div></div>
+      <div class="summary-card"><div class="k">BMC MAC / IP</div><div id="sum-bmc">—</div></div>
+      <div class="summary-card"><div class="k">SYS MAC / IP</div><div id="sum-sys">—</div></div>
+      <div class="summary-card"><div class="k">Tray link</div><div id="sum-tray-msg" class="text-[var(--color-muted)]">—</div></div>
+    </div>
+
+    <h2 class="section-title">Test history (Crabber)</h2>
+    <div class="overflow-x-auto mb-2">
+      <table class="table-compact w-full">
+        <thead>
+          <tr><th>Start (Cali)</th><th>End (Cali)</th><th>Station</th><th>Result</th><th>PN</th><th>Machine</th></tr>
+        </thead>
+        <tbody id="crabber-tbody"><tr><td colspan="6" class="text-[var(--color-muted)]">Search an SN to load history.</td></tr></tbody>
+      </table>
+    </div>
+
+    <h2 class="section-title">Terminals (AI / Debug / BMC / Host)</h2>
+    <p class="text-xs text-[var(--color-muted)] mb-2">Panes stay mounted while you work; SSH sessions reconnect if the socket drops. Use AI controls to start the agent session.</p>
+    <div class="term-grid mb-8">
+      <div class="term-cell">
+        <div class="term-cell-h"><span>AI</span>
+          <div class="sn-debug-ai-controls">
+            <button type="button" class="sn-debug-btn" id="btn-ai-start">Start session</button>
+            <button type="button" class="sn-debug-btn" id="btn-ai-end">End</button>
+            <button type="button" class="sn-debug-btn" id="btn-ai-upload">Upload</button>
+          </div>
+        </div>
+        <div class="sn-debug-terminal">
+          <div id="term-ai" class="sn-debug-terminal-pane sn-debug-ai-container"></div>
+        </div>
+      </div>
+      <div class="term-cell">
+        <div class="term-cell-h"><span>Terminal (jump host)</span></div>
+        <div class="sn-debug-terminal">
+          <div id="term-ssh" class="sn-debug-terminal-pane terminal-pure-xterm sn-debug-ssh-container"></div>
+        </div>
+      </div>
+      <div class="term-cell">
+        <div class="term-cell-h"><span>BMC</span></div>
+        <div class="sn-debug-terminal">
+          <div id="term-bmc" class="sn-debug-terminal-pane terminal-pure-xterm sn-debug-bmc-container"></div>
+        </div>
+      </div>
+      <div class="term-cell">
+        <div class="term-cell-h"><span>Host</span></div>
+        <div class="sn-debug-terminal">
+          <div id="term-host" class="sn-debug-terminal-pane terminal-pure-xterm sn-debug-host-container"></div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Move / Fail / Online test</h2>
+    <div id="flow-section" class="hidden mb-4">
+      <div class="text-xs uppercase tracking-wide text-[var(--color-muted)] mb-1">Current station (UI = NEXT_STATION)</div>
+      <div id="all-pass-msg" class="hidden text-sm msg-ok mb-2">This SN is ALL PASS (>= T_VI).</div>
+      <p id="mode-hint" class="text-sm text-[var(--color-muted)]"></p>
+      <div id="main-flow-row" class="flow-row"></div>
+      <div id="repair-chain-row" class="flow-row hidden"></div>
+      <div id="r-only-wrap" class="hidden"></div>
+      <div id="current-actions" class="hidden mt-2 flex flex-wrap items-center gap-2">
+        <span class="text-sm">Current node: <b id="current-node-text"></b></span>
+        <button type="button" id="btn-pass" class="btn-neon-green">Pass</button>
+        <button type="button" id="btn-fail" class="btn-neon-red">Fail</button>
+      </div>
+    </div>
+
+    <div id="dido-next-section" class="hidden mb-4">
+      <p class="text-sm text-[var(--color-muted)] mb-2">Click Next to advance to the next station in the chain.</p>
+      <button type="button" id="btn-dido-next" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Next</button>
+    </div>
+
+    <div id="do-form-section" class="hidden mb-4">
+      <div class="flex flex-wrap items-end gap-3 max-w-5xl text-sm">
+        <div class="shrink-0">
+          <label for="sel-do-reason" class="block mb-1 font-medium">Reason code</label>
+          <select id="sel-do-reason" class="min-w-[14rem] px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]">
+            <option value="">-- Select --</option>
+          </select>
+        </div>
+        <div class="flex-1 min-w-[12rem]">
+          <label for="input-do-reason-desc" class="block mb-1 font-medium">Reason desc</label>
+          <input type="text" id="input-do-reason-desc" readonly class="w-full px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] opacity-90">
+        </div>
+      </div>
+      <div class="mt-2 max-w-2xl">
+        <label class="block text-sm font-medium mb-1">Remark</label>
+        <textarea id="input-do-remark" class="w-full px-3 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]" rows="2" placeholder="DO remark"></textarea>
+      </div>
+      <div class="mt-3 flex gap-2">
+        <button type="button" id="btn-do-pass" class="btn-neon-green">Pass</button>
+        <button type="button" id="btn-do-fail" class="btn-neon-red">Fail</button>
+      </div>
+    </div>
+
+    <div id="form-section" class="hidden mb-4">
+      <div id="ro-next-wrap" class="hidden mb-3">
+        <p class="text-sm text-[var(--color-muted)] mb-2">RO station: Next (jump to FLA) or Repair below.</p>
+        <div class="flex gap-2 items-end flex-wrap">
+          <div class="shrink-0">
+            <label for="sel-ro-next-reason" class="block text-xs text-[var(--color-muted)] mb-0.5">Reason code</label>
+            <select id="sel-ro-next-reason" class="min-w-[14rem] px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-sm">
+              <option value="">-- Select reason --</option>
+            </select>
+          </div>
+          <div class="flex-1 min-w-[10rem] max-w-md">
+            <label for="input-ro-next-reason-desc" class="block text-xs text-[var(--color-muted)] mb-0.5">Reason desc</label>
+            <input type="text" id="input-ro-next-reason-desc" readonly class="w-full px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-sm opacity-90">
+          </div>
+          <input type="text" id="input-ro-next-remark" placeholder="Remark" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-sm w-48 self-end">
+          <button type="button" id="btn-ro-next" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Next (to FLA)</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 max-w-2xl text-sm">
+        <label>Reason Code</label><select id="sel-reason" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
+        <label>Repair Action</label><select id="sel-action" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
+        <label>Duty Type</label><select id="sel-duty" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
+      </div>
+      <div class="mt-2 max-w-2xl">
+        <label class="block text-sm font-medium mb-1">Remark</label>
+        <textarea id="input-remark" class="w-full px-3 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]" rows="3">Retest</textarea>
+      </div>
+      <div class="mt-3">
+        <button type="button" id="btn-repair" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Repair</button>
+      </div>
+    </div>
+
+    <h2 class="section-title">Kitting (vendor tree)</h2>
+    <div id="tree-section" class="hidden mb-4 overflow-x-auto w-full">
+      <div id="dup-banner" class="dup-banner hidden"></div>
+      <div class="flex items-center gap-2 mb-2 flex-wrap">
+        <p class="text-sm font-medium mb-0">Vendor SN tree</p>
+        <span id="selection-summary" class="selection-summary">Click a row to select subtree for dekit/kitting.</span>
+        <label class="text-sm flex items-center gap-1 ml-2">
+          <input type="checkbox" id="chk-show-dekitted" checked>
+          Show dekitted parts
+        </label>
+        <button type="button" id="tree-expand-all" class="btn-primary-like">Expand all</button>
+        <button type="button" id="tree-collapse-all" class="btn-primary-like">Collapse all</button>
+        <button type="button" id="tree-dekit" class="btn-primary-like">Dekit</button>
+        <button type="button" id="tree-kitting" class="btn-primary-like">Kitting</button>
+      </div>
+      <table class="w-full border-collapse text-sm table-auto" style="min-width: 100%;">
+        <thead>
+          <tr class="border-b border-[var(--color-border)]">
+            <th class="text-left py-2 pr-2 w-12">#</th>
+            <th class="text-left py-2 pr-2">Sub model</th>
+            <th class="text-left py-2 pr-2">Model name</th>
+            <th class="text-left py-2 pr-2">Father SN</th>
+            <th class="text-left py-2 pr-2">Vendor SN</th>
+            <th class="text-left py-2">New SN</th>
+            <th class="text-left py-2 pr-2">Stack</th>
+            <th class="text-left py-2 pr-2">In Time (Cali)</th>
+          </tr>
+        </thead>
+        <tbody id="tree-tbody"></tbody>
+      </table>
+    </div>
+
+    <p id="result-msg" class="text-sm hidden"></p>
+  </div>
+
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div id="loading-text" class="loading-box">Processing...</div>
+  </div>
+
+  <div id="fail-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold">Fail update (error code history)</h3>
+        <button type="button" id="btn-fail-close" class="px-2 py-1 rounded border border-[var(--color-border)]">Close</button>
+      </div>
+      <table class="table-compact mb-2">
+        <thead>
+          <tr><th>Test time (Cali)</th><th>Repair time (Cali)</th><th>Group</th><th>Type</th><th>Error</th><th>Desc</th><th></th></tr>
+        </thead>
+        <tbody id="fail-history-body"></tbody>
+      </table>
+      <div class="flex gap-2 items-center flex-wrap mb-2">
+        <label class="text-sm">Error code
+          <input type="text" id="fail-ec-input" class="ml-1 px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)]">
+        </label>
+        <button type="button" id="btn-validate-ec" class="px-2 py-1 rounded border border-[var(--color-border)]">Validate</button>
+        <span id="ec-valid-msg" class="text-sm"></span>
+      </div>
+      <button type="button" id="btn-update-fail" class="px-3 py-2 rounded bg-[var(--color-primary)] text-white">Update fail</button>
+    </div>
+  </div>
+
+  <div id="etf-online-test-modal" class="etf-ot-modal" aria-hidden="true">
+    <div class="etf-ot-backdrop"></div>
+    <div class="etf-ot-dialog" role="dialog" aria-labelledby="etf-ot-title">
+      <div class="etf-ot-header">
+        <h3 id="etf-ot-title" class="etf-ot-title">Online Test</h3>
+        <button type="button" class="etf-ot-close" id="etf-ot-close" title="Close">&times;</button>
+      </div>
+      <div class="etf-ot-body">
+        <div id="etf-ot-step-loading" class="etf-ot-step">
+          <p class="etf-ot-muted">Loading WIP…</p>
+        </div>
+        <div id="etf-ot-step-repair" class="etf-ot-step" style="display:none;">
+          <p class="etf-ot-badge" id="etf-ot-repair-badge">Retest</p>
+          <label class="etf-ot-label">Employee ID</label>
+          <input type="text" id="etf-ot-repair-emp" class="etf-ot-input" placeholder="e.g. SJOP" value="SJOP">
+          <label class="etf-ot-label">Reason Code</label>
+          <select id="etf-ot-reason" class="etf-ot-input"></select>
+          <label class="etf-ot-label">Remark</label>
+          <textarea id="etf-ot-remark" class="etf-ot-textarea" rows="2">Retest</textarea>
+          <div class="etf-ot-actions">
+            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-repair-run">Execute repair &amp; jump</button>
+          </div>
+        </div>
+        <div id="etf-ot-step-config" class="etf-ot-step" style="display:none;">
+          <p id="etf-ot-config-hint" class="etf-ot-muted"></p>
+          <label class="etf-ot-label">Station</label>
+          <select id="etf-ot-station" class="etf-ot-input"></select>
+          <label class="etf-ot-label">PN base</label>
+          <div class="etf-ot-row">
+            <select id="etf-ot-pn" class="etf-ot-input etf-ot-flex"></select>
+            <button type="button" class="etf-ot-btn etf-ot-btn-danger" id="etf-ot-pn-del" title="Remove selected custom base" style="display:none">&times;</button>
+          </div>
+          <div class="etf-ot-row" style="gap:4px">
+            <input type="text" id="etf-ot-pn-new" class="etf-ot-input etf-ot-flex" placeholder="Add new base, e.g. VR200_L10">
+            <button type="button" class="etf-ot-btn" id="etf-ot-pn-add">Add</button>
+          </div>
+          <p id="etf-ot-pn-preview" class="etf-ot-muted" style="margin:2px 0 0;font-weight:600"></p>
+          <label class="etf-ot-label">Employee ID</label>
+          <input type="text" id="etf-ot-emp" class="etf-ot-input" placeholder="e.g. SJOP">
+          <label class="etf-ot-label">Tray SN</label>
+          <input type="text" id="etf-ot-sn-ro" class="etf-ot-input" readonly>
+          <div class="etf-ot-actions">
+            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-prepare">Continue</button>
+          </div>
+        </div>
+        <div id="etf-ot-step-machines" class="etf-ot-step" style="display:none;">
+          <label class="etf-ot-label">Filter machines</label>
+          <input type="text" id="etf-ot-machine-filter" class="etf-ot-input" placeholder="Filter by name, user, id…">
+          <div id="etf-ot-machine-list" class="etf-ot-machine-list"></div>
+          <p id="etf-ot-machine-picked" class="etf-ot-muted"></p>
+          <div class="etf-ot-actions">
+            <button type="button" class="etf-ot-btn" id="etf-ot-back-config">&larr; Back</button>
+            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-start" disabled>Start test</button>
+          </div>
+        </div>
+        <div id="etf-ot-step-result" class="etf-ot-step" style="display:none;">
+          <p id="etf-ot-result-msg"></p>
+          <pre id="etf-ot-result-detail" class="etf-ot-pre"></pre>
+          <div class="etf-ot-actions">
+            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-done">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
+  <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js" defer></script>
+  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} };</script>
+  <script src="/static/js/fa_debug.js" defer></script>
+  <script src="/static/js/etf_online_test_modal.js" defer></script>
+  <script src="/static/js/etf_terminal_helpers.js" defer></script>
+  <script src="/static/js/testing_page.js" defer></script>
+</body>
+</html>

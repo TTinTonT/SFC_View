@@ -31,6 +31,7 @@
     {% set ap = allowed_pages or [] %}
     <a href="/debug" class="{{ 'disabled' if 'debug' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
     <a href="/debug/repair" class="{{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
+    <a href="/debug/testing" class="{{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
     <a href="/debug/jump-station" class="{{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
     <a href="/debug/kitting" class="{{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
     <a href="/debug/kitting-sql" class="{{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>

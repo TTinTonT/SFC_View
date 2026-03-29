@@ -541,6 +541,9 @@
   }
 
   function init() {
+    if (!document.getElementById('kpi-total-val')) {
+      return;
+    }
     setDefaultDates();
     initTheme();
     renderNotepadSidebar();
@@ -617,7 +620,8 @@
   function scrollTerminalToBottom(containerEl) {
     if (!containerEl?.isConnected) return;
     const viewport = containerEl?.querySelector?.('.xterm-viewport');
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    if (!viewport) return;
+    viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
   }
 
   const scrollDebounce = new WeakMap();
@@ -643,9 +647,35 @@
     const doFit = () => {
       if (!containerEl?.isConnected) return;
       const rect = containerEl.getBoundingClientRect();
-      if (rect.width < 1 || rect.height < 1) return;
+      if (rect.width < 1 || rect.height < 1) {
+        try {
+          if (term.cols < 2 || term.rows < 2) term.resize(80, 24);
+        } catch (_) {}
+        return;
+      }
       if (fitAddon) { try { fitAddon.fit(); } catch (_) {} }
-      scrollTerminalToBottomDebounced(containerEl);
+      try {
+        if (term.cols < 2 || term.rows < 2) term.resize(80, 24);
+      } catch (_) {}
+      // Plain SSH panes (Testing): FitAddon often fits 1–2 extra rows; the active line + cursor render below the clip.
+      // Shrink row count so the cursor stays inside the viewport, then scroll/focus.
+      if (containerEl?.classList?.contains('terminal-pure-xterm')) {
+        try {
+          const next = Math.max(3, term.rows - 2);
+          if (next < term.rows) term.resize(term.cols, next);
+        } catch (_) {}
+        requestAnimationFrame(() => {
+          try {
+            scrollTerminalToBottom(containerEl);
+            term.focus();
+          } catch (_) {}
+          requestAnimationFrame(() => {
+            try { scrollTerminalToBottom(containerEl); } catch (_) {}
+          });
+        });
+      } else {
+        scrollTerminalToBottomDebounced(containerEl);
+      }
     };
     const doFitDebounced = () => {
       if (fitPending) return;
@@ -694,6 +724,9 @@
       if (!ws) {
         try { if (term && containerEl?.isConnected) term.write('\r\n[AI terminal not configured. Set WS_TERMINAL_URL in config.]\r\n'); } catch (_) {}
       } else {
+      try {
+        term.writeln('\x1b[90mAI: click “Start session” if no output appears.\x1b[0m');
+      } catch (_) {}
       ws.onopen = () => {};
       ws.onmessage = (e) => {
         decodeMsgAsPromise(e.data).then((txt) => {
@@ -729,12 +762,18 @@
     try {
       containerEl.innerHTML = '';
       containerEl.style.minHeight = '120px';
-      const term = new TerminalCls({ cursorBlink: false, theme: { background: '#1e1e1e', foreground: '#d4d4d4' } });
+      const term = new TerminalCls({
+        cursorBlink: true,
+        theme: { background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#f8f8f2' },
+      });
       fitAddon = initFitAddonAndOpen(term, containerEl);
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       let url = proto + '//' + location.host + '/ws/ssh';
       if (sshHost) url += '?host=' + encodeURIComponent(sshHost);
       const ws = new WebSocket(url);
+      try {
+        term.writeln('\x1b[90mConnecting to jump host (SSH)…\x1b[0m');
+      } catch (_) {}
       ws.onopen = () => {};
       ws.onmessage = (e) => {
         decodeMsgAsPromise(e.data).then((txt) => {
@@ -760,12 +799,19 @@
     try {
       containerEl.innerHTML = '';
       containerEl.style.minHeight = '120px';
-      const term = new TerminalCls({ cursorBlink: false, theme: { background: '#1e1e1e', foreground: '#d4d4d4' } });
+      const term = new TerminalCls({
+        cursorBlink: true,
+        theme: { background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#f8f8f2' },
+      });
       fitAddon = initFitAddonAndOpen(term, containerEl);
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       let url = proto + '//' + location.host + '/ws/ssh?type=' + encodeURIComponent(wsType) + '&target=' + encodeURIComponent(targetIp);
       if (jumpHost) url += '&jump_host=' + encodeURIComponent(jumpHost);
       const ws = new WebSocket(url);
+      try {
+        const label = wsType === 'bmc' ? 'BMC' : 'Host';
+        term.writeln('\x1b[90mConnecting (' + label + ' via jump)…\x1b[0m');
+      } catch (_) {}
       ws.onopen = () => {};
       ws.onmessage = (e) => {
         decodeMsgAsPromise(e.data).then((txt) => {
@@ -793,10 +839,12 @@
     const isPayload = typeof actionOrPayload === 'object' && actionOrPayload !== null && (actionOrPayload.aiEl != null || actionOrPayload.sshEl != null || actionOrPayload.bmcEl != null || actionOrPayload.hostEl != null);
     const payload = isPayload ? actionOrPayload : (opts || {});
     const action = isPayload ? null : actionOrPayload;
-    const aiEl = isPayload ? (payload.aiEl || null) : ((action === 'ai' || action === 'both') && payload.aiEl) ? payload.aiEl : null;
-    const sshEl = isPayload ? (payload.sshEl || null) : ((action === 'term' || action === 'both') && payload.sshEl) ? payload.sshEl : null;
-    const bmcEl = isPayload ? (payload.bmcEl || null) : (action === 'bmc' && payload.bmcEl) ? payload.bmcEl : null;
-    const hostEl = isPayload ? (payload.hostEl || null) : (action === 'host' && payload.hostEl) ? payload.hostEl : null;
+    // Third-arg form: etfCreateSnTerminals(sn, rowKey, null, { aiEl, sshEl, ... }) — action is null but containers live on opts/payload.
+    const useOptsContainers = !isPayload && actionOrPayload == null && (payload.aiEl != null || payload.sshEl != null || payload.bmcEl != null || payload.hostEl != null);
+    const aiEl = (isPayload || useOptsContainers) ? (payload.aiEl || null) : ((action === 'ai' || action === 'both') && payload.aiEl) ? payload.aiEl : null;
+    const sshEl = (isPayload || useOptsContainers) ? (payload.sshEl || null) : ((action === 'term' || action === 'both') && payload.sshEl) ? payload.sshEl : null;
+    const bmcEl = (isPayload || useOptsContainers) ? (payload.bmcEl || null) : (action === 'bmc' && payload.bmcEl) ? payload.bmcEl : null;
+    const hostEl = (isPayload || useOptsContainers) ? (payload.hostEl || null) : (action === 'host' && payload.hostEl) ? payload.hostEl : null;
     const row = payload.row;
 
     const run = () => {
@@ -1035,6 +1083,10 @@
       const el = x?.term?.element;
       if (x?.fitAddon && el?.isConnected) { try { x.fitAddon.fit(); } catch (_) {} }
     });
+  };
+
+  window.etfGetSnPanel = function(rowKey) {
+    return snDebugPanels.get(rowKey) || null;
   };
 
   window.etfUpdatePinnedSns = function(items) {

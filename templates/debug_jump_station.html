@@ -41,6 +41,7 @@
       <a href="/debug" class="nav-btn {{ 'disabled' if 'debug' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
       {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="nav-btn">Setting</a>{% endif %}
       <a href="/debug/repair" class="nav-btn {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
+      <a href="/debug/testing" class="nav-btn {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
       <a href="/debug/jump-station" class="nav-btn active {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
       <a href="/debug/kitting" class="nav-btn {{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
       <a href="/debug/kitting-sql" class="nav-btn {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>

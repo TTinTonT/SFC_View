@@ -19,30 +19,35 @@ from fa_debug.logic import prepare_debug_rows
 
 bp = Blueprint("fa_debug", __name__, url_prefix="", template_folder="../templates")
 
-_URL_TO_PAGE = [
-    ("/debug/repair", "repair"),
-    ("/api/debug/repair/", "repair"),
-    ("/debug/jump-station", "jump-station"),
-    ("/api/debug/jump-station/", "jump-station"),
-    ("/debug/kitting-sql", "kitting-sql"),
-    ("/api/debug/kitting-sql/", "kitting-sql"),
-    ("/debug/kitting", "kitting"),
-    ("/api/debug/kitting/", "kitting"),
-    ("/api/debug-query", "debug"),
-    ("/api/debug-data", "debug"),
-    ("/api/fa-debug/", "debug"),
-    ("/api/etf/online-test/", "debug"),
-    ("/debug", "debug"),
+# (prefix, frozenset of page_key values — user needs ANY of these, unless admin)
+_URL_ACCESS_RULES = [
+    ("/debug/repair", frozenset({"repair"})),
+    ("/api/debug/repair/", frozenset({"repair", "testing"})),
+    ("/debug/jump-station", frozenset({"jump-station"})),
+    ("/api/debug/jump-station/", frozenset({"jump-station"})),
+    ("/debug/kitting-sql", frozenset({"kitting-sql"})),
+    ("/api/debug/kitting-sql/", frozenset({"kitting-sql"})),
+    ("/debug/kitting", frozenset({"kitting"})),
+    ("/api/debug/kitting/", frozenset({"kitting"})),
+    ("/debug/testing", frozenset({"testing"})),
+    ("/api/debug/testing/", frozenset({"testing"})),
+    ("/api/debug-query", frozenset({"debug"})),
+    ("/api/debug-data", frozenset({"debug"})),
+    ("/api/fa-debug/", frozenset({"debug", "testing"})),
+    ("/api/etf/online-test/", frozenset({"debug", "testing"})),
+    ("/api/debug/log-path-debug", frozenset({"debug"})),
+    ("/api/debug/log-path", frozenset({"debug", "testing"})),
+    ("/debug", frozenset({"debug"})),
 ]
 
 
-def _url_to_page_key(path: str) -> str | None:
-    """Return page_key for path, or None if no permission check needed (my-settings, setting, unknown)."""
+def _url_required_page_keys(path: str) -> frozenset | None:
+    """Return required page_key set for path, or None if no permission check (my-settings, setting, unknown)."""
     if path in ("/debug/my-settings", "/debug/setting"):
         return None
-    for prefix, key in _URL_TO_PAGE:
+    for prefix, keys in _URL_ACCESS_RULES:
         if path == prefix or (len(path) > len(prefix) and path.startswith(prefix)):
-            return key
+            return keys
     return None
 
 
@@ -57,16 +62,23 @@ def require_auth():
         return jsonify({"ok": False, "error": "Authentication required"}), 401
     request.current_user = user
     path = (request.path or "").rstrip("/") or "/"
-    page_key = _url_to_page_key(path)
+    required_keys = _url_required_page_keys(path)
     is_admin = (user.get("role") or "").lower() == "admin"
     ensure_auth_db()
     conn = connect_auth_db()
     try:
-        allowed_pages = get_user_page_permissions(conn, user["id"]) if not is_admin else {"debug", "repair", "jump-station", "kitting", "kitting-sql"}
+        allowed_pages = get_user_page_permissions(conn, user["id"]) if not is_admin else {
+            "debug",
+            "repair",
+            "jump-station",
+            "kitting",
+            "kitting-sql",
+            "testing",
+        }
     finally:
         conn.close()
     request.allowed_pages = allowed_pages
-    if page_key is not None and not is_admin and page_key not in allowed_pages:
+    if required_keys is not None and not is_admin and not (allowed_pages & required_keys):
         accept = request.headers.get("Accept") or ""
         if "text/html" in accept:
             return redirect("/debug")
@@ -247,6 +259,19 @@ def debug_kitting():
 def debug_kitting_sql():
     """IT Kitting SQL page: assy tree by direct Oracle SQL."""
     return render_template("debug_kitting_sql.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
+
+
+@bp.route("/debug/testing")
+def debug_testing():
+    """SN-centric Testing page: tray summary, Crabber history, repair flow, kitting, four terminals."""
+    from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
+    return render_template(
+        "debug_testing.html",
+        ws_terminal_url=WS_TERMINAL_URL,
+        upload_url=UPLOAD_URL,
+        current_user=getattr(request, "current_user", None),
+        allowed_pages=getattr(request, "allowed_pages", set()),
+    )
 
 
 # --- IT Kitting API (proxy to external table_config_search_data) ---
@@ -619,6 +644,66 @@ def api_jump_station_wip():
             conn.close()
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/debug/testing/overview", methods=["GET"])
+def api_testing_overview():
+    """Aggregate tray row (ETF cache), WIP summary, and Crabber test history for Testing page."""
+    sn_raw = (request.args.get("sn") or "").strip()
+    if not sn_raw:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    sn_upper = sn_raw.upper()
+    out: dict = {"ok": True, "sn": sn_raw, "tray": {}, "wip": {}, "crabber": {}}
+
+    try:
+        from etf.routes import _maybe_start_background, etf_search_rows_cached
+
+        _maybe_start_background()
+        rows = etf_search_rows_cached(sn_raw)
+        best = None
+        qlow = sn_raw.lower()
+        for r in rows:
+            if str(r.get("sn") or "").strip().lower() == qlow:
+                best = r
+                break
+        if best is None and rows:
+            best = rows[0]
+        if best:
+            out["tray"] = {"connected": True, "row": best, "message": ""}
+        else:
+            out["tray"] = {
+                "connected": False,
+                "row": None,
+                "message": "Không tìm được kết nối đến SN này (tray cache).",
+            }
+    except Exception as e:
+        out["tray"] = {"connected": False, "row": None, "message": str(e)}
+
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+
+        conn = get_conn()
+        try:
+            row = get_station_and_next(conn, sn_upper)
+            if row:
+                wip = dict(zip(_WIP_KEYS, row))
+                out["wip"] = {"ok": True, "wip": _serialize_wip(wip)}
+            else:
+                out["wip"] = {"ok": False, "error": "No WIP for this SN"}
+        finally:
+            conn.close()
+    except Exception as e:
+        out["wip"] = {"ok": False, "error": str(e)}
+
+    try:
+        from crabber.client import fetch_test_history_for_sn
+
+        out["crabber"] = fetch_test_history_for_sn(sn_raw)
+    except Exception as e:
+        out["crabber"] = {"ok": False, "tests": [], "error": str(e)}
+
+    return jsonify(out)
 
 
 @bp.route("/api/debug/jump-station/execute", methods=["POST"])

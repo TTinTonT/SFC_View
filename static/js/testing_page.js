@@ -1,232 +1,4 @@
-<!doctype html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Repair – Debug</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/static/css/theme_shared.css">
-  <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
-  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
-  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 100%; width: 100%; margin: 0 auto; }
-  .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-  .nav-btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; text-decoration: none; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; }
-  .nav-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .nav-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .nav-btn.disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
-  .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
-  .btn-logout:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .msg-error { color: #dc2626; }
-  .msg-ok { color: #16a34a; }
-  .hidden { display: none !important; }
-  .flow-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0; min-height: 3rem; }
-  .flow-node { display: inline-flex; align-items: center; justify-content: center; min-width: 6rem; padding: 0.4rem 0.9rem; border-radius: 10px; border: 2px solid var(--color-border); background: var(--color-surface); font-weight: 600; font-size: 0.875rem; }
-  .flow-node.current { border-color: var(--color-primary); background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.15); }
-  .flow-arrow { color: var(--color-muted); font-size: 1.25rem; user-select: none; }
-  .flow-branch { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
-  .modal-box { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 44rem; width: 94%; max-height: 80vh; overflow: auto; }
-  .table-compact { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  .table-compact th, .table-compact td { border-bottom: 1px solid var(--color-border); padding: 0.4rem 0.25rem; text-align: left; }
-  .ec-valid { color: #16a34a; font-weight: 600; }
-  .tree-row-flag-y { background: rgba(22, 163, 74, 0.15); }
-  .tree-row-flag-n { background: rgba(220, 38, 38, 0.15); }
-  .tree-row-selected { background: rgba(234, 179, 8, 0.45) !important; }
-  .tree-td-num { white-space: nowrap; position: relative; vertical-align: middle; }
-  .tree-toggle { display: inline-block; width: 1.2em; cursor: pointer; user-select: none; font-size: 0.75em; color: var(--color-text); margin-right: 2px; }
-  .tree-toggle:hover { color: var(--color-primary); }
-  .tree-hbar { position: absolute; top: 50%; height: 2px; background: var(--color-border); display: block; }
-  .tree-new-sn-input { min-width: 28ch; width: 28ch; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); box-sizing: border-box; }
-  .btn-primary-like { padding: 0.5rem 0.9rem; border-radius: 0.5rem; font-weight: 600; color: #fff; background: var(--color-primary); border: 1px solid var(--color-primary); }
-  .btn-primary-like:hover { opacity: 0.9; }
-  .btn-warning-like { padding: 0.5rem 0.9rem; border-radius: 0.5rem; font-weight: 700; color: #2a1a00; background: #facc15; border: 1px solid #facc15; box-shadow: 0 0 8px rgba(250, 204, 21, 0.45); }
-  .btn-warning-like:hover { filter: brightness(1.03); }
-  .btn-neon-green { padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-weight: 700; color: #001a08; background: #39ff14; border: 1px solid #39ff14; box-shadow: 0 0 10px rgba(57,255,20,0.55); }
-  .btn-neon-red { padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-weight: 700; color: #2a0000; background: #ff3131; border: 1px solid #ff3131; box-shadow: 0 0 10px rgba(255,49,49,0.55); }
-  .loading-overlay { position: fixed; inset: 0; z-index: 120; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; }
-  .loading-box { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; padding: 1rem 1.4rem; font-weight: 600; }
-  .dup-banner { margin: 0.5rem 0; padding: 0.6rem 0.8rem; border: 2px solid #dc2626; border-radius: 8px; background: rgba(220,38,38,0.12); color: #b91c1c; font-size: 0.875rem; }
-  .tree-row-selected-root { background: rgba(234, 179, 8, 0.45) !important; box-shadow: inset 0 0 0 1px rgba(180, 83, 9, 0.6); }
-  .tree-copy-cell { white-space: nowrap; }
-  .tree-copy-cell span { display: inline; }
-  .tree-copy-btn { padding: 0.15rem 0.3rem; font-size: 0.7rem; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); cursor: pointer; margin-left: 0.25rem; }
-  .tree-copy-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .flag-badge { display: inline-block; min-width: 1.2rem; text-align: center; border-radius: 999px; padding: 0 0.35rem; font-size: 0.7rem; font-weight: 700; margin-left: 0.25rem; }
-  .flag-y { background: rgba(22,163,74,0.2); color: #166534; }
-  .flag-n { background: rgba(220,38,38,0.2); color: #991b1b; }
-  .selection-summary { font-size: 0.82rem; color: var(--color-muted); }
-  .tree-new-sn-input.in-scope { border-color: rgba(180, 83, 9, 0.8); }
-  .tree-new-sn-input.out-scope { opacity: 0.65; }
-  </style>
-</head>
-<body>
-  <div class="panel">
-    <div class="nav-links">
-      {% set ap = allowed_pages or [] %}
-      <a href="/debug" class="nav-btn {{ 'disabled' if 'debug' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
-      {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="nav-btn">Setting</a>{% endif %}
-      <a href="/debug/repair" class="nav-btn active {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
-      <a href="/debug/testing" class="nav-btn {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
-      <a href="/debug/jump-station" class="nav-btn {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
-      <a href="/debug/kitting" class="nav-btn {{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
-      <a href="/debug/kitting-sql" class="nav-btn {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
-      <a href="/" class="nav-btn">Analytics</a>
-      <form method="post" action="/api/auth/logout" style="display: inline;">
-        <button type="submit" class="btn-logout">Logout</button>
-      </form>
-    </div>
-
-    <h1 class="text-2xl font-bold mb-3">Repair</h1>
-    <div class="mb-4">
-      <label class="block text-sm font-medium mb-1">Serial Number</label>
-      <div class="flex gap-2 flex-wrap">
-        <input type="text" id="input-sn" class="flex-1 min-w-[15rem] max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter SN">
-        <label class="text-sm flex items-center gap-2">Employee ID
-          <input type="text" id="input-emp-top" value="SJOP" class="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] w-40">
-        </label>
-        <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
-      </div>
-      <p id="sn-error" class="mt-1 text-sm msg-error hidden"></p>
-    </div>
-
-    <div id="flow-section" class="hidden mb-4">
-      <div class="text-xs uppercase tracking-wide text-[var(--color-muted)] mb-1">Current station (UI = NEXT_STATION)</div>
-      <div id="all-pass-msg" class="hidden text-sm msg-ok mb-2">This SN is ALL PASS (>= T_VI).</div>
-      <p id="mode-hint" class="text-sm text-[var(--color-muted)]"></p>
-      <div id="main-flow-row" class="flow-row"></div>
-      <div id="repair-chain-row" class="flow-row hidden"></div>
-      <div id="r-only-wrap" class="hidden"></div>
-      <div id="current-actions" class="hidden mt-2 flex items-center gap-2">
-        <span class="text-sm">Current node: <b id="current-node-text"></b></span>
-        <button type="button" id="btn-pass" class="btn-neon-green">Pass</button>
-        <button type="button" id="btn-fail" class="btn-neon-red">Fail</button>
-      </div>
-    </div>
-
-    <div id="dido-next-section" class="hidden mb-4">
-      <p class="text-sm text-[var(--color-muted)] mb-2">Click Next to advance to the next station in the chain.</p>
-      <button type="button" id="btn-dido-next" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Next</button>
-    </div>
-
-    <div id="do-form-section" class="hidden mb-4">
-      <div class="flex flex-wrap items-end gap-3 max-w-5xl text-sm">
-        <div class="shrink-0">
-          <label for="sel-do-reason" class="block mb-1 font-medium">Reason code</label>
-          <select id="sel-do-reason" class="min-w-[14rem] px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]">
-            <option value="">-- Select --</option>
-          </select>
-        </div>
-        <div class="flex-1 min-w-[12rem]">
-          <label for="input-do-reason-desc" class="block mb-1 font-medium">Reason desc</label>
-          <input type="text" id="input-do-reason-desc" readonly class="w-full px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] opacity-90 text-[var(--color-fg)]">
-        </div>
-      </div>
-      <div class="mt-2 max-w-2xl">
-        <label class="block text-sm font-medium mb-1">Remark</label>
-        <textarea id="input-do-remark" class="w-full px-3 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]" rows="2" placeholder="DO remark"></textarea>
-      </div>
-      <div class="mt-3 flex gap-2">
-        <button type="button" id="btn-do-pass" class="btn-neon-green">Pass</button>
-        <button type="button" id="btn-do-fail" class="btn-neon-red">Fail</button>
-      </div>
-    </div>
-
-    <div id="form-section" class="hidden mb-4">
-      <div id="ro-next-wrap" class="hidden mb-3">
-        <p class="text-sm text-[var(--color-muted)] mb-2">RO station: Next (jump to FLA) or Repair below.</p>
-        <div class="flex gap-2 items-end flex-wrap">
-          <div class="shrink-0">
-            <label for="sel-ro-next-reason" class="block text-xs text-[var(--color-muted)] mb-0.5">Reason code</label>
-            <select id="sel-ro-next-reason" class="min-w-[14rem] px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-sm">
-              <option value="">-- Select reason --</option>
-            </select>
-          </div>
-          <div class="flex-1 min-w-[10rem] max-w-md">
-            <label for="input-ro-next-reason-desc" class="block text-xs text-[var(--color-muted)] mb-0.5">Reason desc</label>
-            <input type="text" id="input-ro-next-reason-desc" readonly class="w-full px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-sm opacity-90">
-          </div>
-          <input type="text" id="input-ro-next-remark" placeholder="Remark" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] text-sm w-48 self-end">
-          <button type="button" id="btn-ro-next" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Next (to FLA)</button>
-        </div>
-      </div>
-      <div class="grid grid-cols-2 gap-2 max-w-2xl text-sm">
-        <label>Reason Code</label><select id="sel-reason" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
-        <label>Repair Action</label><select id="sel-action" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
-        <label>Duty Type</label><select id="sel-duty" class="px-2 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]"></select>
-      </div>
-      <div class="mt-2 max-w-2xl">
-        <label class="block text-sm font-medium mb-1">Remark</label>
-        <textarea id="input-remark" class="w-full px-3 py-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)]" rows="3">Retest</textarea>
-      </div>
-      <div class="mt-3">
-        <button type="button" id="btn-repair" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Repair</button>
-      </div>
-    </div>
-
-    <div id="tree-section" class="hidden mb-4 overflow-x-auto w-full">
-      <div id="dup-banner" class="dup-banner hidden"></div>
-      <div class="flex items-center gap-2 mb-2 flex-wrap">
-        <p class="text-sm font-medium mb-0">Vendor SN tree (optional kitting: fill New SN)</p>
-        <span id="selection-summary" class="selection-summary">Click a row to select subtree for dekit/kitting.</span>
-        <label class="text-sm flex items-center gap-1 ml-2">
-          <input type="checkbox" id="chk-show-dekitted" checked>
-          Show dekitted parts
-        </label>
-        <button type="button" id="tree-expand-all" class="btn-primary-like">Expand all</button>
-        <button type="button" id="tree-collapse-all" class="btn-primary-like">Collapse all</button>
-        <button type="button" id="tree-dekit" class="btn-primary-like">Dekit</button>
-        <button type="button" id="tree-kitting" class="btn-primary-like">Kitting</button>
-      </div>
-      <table class="w-full border-collapse text-sm table-auto" style="min-width: 100%;">
-        <thead>
-          <tr class="border-b border-[var(--color-border)]">
-            <th class="text-left py-2 pr-2 w-12">#</th>
-            <th class="text-left py-2 pr-2">Sub model</th>
-            <th class="text-left py-2 pr-2">Model name</th>
-            <th class="text-left py-2 pr-2">Father SN</th>
-            <th class="text-left py-2 pr-2">Vendor SN</th>
-            <th class="text-left py-2">New SN</th>
-            <th class="text-left py-2 pr-2">Stack</th>
-            <th class="text-left py-2 pr-2">In Time (Cali)</th>
-          </tr>
-        </thead>
-        <tbody id="tree-tbody"></tbody>
-      </table>
-    </div>
-
-    <p id="result-msg" class="text-sm hidden"></p>
-  </div>
-  <div id="loading-overlay" class="loading-overlay hidden">
-    <div id="loading-text" class="loading-box">Processing...</div>
-  </div>
-
-  <div id="fail-modal" class="modal-overlay hidden">
-    <div class="modal-box">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="font-semibold">Fail update (error code history)</h3>
-        <button type="button" id="btn-fail-close" class="px-2 py-1 rounded border border-[var(--color-border)]">Close</button>
-      </div>
-      <table class="table-compact mb-2">
-        <thead>
-          <tr><th>Test time (Cali)</th><th>Repair time (Cali)</th><th>Group</th><th>Type</th><th>Error</th><th>Desc</th><th></th></tr>
-        </thead>
-        <tbody id="fail-history-body"></tbody>
-      </table>
-      <div class="flex gap-2 items-center flex-wrap mb-2">
-        <label class="text-sm">Error code
-          <input type="text" id="fail-ec-input" class="ml-1 px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)]">
-        </label>
-        <button type="button" id="btn-validate-ec" class="px-2 py-1 rounded border border-[var(--color-border)]">Validate</button>
-        <span id="ec-valid-msg" class="text-sm"></span>
-      </div>
-      <button type="button" id="btn-update-fail" class="px-3 py-2 rounded bg-[var(--color-primary)] text-white">Update fail</button>
-    </div>
-  </div>
-
-  <script>
-  (function () {
+(function () {
     var inputSn = document.getElementById('input-sn');
     var inputEmpTop = document.getElementById('input-emp-top');
     var btnSearch = document.getElementById('btn-search');
@@ -281,6 +53,56 @@
     var inputRoNextReasonDesc = document.getElementById('input-ro-next-reason-desc');
     var inputRoNextRemark = document.getElementById('input-ro-next-remark');
     var btnRoNext = document.getElementById('btn-ro-next');
+    var btnOnlineTest = document.getElementById('btn-online-test');
+    var crabberTbody = document.getElementById('crabber-tbody');
+
+    var termRowKey = '';
+    var termStopWatch = null;
+    var lastTrayRow = null;
+    var crabberPollTimer = null;
+    var CRABBER_POLL_MS = 60000;
+
+    function stopCrabberPoll() {
+      if (crabberPollTimer != null) {
+        clearInterval(crabberPollTimer);
+        crabberPollTimer = null;
+      }
+    }
+    function crabberHistoryHasProc(tests) {
+      if (!tests || !tests.length) return false;
+      return tests.some(function (t) {
+        return String((t && t.node_log_event) || '').toUpperCase() === 'PROC';
+      });
+    }
+    function scheduleCrabberPollIfNeeded(crabber) {
+      stopCrabberPoll();
+      var tests = (crabber && crabber.ok && Array.isArray(crabber.tests)) ? crabber.tests : [];
+      if (!crabberHistoryHasProc(tests)) return;
+      var pollSn = termRowKey;
+      crabberPollTimer = setInterval(function () {
+        var sn = (inputSn.value || '').trim().toUpperCase();
+        if (!sn || sn !== pollSn) {
+          stopCrabberPoll();
+          return;
+        }
+        api('/api/debug/testing/overview?sn=' + encodeURIComponent(sn)).then(function (res) {
+          if (!res.json || !res.json.ok) {
+            stopCrabberPoll();
+            return;
+          }
+          if (termRowKey !== pollSn) {
+            stopCrabberPoll();
+            return;
+          }
+          var c = res.json.crabber;
+          renderCrabberTable(c);
+          var t2 = (c && c.ok && Array.isArray(c.tests)) ? c.tests : [];
+          if (!crabberHistoryHasProc(t2)) stopCrabberPoll();
+        }).catch(function () {
+          stopCrabberPoll();
+        });
+      }, CRABBER_POLL_MS);
+    }
 
     var options = { reason_codes: [], repair_actions: [], duty_types: [] };
     var debugReasonCodes = [];
@@ -339,14 +161,14 @@
       requestPending = true;
       loadingText.textContent = msg || 'Processing...';
       loadingOverlay.classList.remove('hidden');
-      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext].forEach(function (b) {
+      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext, btnOnlineTest].forEach(function (b) {
         if (b) b.disabled = true;
       });
     }
     function unlockUI() {
       requestPending = false;
       loadingOverlay.classList.add('hidden');
-      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext].forEach(function (b) {
+      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext, btnOnlineTest].forEach(function (b) {
         if (b) b.disabled = false;
       });
       if (hasInvalidDuplicate) {
@@ -404,6 +226,7 @@
       }
     }
     function resetView() {
+      stopCrabberPoll();
       flowSection.classList.add('hidden');
       formSection.classList.add('hidden');
       didoNextSection.classList.add('hidden');
@@ -419,6 +242,93 @@
       allPassMsg.classList.add('hidden');
       snError.classList.add('hidden');
       resultMsg.classList.add('hidden');
+      if (crabberTbody) {
+        crabberTbody.innerHTML = '<tr><td colspan="6" style="color:var(--color-muted)">—</td></tr>';
+      }
+      ['sum-room', 'sum-pn-tray', 'sum-wip', 'sum-bmc', 'sum-sys', 'sum-tray-msg'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = '—';
+      });
+    }
+    function stopTermWatch() {
+      if (typeof termStopWatch === 'function') termStopWatch();
+      termStopWatch = null;
+    }
+    function renderOverviewPanels(overview) {
+      var tray = overview.tray || {};
+      var row = tray.row || {};
+      var wip = overview.wip || {};
+      var w = wip.wip || {};
+      var elRoom = document.getElementById('sum-room');
+      var elPn = document.getElementById('sum-pn-tray');
+      var elWip = document.getElementById('sum-wip');
+      var elBmc = document.getElementById('sum-bmc');
+      var elSys = document.getElementById('sum-sys');
+      var elMsg = document.getElementById('sum-tray-msg');
+      if (elRoom) {
+        var rm = tray.connected ? (row.room || '') : '';
+        elRoom.textContent = rm ? String(rm).toUpperCase() : '—';
+      }
+      if (elPn) {
+        elPn.textContent = (row.pn || '') || (w.MODEL_NAME || '') || '—';
+      }
+      if (elWip) {
+        if (wip.ok) {
+          var nextOnly = (w.NEXT_STATION || '').trim();
+          elWip.textContent = nextOnly || '—';
+        } else {
+          elWip.textContent = wip.error || '—';
+        }
+      }
+      if (elBmc) {
+        var bmcParts = [row.bmc_mac, row.bmc_ip].filter(function (x) { return x && String(x).trim(); });
+        elBmc.textContent = bmcParts.length ? bmcParts.join(' / ') : '—';
+      }
+      if (elSys) {
+        var sysParts = [row.sys_mac, row.sys_ip].filter(function (x) { return x && String(x).trim(); });
+        elSys.textContent = sysParts.length ? sysParts.join(' / ') : '—';
+      }
+      if (elMsg) {
+        elMsg.textContent = tray.connected ? '' : (tray.message || 'Không tìm được kết nối đến SN này');
+      }
+    }
+    function formatCrabberCali(iso) {
+      var s = (iso && String(iso).trim()) ? String(iso).trim() : '';
+      if (!s) return '';
+      var d = new Date(s);
+      if (isNaN(d.getTime())) return s;
+      try {
+        return new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Los_Angeles',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+          timeZoneName: 'short',
+        }).format(d);
+      } catch (e1) {
+        return s;
+      }
+    }
+    function renderCrabberTable(crabber) {
+      if (!crabberTbody) return;
+      var tests = (crabber && crabber.ok && Array.isArray(crabber.tests)) ? crabber.tests : [];
+      if (!tests.length) {
+        stopCrabberPoll();
+        var err = (crabber && crabber.error) ? crabber.error : 'No Crabber rows (check API or SN).';
+        crabberTbody.innerHTML = '<tr><td colspan="6" style="color:var(--color-muted)">' + rcEscHtml(err) + '</td></tr>';
+        return;
+      }
+      crabberTbody.innerHTML = tests.map(function (t) {
+        var startIso = (t.log_time && String(t.log_time).trim()) ? t.log_time : (t.test_time || '');
+        var startDisp = formatCrabberCali(startIso);
+        var endIso = (t.sfc_event_date && String(t.sfc_event_date).trim()) ? String(t.sfc_event_date).trim() : '';
+        var endDisp = endIso ? formatCrabberCali(endIso) : '—';
+        return '<tr><td>' + rcEscHtml(startDisp) + '</td><td>' + rcEscHtml(endDisp) + '</td><td>' + rcEscHtml(t.station || '') + '</td><td>' + rcEscHtml(t.result || '') + '</td><td>' + rcEscHtml(t.pn || '') + '</td><td>' + rcEscHtml(t.machine || '') + '</td></tr>';
+      }).join('');
     }
     function renderTree() {
       if (!tree || !tree.length) {
@@ -763,21 +673,53 @@
       var sn = (inputSn.value || '').trim();
       if (!sn) { snError.textContent = 'Enter SN'; snError.classList.remove('hidden'); return; }
       lockUI('Loading data...');
-      api('/api/debug/repair/flow-state?sn=' + encodeURIComponent(sn)).then(function (res) {
-        flowState = res.json;
-        if (!res.json.ok) {
-          snError.textContent = res.json.error || 'Search failed';
+      stopTermWatch();
+      var prevKey = termRowKey;
+      termRowKey = sn.toUpperCase();
+      if (prevKey && prevKey !== termRowKey && typeof window.etfCloseSnPanel === 'function') {
+        try { window.etfCloseSnPanel(prevKey); } catch (e1) {}
+      }
+      var ovUrl = '/api/debug/testing/overview?sn=' + encodeURIComponent(sn);
+      var fsUrl = '/api/debug/repair/flow-state?sn=' + encodeURIComponent(sn);
+      Promise.all([api(ovUrl).catch(function () { return { json: { ok: false } }; }), api(fsUrl)])
+        .then(function (pair) {
+          var ovRes = pair[0];
+          var fsRes = pair[1];
+          if (ovRes.json && ovRes.json.ok) {
+            renderOverviewPanels(ovRes.json);
+            renderCrabberTable(ovRes.json.crabber);
+            scheduleCrabberPollIfNeeded(ovRes.json.crabber);
+            lastTrayRow = (ovRes.json.tray && ovRes.json.tray.row) ? ovRes.json.tray.row : null;
+            var els = {
+              ai: document.getElementById('term-ai'),
+              ssh: document.getElementById('term-ssh'),
+              bmc: document.getElementById('term-bmc'),
+              host: document.getElementById('term-host'),
+            };
+            if (window.etfTerminalHelpers) {
+              window.etfTerminalHelpers.openFourTerminals(sn, termRowKey, lastTrayRow || {}, els);
+              termStopWatch = window.etfTerminalHelpers.watchClosedSshAndReconnect(termRowKey, sn, lastTrayRow || {}, els);
+            }
+          } else {
+            stopCrabberPoll();
+            renderCrabberTable({ ok: false, tests: [], error: 'Overview failed' });
+          }
+          flowState = fsRes.json;
+          if (!fsRes.json.ok) {
+            snError.textContent = fsRes.json.error || 'Search failed';
+            snError.classList.remove('hidden');
+            return loadTree(sn);
+          }
+          renderFlowState();
+          return loadTree(sn);
+        })
+        .catch(function () {
+          snError.textContent = 'Request failed';
           snError.classList.remove('hidden');
-          return;
-        }
-        renderFlowState();
-        return loadTree(sn);
-      }).catch(function () {
-        snError.textContent = 'Request failed';
-        snError.classList.remove('hidden');
-      }).finally(function () {
-        unlockUI();
-      });
+        })
+        .finally(function () {
+          unlockUI();
+        });
     }
     function onPass() {
       if (requestPending) return;
@@ -1155,8 +1097,36 @@
     });
     chkShowDekitted.addEventListener('change', renderTree);
 
+    if (btnOnlineTest) {
+      btnOnlineTest.addEventListener('click', function () {
+        var s = (inputSn.value || '').trim();
+        if (!s) { showErr('Enter SN first'); return; }
+        if (typeof window.etfOpenOnlineTestModal === 'function') window.etfOpenOnlineTestModal(s);
+      });
+    }
+    var btnAiStart = document.getElementById('btn-ai-start');
+    var btnAiEnd = document.getElementById('btn-ai-end');
+    var btnAiUpload = document.getElementById('btn-ai-upload');
+    if (btnAiStart) {
+      btnAiStart.addEventListener('click', function () {
+        if (!termRowKey) { showErr('Search SN first'); return; }
+        if (typeof window.etfAiStartSession === 'function') window.etfAiStartSession(termRowKey);
+      });
+    }
+    if (btnAiEnd) {
+      btnAiEnd.addEventListener('click', function () {
+        if (!termRowKey) return;
+        if (typeof window.etfAiEndSession === 'function') window.etfAiEndSession(termRowKey);
+      });
+    }
+    if (btnAiUpload) {
+      btnAiUpload.addEventListener('click', function () {
+        if (!termRowKey) { showErr('Search SN first'); return; }
+        if (typeof window.etfAiUpload === 'function') window.etfAiUpload(termRowKey);
+      });
+    }
+
+    window.addEventListener('beforeunload', stopCrabberPoll);
+
     loadOptions();
-  })();
-  </script>
-</body>
-</html>
+})();

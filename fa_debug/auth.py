@@ -236,7 +236,7 @@ def login_flow(username: str, password: str, ip: str) -> Tuple[bool, Optional[st
         conn.close()
 
 
-VALID_PAGE_KEYS = frozenset({"debug", "repair", "jump-station", "kitting", "kitting-sql"})
+VALID_PAGE_KEYS = frozenset({"debug", "repair", "jump-station", "kitting", "kitting-sql", "testing"})
 
 
 def get_user_page_permissions(conn, user_id: int) -> set:

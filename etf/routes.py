@@ -494,13 +494,11 @@ def _row_matches_query(row, q):
     return any(ql in (str(f).lower()) for f in fields if f)
 
 
-@bp.route("/api/etf/search")
-def api_etf_search():
-    """Search for SN/MAC/IP across all rooms. Returns matching rows with room and ssh_host."""
-    _maybe_start_background()
-    q = (request.args.get("q") or "").strip()
+def etf_search_rows_cached(q: str) -> list:
+    """Search ETF tray cache for SN/MAC/IP across all rooms (same logic as /api/etf/search)."""
+    q = (q or "").strip()
     if not q:
-        return jsonify({"ok": True, "rows": []})
+        return []
     results = []
     with _cache_lock:
         for room in ROOMS:
@@ -513,6 +511,17 @@ def api_etf_search():
                     r_copy = dict(r)
                     r_copy["room"] = room
                     results.append(r_copy)
+    return results
+
+
+@bp.route("/api/etf/search")
+def api_etf_search():
+    """Search for SN/MAC/IP across all rooms. Returns matching rows with room and ssh_host."""
+    _maybe_start_background()
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"ok": True, "rows": []})
+    results = etf_search_rows_cached(q)
     return jsonify({"ok": True, "rows": results})
 
 
