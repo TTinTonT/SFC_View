@@ -384,13 +384,21 @@ def api_kitting_sql_update():
     rowid = (select_data.get("ROWID") or "").strip()
     if not rowid:
         return jsonify({"ok": False, "error": "ROWID required"}), 400
-    update_items = [(k, v) for k, v in select_data.items() if k != "ROWID"]
+    # DATE/TIMESTAMP columns are returned to UI as formatted strings; sending them back as plain binds can trigger ORA-01861.
+    # For this page's update actions, keep DB-generated times unchanged.
+    skip_update_fields = {"IN_STATION_TIME", "REFERENCE_TIME"}
+    update_items = [(k, v) for k, v in select_data.items() if k != "ROWID" and k not in skip_update_fields]
     if not update_items:
         return jsonify({"ok": False, "error": "No updatable fields"}), 400
-    set_sql = ", ".join([f"{k} = :{k}" for k, _ in update_items])
-    sql = f"UPDATE SFISM4.R_ASSY_COMPONENT_T SET {set_sql} WHERE ROWID = :ROWID"
-    binds = {k: v for k, v in update_items}
-    binds["ROWID"] = rowid
+    # Use generated bind names (:b0, :b1, ...) to avoid ORA-01745 on reserved/invalid bind identifiers.
+    set_parts = []
+    binds = {}
+    for i, (k, v) in enumerate(update_items):
+        b = f"b{i}"
+        set_parts.append(f"{k} = :{b}")
+        binds[b] = v
+    sql = f"UPDATE SFISM4.R_ASSY_COMPONENT_T SET {', '.join(set_parts)} WHERE ROWID = :b_rowid"
+    binds["b_rowid"] = rowid
     try:
         from sfis_tool.db import get_conn
         conn = get_conn()
@@ -423,9 +431,10 @@ def api_kitting_sql_insert():
     if not insert_items:
         return jsonify({"ok": False, "error": "No insert fields"}), 400
     cols_sql = ", ".join([k for k, _ in insert_items])
-    vals_sql = ", ".join([f":{k}" for k, _ in insert_items])
+    bind_names = [f"b{i}" for i in range(len(insert_items))]
+    vals_sql = ", ".join([f":{b}" for b in bind_names])
     sql = f"INSERT INTO SFISM4.R_ASSY_COMPONENT_T ({cols_sql}) VALUES ({vals_sql})"
-    binds = {k: v for k, v in insert_items}
+    binds = {bind_names[i]: insert_items[i][1] for i in range(len(insert_items))}
     try:
         from sfis_tool.db import get_conn
         conn = get_conn()
@@ -1620,7 +1629,7 @@ def api_repair_execute():
                     [(k[0], k[1]) for k in node_keys if k[0]],
                     key=lambda x: depth_map_raw.get((sn.upper(), str(x[0]), "" if x[1] is None else str(x[1])), 999),
                 )
-                total, err = dekit_nodes(conn, sn, node_keys, emp, auto_commit=False)
+                total, err = dekit_nodes(conn, sn, node_keys, emp, auto_commit=False, skip_missing=True)
                 if err:
                     conn.rollback()
                     return jsonify({"ok": False, "error": f"De-kit failed: {err}", "step": "dekit"})

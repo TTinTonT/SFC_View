@@ -283,13 +283,12 @@ def insert_assy_row(conn, sn, old_vendor_sn, old_father_sn, new_vendor_sn, new_f
     try:
         cur.execute(KITTING_INSERT_SELECT, {"sn": sn.upper(), "old": old_vendor_sn, "old_f": old_father_sn})
         rows = cur.fetchall()
-        if not rows:
-            return False, "source_not_found"
-        if len(rows) > 1 and not _is_config_vendor(old_vendor_sn):
-            return False, "ambiguous_source_row"
-        row = rows[0]
         cols = [d[0] for d in cur.description]
         col_idx = {c.upper(): i for i, c in enumerate(cols)}
+        if not rows:
+            return False, "source_not_found"
+        # KITTING_INSERT_SELECT orders by IN_STATION_TIME DESC. Repeated dekit/kit can leave multiple N rows for the same key; pick latest (same as CONFIG path).
+        row = rows[0]
         idx_vendor = col_idx.get("VENDOR_SN", -1)
         idx_father = col_idx.get("FATHER_SN", -1)
 
@@ -383,8 +382,12 @@ def validate_kit_request(conn, sn, kit_list):
         if not row:
             errors.append(f"Node not found in DB for ({ov}, {ofs or 'NULL'}).")
             continue
-        if str(row.get("ASSY_FLAG") or "").upper() != "Y":
-            errors.append(f"Node already dekitted for ({ov}, {ofs or 'NULL'}).")
+        flag = str(row.get("ASSY_FLAG") or "").upper()
+        # KITTING_INSERT_SELECT reads from ASSY_FLAG='N' rows; dekit sets Y->N. Allow both Y (dekit then insert) and N (re-kit after prior dekit).
+        if flag not in ("Y", "N"):
+            errors.append(
+                f"Invalid ASSY_FLAG for node ({ov}, {ofs or 'NULL'}): expected Y or N, got {flag!r}."
+            )
             continue
         mapped[key] = {"new_vendor_sn": nv, "new_father_sn": (item.get("new_father_sn") or "").strip()}
     for key, payload in mapped.items():

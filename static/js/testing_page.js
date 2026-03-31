@@ -360,7 +360,7 @@
         var rootNode = numToNode[selectedRootNum] || {};
         selectionSummary.textContent = 'Selected: ' + (rootNode.vendor_sn || selectedRootNum) + ' + ' + Math.max(0, selectedNodesCount - 1) + ' children';
       } else {
-        selectionSummary.textContent = 'Click a row to select subtree for dekit/kitting.';
+        selectionSummary.textContent = 'Select a subtree, or enter New SN on any rows (any branches) to kit several parts in one run.';
       }
       var visible = tree.filter(function (node) { return isVisible(node.num); });
       if (!chkShowDekitted.checked) {
@@ -468,28 +468,54 @@
       var byNum = {};
       tree.forEach(function (n) { byNum[n.num] = n; });
       var subtreeNums = getSubtreeNums(selectedRootNum);
-      if (!subtreeNums.length) {
-        if (requireSelection) return { error: 'Please select one row to continue.' };
-        return { list: [] };
-      }
-      // Base subtree: selected root + its descendants.
-      // Enhancement: if user entered New SN for an ancestor (a "parent" above the selected root),
-      // include that ancestor too, so backend updates both parent and child nodes.
       var newByNum = {};
-      var candidateNumsSet = new Set(subtreeNums);
+      var candidateNumsSet = new Set();
+      var filledOutsideSubtree = false;
 
       function getNewSnForNum(num) {
         var inp = treeTbody.querySelector('.tree-new-sn[data-num="' + num + '"]');
         return inp ? (inp.value || '').trim() : (savedInputValues[String(num)] || '').trim();
       }
 
-      subtreeNums.forEach(function (num) {
-        var v = getNewSnForNum(num);
-        if (v) newByNum[num] = v;
+      // Cross-branch: any row with New SN in the tree is included in the kit batch.
+      tree.forEach(function (n) {
+        var v = getNewSnForNum(n.num);
+        if (v) {
+          newByNum[n.num] = v;
+          candidateNumsSet.add(n.num);
+        }
       });
+      if (selectedRootNum) {
+        var subtreeNumsSet = new Set(subtreeNums);
+        tree.forEach(function (n) {
+          var v = getNewSnForNum(n.num);
+          if (v && !subtreeNumsSet.has(n.num)) filledOutsideSubtree = true;
+        });
+        // If user typed New SN outside the highlighted subtree, kit only filled rows (multi-branch). Otherwise keep "whole subtree must be filled" behavior.
+        if (!filledOutsideSubtree) {
+          subtreeNums.forEach(function (num) {
+            candidateNumsSet.add(num);
+            var v = getNewSnForNum(num);
+            if (v) newByNum[num] = v;
+          });
+        }
+      }
 
-      // Walk upward from each subtree node; if an ancestor has a filled New SN, include it.
-      subtreeNums.forEach(function (num) {
+      if (requireSelection) {
+        if (!selectedRootNum && candidateNumsSet.size === 0) {
+          return { error: 'Enter New SN for at least one part (any row), or select a subtree to kit.' };
+        }
+        if (selectedRootNum && !subtreeNums.length) {
+          return { error: 'Please select one row to continue.' };
+        }
+      } else {
+        if (!selectedRootNum && candidateNumsSet.size === 0) {
+          return { list: [] };
+        }
+      }
+
+      // Walk upward from each candidate; include ancestors that have a filled New SN (parent chain).
+      Array.from(candidateNumsSet).forEach(function (num) {
         var n = byNum[num];
         while (n && n.parent_num != null && byNum[n.parent_num]) {
           var p = n.parent_num;
@@ -502,10 +528,20 @@
         }
       });
 
+      if (selectedRootNum && !filledOutsideSubtree) {
+        for (var j = 0; j < subtreeNums.length; j++) {
+          if (!newByNum[subtreeNums[j]]) {
+            return { error: 'Please enter New SN for all nodes in the selected subtree.' };
+          }
+        }
+      }
+
       var candidateNums = Array.from(candidateNumsSet);
       for (var i = 0; i < candidateNums.length; i++) {
         var num = candidateNums[i];
-        if (!newByNum[num]) return { error: 'Please enter New SN for all nodes in the selected subtree.' };
+        if (!newByNum[num]) {
+          return { error: 'Please enter New SN for every part included in this kit batch.' };
+        }
       }
 
       candidateNums.sort(function (a, b) { return a - b; });

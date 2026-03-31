@@ -517,8 +517,9 @@
     }
     for (var p = 0; p < swapPairs.length; p++) {
       var pair = swapPairs[p], R = pair.R, S = pair.S, newR = pair.newVendorR, newS = pair.newVendorS;
-      updates.push({ node: R, vendorSn: newS, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (S.father_sn || '') : (R.father_sn || ''), empNo: 'T81047' });
-      updates.push({ node: S, vendorSn: newR, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (R.father_sn || '') : (S.father_sn || ''), empNo: 'T81047' });
+      // Swap must assign each row the opposite vendor target; old mapping produced no-op updates.
+      updates.push({ node: R, vendorSn: newR, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (S.father_sn || '') : (R.father_sn || ''), empNo: 'T81047' });
+      updates.push({ node: S, vendorSn: newS, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (R.father_sn || '') : (S.father_sn || ''), empNo: 'T81047' });
     }
     var byRowid = {};
     updates.forEach(function (u) {
