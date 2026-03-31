@@ -165,10 +165,11 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
     List test log rows for SN from Crabber search_log_items (no per-row node detail fetch).
 
     Returns {ok, tests, error?, raw_total?}. Each test row:
-      station, result (display: Canceled / Testing / API Pass|Fail|…),
+      sn, station, result (display: Canceled / Testing / API Pass|Fail|…),
       test_time (legacy: same as start time source), log_time (ISO UTC, prefer API log_time),
       sfc_event_date (ISO UTC when test finished / SFC posted; empty while PROC/TPSQ or missing),
-      node_log_id, pn, machine, phase, project, node_log_event (raw, for UI polling).
+      node_log_id, pn, pn_name, machine, machine_id, phase, project, node_log_event (raw, for UI polling),
+      procedure, revision (for Crabber UI deep-link cookie + processing_info query).
     """
     base, token = _get_config()
     result: dict = {"ok": False, "tests": [], "error": None}
@@ -229,7 +230,7 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
             log_time_iso = test_time
         sfc_raw = it.get("sfc_event_date") or it.get("sfcEventDate")
         sfc_event_date = str(sfc_raw).strip() if sfc_raw is not None and str(sfc_raw).strip() else ""
-        pn = str(
+        pn_name = str(
             it.get("pn_name")
             or it.get("pnName")
             or it.get("pn")
@@ -237,21 +238,45 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
             or it.get("part_number")
             or ""
         ).strip()
+        procedure = str(
+            it.get("procedure")
+            or it.get("procedure_id")
+            or it.get("procedureId")
+            or ""
+        ).strip()
+        revision = str(
+            it.get("revision")
+            or it.get("procedure_rev")
+            or it.get("procedureRev")
+            or ""
+        ).strip()
+        machine_id = str(
+            it.get("machine_id")
+            or it.get("machineId")
+            or it.get("mac_id")
+            or ""
+        ).strip()
+        row_sn = str(it.get("sn") or it.get("SN") or "").strip()
         out.append(
             {
+                "sn": row_sn,
                 "station": str(it.get("station") or it.get("Station") or "").strip(),
                 "result": _derive_crabber_display_result(raw_res, node_log_event),
                 "test_time": test_time,
                 "log_time": log_time_iso,
                 "sfc_event_date": sfc_event_date,
                 "node_log_id": str(node_log_id).strip() if node_log_id else "",
-                "pn": pn,
+                "pn": pn_name,
+                "pn_name": pn_name,
                 "machine": str(
                     it.get("machine") or it.get("machine_name") or it.get("Machine") or ""
                 ).strip(),
+                "machine_id": machine_id,
                 "phase": str(it.get("phase") or it.get("Phase") or "").strip(),
                 "project": str(it.get("project") or it.get("Project") or "").strip(),
                 "node_log_event": node_log_event,
+                "procedure": procedure,
+                "revision": revision,
             }
         )
         n += 1

@@ -54,14 +54,52 @@
     var inputRoNextRemark = document.getElementById('input-ro-next-remark');
     var btnRoNext = document.getElementById('btn-ro-next');
     var btnOnlineTest = document.getElementById('btn-online-test');
+    var autoRefreshCountdown = document.getElementById('auto-refresh-countdown');
     var crabberTbody = document.getElementById('crabber-tbody');
 
     var termRowKey = '';
     var termStopWatch = null;
     var lastTrayRow = null;
     var crabberPollTimer = null;
+    var autoRefreshTimer = null;
+    var countdownTimer = null;
+    var autoRefreshRemainingSec = 0;
     var CRABBER_POLL_MS = 60000;
+    var AUTO_REFRESH_MS = 60000;
 
+    function setAutoRefreshLabel(text) {
+      if (!autoRefreshCountdown) return;
+      autoRefreshCountdown.textContent = text;
+    }
+    function stopAutoRefresh() {
+      if (autoRefreshTimer != null) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+      if (countdownTimer != null) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+      autoRefreshRemainingSec = 0;
+      setAutoRefreshLabel('Auto refresh: —');
+    }
+    function startAutoRefresh() {
+      stopAutoRefresh();
+      autoRefreshRemainingSec = Math.floor(AUTO_REFRESH_MS / 1000);
+      setAutoRefreshLabel('Auto refresh in ' + autoRefreshRemainingSec + 's');
+      countdownTimer = setInterval(function () {
+        autoRefreshRemainingSec = Math.max(0, autoRefreshRemainingSec - 1);
+        setAutoRefreshLabel('Auto refresh in ' + autoRefreshRemainingSec + 's');
+      }, 1000);
+      autoRefreshTimer = setInterval(function () {
+        if (requestPending) return;
+        var sn = (inputSn.value || '').trim();
+        if (!sn) { stopAutoRefresh(); return; }
+        autoRefreshRemainingSec = Math.floor(AUTO_REFRESH_MS / 1000);
+        setAutoRefreshLabel('Auto refresh in ' + autoRefreshRemainingSec + 's');
+        refreshCurrentSnData(sn, false);
+      }, AUTO_REFRESH_MS);
+    }
     function stopCrabberPoll() {
       if (crabberPollTimer != null) {
         clearInterval(crabberPollTimer);
@@ -227,6 +265,7 @@
     }
     function resetView() {
       stopCrabberPoll();
+      stopAutoRefresh();
       flowSection.classList.add('hidden');
       formSection.classList.add('hidden');
       didoNextSection.classList.add('hidden');
@@ -249,6 +288,44 @@
         var el = document.getElementById(id);
         if (el) el.textContent = '—';
       });
+    }
+    function refreshCurrentSnData(sn, allowTerminalReconnect) {
+      var ovUrl = '/api/debug/testing/overview?sn=' + encodeURIComponent(sn);
+      var fsUrl = '/api/debug/repair/flow-state?sn=' + encodeURIComponent(sn);
+      return Promise.all([api(ovUrl).catch(function () { return { json: { ok: false } }; }), api(fsUrl)])
+        .then(function (pair) {
+          var ovRes = pair[0];
+          var fsRes = pair[1];
+          if (ovRes.json && ovRes.json.ok) {
+            renderOverviewPanels(ovRes.json);
+            renderCrabberTable(ovRes.json.crabber);
+            scheduleCrabberPollIfNeeded(ovRes.json.crabber);
+            lastTrayRow = (ovRes.json.tray && ovRes.json.tray.row) ? ovRes.json.tray.row : null;
+            if (allowTerminalReconnect) {
+              var els = {
+                ai: document.getElementById('term-ai'),
+                ssh: document.getElementById('term-ssh'),
+                bmc: document.getElementById('term-bmc'),
+                host: document.getElementById('term-host'),
+              };
+              if (window.etfTerminalHelpers) {
+                window.etfTerminalHelpers.openFourTerminals(sn, termRowKey, lastTrayRow || {}, els);
+                termStopWatch = window.etfTerminalHelpers.watchClosedSshAndReconnect(termRowKey, sn, lastTrayRow || {}, els);
+              }
+            }
+          } else {
+            stopCrabberPoll();
+            renderCrabberTable({ ok: false, tests: [], error: 'Overview failed' });
+          }
+          flowState = fsRes.json;
+          if (!fsRes.json.ok) {
+            snError.textContent = fsRes.json.error || 'Search failed';
+            snError.classList.remove('hidden');
+            return loadTree(sn);
+          }
+          renderFlowState();
+          return loadTree(sn);
+        });
     }
     function stopTermWatch() {
       if (typeof termStopWatch === 'function') termStopWatch();
@@ -327,7 +404,9 @@
         var startDisp = formatCrabberCali(startIso);
         var endIso = (t.sfc_event_date && String(t.sfc_event_date).trim()) ? String(t.sfc_event_date).trim() : '';
         var endDisp = endIso ? formatCrabberCali(endIso) : '—';
-        return '<tr><td>' + rcEscHtml(startDisp) + '</td><td>' + rcEscHtml(endDisp) + '</td><td>' + rcEscHtml(t.station || '') + '</td><td>' + rcEscHtml(t.result || '') + '</td><td>' + rcEscHtml(t.pn || '') + '</td><td>' + rcEscHtml(t.machine || '') + '</td></tr>';
+        var rs = String(t.result || '').toUpperCase();
+        var rowCls = rs === 'FAIL' ? 'crabber-row-fail' : (rs === 'PASS' ? 'crabber-row-pass' : (rs === 'TESTING' ? 'crabber-row-testing' : ''));
+        return '<tr class="' + rowCls + '"><td>' + rcEscHtml(startDisp) + '</td><td>' + rcEscHtml(endDisp) + '</td><td>' + rcEscHtml(t.station || '') + '</td><td>' + rcEscHtml(t.result || '') + '</td><td>' + rcEscHtml(t.pn || '') + '</td><td>' + rcEscHtml(t.machine || '') + '</td></tr>';
       }).join('');
     }
     function renderTree() {
@@ -715,40 +794,8 @@
       if (prevKey && prevKey !== termRowKey && typeof window.etfCloseSnPanel === 'function') {
         try { window.etfCloseSnPanel(prevKey); } catch (e1) {}
       }
-      var ovUrl = '/api/debug/testing/overview?sn=' + encodeURIComponent(sn);
-      var fsUrl = '/api/debug/repair/flow-state?sn=' + encodeURIComponent(sn);
-      Promise.all([api(ovUrl).catch(function () { return { json: { ok: false } }; }), api(fsUrl)])
-        .then(function (pair) {
-          var ovRes = pair[0];
-          var fsRes = pair[1];
-          if (ovRes.json && ovRes.json.ok) {
-            renderOverviewPanels(ovRes.json);
-            renderCrabberTable(ovRes.json.crabber);
-            scheduleCrabberPollIfNeeded(ovRes.json.crabber);
-            lastTrayRow = (ovRes.json.tray && ovRes.json.tray.row) ? ovRes.json.tray.row : null;
-            var els = {
-              ai: document.getElementById('term-ai'),
-              ssh: document.getElementById('term-ssh'),
-              bmc: document.getElementById('term-bmc'),
-              host: document.getElementById('term-host'),
-            };
-            if (window.etfTerminalHelpers) {
-              window.etfTerminalHelpers.openFourTerminals(sn, termRowKey, lastTrayRow || {}, els);
-              termStopWatch = window.etfTerminalHelpers.watchClosedSshAndReconnect(termRowKey, sn, lastTrayRow || {}, els);
-            }
-          } else {
-            stopCrabberPoll();
-            renderCrabberTable({ ok: false, tests: [], error: 'Overview failed' });
-          }
-          flowState = fsRes.json;
-          if (!fsRes.json.ok) {
-            snError.textContent = fsRes.json.error || 'Search failed';
-            snError.classList.remove('hidden');
-            return loadTree(sn);
-          }
-          renderFlowState();
-          return loadTree(sn);
-        })
+      refreshCurrentSnData(sn, true)
+        .then(function () { startAutoRefresh(); })
         .catch(function () {
           snError.textContent = 'Request failed';
           snError.classList.remove('hidden');

@@ -233,65 +233,6 @@
   }
   .etf-table .sn-copy-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
   .etf-table .remark-input { width: 100%; min-width: 120px; padding: 0.3rem 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); color: var(--color-text); font-size: 0.75rem; }
-  .etf-online-test-btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.72rem;
-    font-weight: 600;
-    border-radius: 6px;
-    border: 1px solid var(--color-primary);
-    background: var(--color-surface);
-    color: var(--color-primary);
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .etf-online-test-btn:hover { background: var(--color-primary); color: #fff; }
-  .etf-ot-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
-  .etf-ot-modal[aria-hidden="true"] { display: none !important; }
-  .etf-ot-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
-  .etf-ot-dialog {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    max-width: 520px;
-    max-height: 90vh;
-    overflow: auto;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-  }
-  .etf-ot-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--color-border); }
-  .etf-ot-title { font-size: 1.1rem; font-weight: 700; margin: 0; color: var(--color-text); }
-  .etf-ot-close { background: none; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--color-muted); }
-  .etf-ot-body { padding: 1rem; }
-  .etf-ot-step label { display: block; margin-top: 0.65rem; }
-  .etf-ot-label { font-size: 0.78rem; font-weight: 600; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-  .etf-ot-input, .etf-ot-textarea {
-    width: 100%;
-    margin-top: 0.25rem;
-    padding: 0.45rem 0.55rem;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-size: 0.875rem;
-  }
-  .etf-ot-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; align-items: center; }
-  .etf-ot-row .etf-ot-flex { flex: 1; min-width: 140px; margin-top: 0; }
-  .etf-ot-muted { color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
-  .etf-ot-badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 6px; background: rgba(99, 102, 241, 0.15); color: var(--color-primary); font-weight: 600; font-size: 0.8rem; margin-bottom: 0.5rem; }
-  .etf-ot-actions { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
-  .etf-ot-btn { padding: 0.45rem 0.85rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-weight: 600; cursor: pointer; font-size: 0.85rem; }
-  .etf-ot-btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
-  .etf-ot-btn-danger { background: #dc2626; border-color: #dc2626; color: #fff; min-width: 28px; padding: 0 6px; font-size: 1rem; }
-  .etf-ot-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .etf-ot-machine-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; margin-top: 0.35rem; background: var(--color-bg); }
-  .etf-ot-machine-item { padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--color-border); cursor: pointer; font-size: 0.82rem; }
-  .etf-ot-machine-item:last-child { border-bottom: none; }
-  .etf-ot-machine-item:hover { background: var(--color-hover); }
-  .etf-ot-machine-item.selected { background: rgba(99, 102, 241, 0.12); outline: 2px solid var(--color-primary); }
-  .etf-ot-machine-item .occ { color: #c2410c; font-size: 0.75rem; }
-  .etf-ot-pre { font-size: 0.7rem; max-height: 160px; overflow: auto; background: var(--color-bg); padding: 0.5rem; border-radius: 6px; white-space: pre-wrap; word-break: break-all; }
   /* SN debug menu + panel */
   .sn-cell { position: relative; display: flex; align-items: center; gap: 0.35rem; }
   .sn-menu { display: none; position: absolute; top: 100%; left: 0; margin-top: 2px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 50; padding: 0.25rem; min-width: 140px; }
@@ -563,78 +504,12 @@
     </div>
   </div>
 
-  <div id="etf-online-test-modal" class="etf-ot-modal" aria-hidden="true">
-    <div class="etf-ot-backdrop"></div>
-    <div class="etf-ot-dialog" role="dialog" aria-labelledby="etf-ot-title">
-      <div class="etf-ot-header">
-        <h3 id="etf-ot-title" class="etf-ot-title">Online Test</h3>
-        <button type="button" class="etf-ot-close" id="etf-ot-close" title="Close">&times;</button>
-      </div>
-      <div class="etf-ot-body">
-        <div id="etf-ot-step-loading" class="etf-ot-step">
-          <p class="etf-ot-muted">Loading WIP…</p>
-        </div>
-        <div id="etf-ot-step-repair" class="etf-ot-step" style="display:none;">
-          <p class="etf-ot-badge" id="etf-ot-repair-badge">Retest</p>
-          <label class="etf-ot-label">Employee ID</label>
-          <input type="text" id="etf-ot-repair-emp" class="etf-ot-input" placeholder="e.g. SJOP" value="SJOP">
-          <label class="etf-ot-label">Reason Code</label>
-          <select id="etf-ot-reason" class="etf-ot-input"></select>
-          <label class="etf-ot-label">Remark</label>
-          <textarea id="etf-ot-remark" class="etf-ot-textarea" rows="2">Retest</textarea>
-          <div class="etf-ot-actions">
-            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-repair-run">Execute repair &amp; jump</button>
-          </div>
-        </div>
-        <div id="etf-ot-step-config" class="etf-ot-step" style="display:none;">
-          <p id="etf-ot-config-hint" class="etf-ot-muted"></p>
-          <label class="etf-ot-label">Station</label>
-          <select id="etf-ot-station" class="etf-ot-input"></select>
-          <label class="etf-ot-label">PN base</label>
-          <div class="etf-ot-row">
-            <select id="etf-ot-pn" class="etf-ot-input etf-ot-flex"></select>
-            <button type="button" class="etf-ot-btn etf-ot-btn-danger" id="etf-ot-pn-del" title="Remove selected custom base" style="display:none">&times;</button>
-          </div>
-          <div class="etf-ot-row" style="gap:4px">
-            <input type="text" id="etf-ot-pn-new" class="etf-ot-input etf-ot-flex" placeholder="Add new base, e.g. VR200_L10">
-            <button type="button" class="etf-ot-btn" id="etf-ot-pn-add">Add</button>
-          </div>
-          <p id="etf-ot-pn-preview" class="etf-ot-muted" style="margin:2px 0 0;font-weight:600"></p>
-          <label class="etf-ot-label">Employee ID</label>
-          <input type="text" id="etf-ot-emp" class="etf-ot-input" placeholder="e.g. SJOP">
-          <label class="etf-ot-label">Tray SN</label>
-          <input type="text" id="etf-ot-sn-ro" class="etf-ot-input" readonly>
-          <div class="etf-ot-actions">
-            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-prepare">Continue</button>
-          </div>
-        </div>
-        <div id="etf-ot-step-machines" class="etf-ot-step" style="display:none;">
-          <label class="etf-ot-label">Filter machines</label>
-          <input type="text" id="etf-ot-machine-filter" class="etf-ot-input" placeholder="Filter by name, user, id…">
-          <div id="etf-ot-machine-list" class="etf-ot-machine-list"></div>
-          <p id="etf-ot-machine-picked" class="etf-ot-muted"></p>
-          <div class="etf-ot-actions">
-            <button type="button" class="etf-ot-btn" id="etf-ot-back-config">&larr; Back</button>
-            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-start" disabled>Start test</button>
-          </div>
-        </div>
-        <div id="etf-ot-step-result" class="etf-ot-step" style="display:none;">
-          <p id="etf-ot-result-msg"></p>
-          <pre id="etf-ot-result-detail" class="etf-ot-pre"></pre>
-          <div class="etf-ot-actions">
-            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-done">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
   <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js" defer></script>
   <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} };</script>
   <script src="/static/js/fa_debug.js" defer></script>
-  <script src="/static/js/etf_online_test_modal.js" defer></script>
+  <script>window.ETF_STATUS_HIDE_TEST_BTN = true;</script>
   <script src="/static/js/etf_status.js" defer></script>
 </body>
 </html>

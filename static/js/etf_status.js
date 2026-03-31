@@ -12,6 +12,15 @@
   const expandedPanels = new Map(); // value: { ai, term, bmc, host } or legacy "ai"|"term"|"both"
   const panelRowKeyToSn = new Map();
 
+  /** When true (set on FA Debug main page only), hide Tray "Test" — use Online test on /debug/testing. */
+  function hideEtfTrayTestButton() {
+    try {
+      return window.ETF_STATUS_HIDE_TEST_BTN === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function getPanelFlags(rowKey) {
     const v = expandedPanels.get(rowKey);
     if (!v) return { ai: false, term: false, bmc: false, host: false };
@@ -580,7 +589,7 @@
         <td class="etf-td"><div class="etf-cell-inner">${escapeHtml(sfcSlot)}</div></td>
         <td class="etf-td last-end-cell" data-last-end="${escapeHtml(rawLastEnd)}"><div class="etf-cell-inner etf-cell-inner--time"><span class="last-end-value">${lastEndDisplay}</span></div></td>
         <td class="etf-td"><div class="etf-cell-inner" title="${sfcRemarkVal}">${sfcRemarkVal}</div></td>
-        <td class="etf-td etf-td-action">${r.sn ? (`<button type="button" class="etf-online-test-btn" data-sn="${escapeHtml(r.sn)}" title="Online test / Retest">Test</button>`) : '<span style="color:var(--color-muted);font-size:0.8rem">—</span>'}</td>
+        <td class="etf-td etf-td-action">${hideEtfTrayTestButton() ? '<span style="color:var(--color-muted);font-size:0.8rem">—</span>' : (r.sn ? (`<button type="button" class="etf-online-test-btn" data-sn="${escapeHtml(r.sn)}" title="Online test / Retest">Test</button>`) : '<span style="color:var(--color-muted);font-size:0.8rem">—</span>')}</td>
       </tr>`);
 
       if ((flags.ai || flags.term || flags.bmc || flags.host) && !savedPanels.has(rowKey)) {
@@ -682,14 +691,16 @@
       });
     });
 
-    tbody.querySelectorAll(".etf-online-test-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (typeof window.etfOpenOnlineTestModal === "function") {
-          window.etfOpenOnlineTestModal((btn.dataset.sn || "").trim());
-        }
+    if (!hideEtfTrayTestButton()) {
+      tbody.querySelectorAll(".etf-online-test-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (typeof window.etfOpenOnlineTestModal === "function") {
+            window.etfOpenOnlineTestModal((btn.dataset.sn || "").trim());
+          }
+        });
       });
-    });
+    }
 
     tbody.querySelectorAll(".sn-copy-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {

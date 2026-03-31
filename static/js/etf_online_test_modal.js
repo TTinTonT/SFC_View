@@ -260,7 +260,7 @@
       fetch("/api/etf/online-test/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pn_name: pn }),
+        body: JSON.stringify({ pn_name: pn, sn: otCtx.sn || "" }),
       })
         .then((r) => r.json())
         .then((data) => {
@@ -292,6 +292,7 @@
       const body = {
         sn: otCtx.sn,
         pn_name: p.pn_name,
+        selected_station: (document.getElementById("etf-ot-station")?.value || "").trim(),
         emp: otCtx.emp || document.getElementById("etf-ot-emp")?.value || "SJOP",
         machine_id: otCtx.selectedMachineId,
         shelf_proc_data: p.shelf_proc_data,

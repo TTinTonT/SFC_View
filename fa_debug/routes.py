@@ -265,6 +265,7 @@ def debug_kitting_sql():
 def debug_testing():
     """SN-centric Testing page: tray summary, Crabber history, repair flow, kitting, four terminals."""
     from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
+
     return render_template(
         "debug_testing.html",
         ws_terminal_url=WS_TERMINAL_URL,
