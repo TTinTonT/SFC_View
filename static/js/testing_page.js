@@ -54,6 +54,9 @@
     var inputRoNextRemark = document.getElementById('input-ro-next-remark');
     var btnRoNext = document.getElementById('btn-ro-next');
     var btnOnlineTest = document.getElementById('btn-online-test');
+    var btnAiStart = document.getElementById('btn-ai-start');
+    var btnAiEnd = document.getElementById('btn-ai-end');
+    var btnAiUpload = document.getElementById('btn-ai-upload');
     var autoRefreshCountdown = document.getElementById('auto-refresh-countdown');
     var crabberTbody = document.getElementById('crabber-tbody');
 
@@ -66,6 +69,10 @@
     var autoRefreshRemainingSec = 0;
     var CRABBER_POLL_MS = 60000;
     var AUTO_REFRESH_MS = 60000;
+    var ecValidateInFlight = false;
+    var failHistoryLoading = false;
+    var lastAiActionAt = 0;
+    var AI_ACTION_GAP_MS = 700;
 
     function setAutoRefreshLabel(text) {
       if (!autoRefreshCountdown) return;
@@ -199,14 +206,14 @@
       requestPending = true;
       loadingText.textContent = msg || 'Processing...';
       loadingOverlay.classList.remove('hidden');
-      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext, btnOnlineTest].forEach(function (b) {
+      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext, btnOnlineTest, btnAiStart, btnAiEnd, btnAiUpload].forEach(function (b) {
         if (b) b.disabled = true;
       });
     }
     function unlockUI() {
       requestPending = false;
       loadingOverlay.classList.add('hidden');
-      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext, btnOnlineTest].forEach(function (b) {
+      [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext, btnOnlineTest, btnAiStart, btnAiEnd, btnAiUpload].forEach(function (b) {
         if (b) b.disabled = false;
       });
       if (hasInvalidDuplicate) {
@@ -823,12 +830,14 @@
     }
     function openFailModal() {
       if (!flowState || !flowState.wip) return;
+      if (failHistoryLoading) return;
       var sn = (inputSn.value || '').trim();
       ecValidated = false;
       ecValidMsg.textContent = '';
       failEcInput.value = '';
       failHistoryBody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
       failModal.classList.remove('hidden');
+      failHistoryLoading = true;
       api('/api/debug/repair/fail-history?sn=' + encodeURIComponent(sn)).then(function (res) {
         if (!res.json.ok) { failHistoryBody.innerHTML = '<tr><td colspan="7">Error</td></tr>'; return; }
         var rows = res.json.rows || [];
@@ -845,16 +854,26 @@
             ecValidMsg.textContent = '';
           });
         });
+      }).finally(function () {
+        failHistoryLoading = false;
       });
     }
     function validateEc() {
       var ec = (failEcInput.value || '').trim();
       if (!ec) { showErr('Please enter an error code.'); return; }
+      if (ecValidateInFlight) return;
+      ecValidateInFlight = true;
       api('/api/debug/repair/validate-error-code', { method: 'POST', body: { error_code: ec } }).then(function (res) {
         if (!res.json.ok) { ecValidated = false; ecValidMsg.textContent = res.json.error || 'Validate failed'; ecValidMsg.className = 'text-sm msg-error'; return; }
         ecValidated = res.json.valid === true;
         ecValidMsg.textContent = ecValidated ? 'Error code is valid.' : 'Error code is invalid.';
         ecValidMsg.className = 'text-sm ' + (ecValidated ? 'ec-valid' : 'msg-error');
+      }).catch(function () {
+        ecValidated = false;
+        ecValidMsg.textContent = 'Validate request failed.';
+        ecValidMsg.className = 'text-sm msg-error';
+      }).finally(function () {
+        ecValidateInFlight = false;
       });
     }
     function updateFail() {
@@ -1182,30 +1201,57 @@
 
     if (btnOnlineTest) {
       btnOnlineTest.addEventListener('click', function () {
+        if (requestPending) return;
         var s = (inputSn.value || '').trim();
         if (!s) { showErr('Enter SN first'); return; }
-        if (typeof window.etfOpenOnlineTestModal === 'function') window.etfOpenOnlineTestModal(s);
+        if (typeof window.etfOpenOnlineTestModal !== 'function') return;
+        lockUI('Checking…');
+        api('/api/etf/online-test/wip?sn=' + encodeURIComponent(s.trim().toUpperCase())).then(function (res) {
+          unlockUI();
+          if (!res.json || !res.json.ok) {
+            showErr((res.json && res.json.error) ? res.json.error : 'WIP check failed');
+            return;
+          }
+          if (res.json.crabber_test_in_progress) {
+            showErr('Crabber đang chạy test cho SN này (PROC/Testing). Chờ xong hoặc đóng test trước khi mở Online test.');
+            return;
+          }
+          window.etfOpenOnlineTestModal(s);
+        }).catch(function (e) {
+          unlockUI();
+          showErr(e && e.message ? e.message : 'Request failed');
+        });
       });
     }
-    var btnAiStart = document.getElementById('btn-ai-start');
-    var btnAiEnd = document.getElementById('btn-ai-end');
-    var btnAiUpload = document.getElementById('btn-ai-upload');
+    function guardAiClick(fn) {
+      if (requestPending) return;
+      var now = Date.now();
+      if (now - lastAiActionAt < AI_ACTION_GAP_MS) return;
+      lastAiActionAt = now;
+      fn();
+    }
     if (btnAiStart) {
       btnAiStart.addEventListener('click', function () {
         if (!termRowKey) { showErr('Search SN first'); return; }
-        if (typeof window.etfAiStartSession === 'function') window.etfAiStartSession(termRowKey);
+        guardAiClick(function () {
+          if (typeof window.etfAiStartSession === 'function') window.etfAiStartSession(termRowKey);
+        });
       });
     }
     if (btnAiEnd) {
       btnAiEnd.addEventListener('click', function () {
         if (!termRowKey) return;
-        if (typeof window.etfAiEndSession === 'function') window.etfAiEndSession(termRowKey);
+        guardAiClick(function () {
+          if (typeof window.etfAiEndSession === 'function') window.etfAiEndSession(termRowKey);
+        });
       });
     }
     if (btnAiUpload) {
       btnAiUpload.addEventListener('click', function () {
         if (!termRowKey) { showErr('Search SN first'); return; }
-        if (typeof window.etfAiUpload === 'function') window.etfAiUpload(termRowKey);
+        guardAiClick(function () {
+          if (typeof window.etfAiUpload === 'function') window.etfAiUpload(termRowKey);
+        });
       });
     }
 

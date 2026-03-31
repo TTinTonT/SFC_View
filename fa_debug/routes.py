@@ -2443,6 +2443,13 @@ def api_etf_online_test_wip():
             default_station = next_station if next_station in filtered_stations else (
                 filtered_stations[0] if filtered_stations else ""
             )
+            try:
+                from crabber.client import sn_has_active_crabber_test
+
+                _active, _ = sn_has_active_crabber_test(sn)
+                crabber_busy = bool(_active)
+            except Exception:
+                crabber_busy = False
             return jsonify({
                 "ok": True,
                 "wip": _serialize_wip(wip),
@@ -2453,6 +2460,7 @@ def api_etf_online_test_wip():
                 "default_station": default_station,
                 "is_repair": has_unrepaired,
                 "button_label": button_label,
+                "crabber_test_in_progress": crabber_busy,
             })
         finally:
             conn.close()
@@ -2623,7 +2631,28 @@ def api_etf_online_test_prepare():
     pn_name = (data.get("pn_name") or data.get("pn") or "").strip()
     if not pn_name:
         return jsonify({"ok": False, "error": "pn_name required"}), 400
+    sn_norm = (data.get("sn") or "").strip().upper()
+    sn_lk = None
+    if sn_norm:
+        sn_lk = _get_sn_lock(sn_norm)
+        if not sn_lk.acquire(blocking=False):
+            return jsonify({
+                "ok": False,
+                "error": "Another operation is in progress for this SN. Please wait.",
+            }), 409
     try:
+        if sn_norm:
+            from crabber.client import sn_has_active_crabber_test
+
+            active, _ = sn_has_active_crabber_test(sn_norm)
+            if active:
+                return jsonify({
+                    "ok": False,
+                    "error": (
+                        "A test is already running on Crabber for this SN (PROC/Testing). "
+                        "Finish or cancel before starting another."
+                    ),
+                }), 409
         from config.debug_config import CRABBER_USER_ID
         from crabber.online_test import (
             check_pn_mapping,
@@ -2677,6 +2706,12 @@ def api_etf_online_test_prepare():
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if sn_lk is not None:
+            try:
+                sn_lk.release()
+            except Exception:
+                pass
 
 
 @bp.route("/api/etf/online-test/start", methods=["POST"])
@@ -2706,11 +2741,29 @@ def api_etf_online_test_start():
         units = int(units) if units is not None else 1
     except (TypeError, ValueError):
         units = 1
+    sn_norm = sn.strip().upper()
+    sn_lock = _get_sn_lock(sn_norm)
+    if not sn_lock.acquire(blocking=False):
+        return jsonify({
+            "ok": False,
+            "error": "Another operation is in progress for this SN. Please wait.",
+        }), 409
     try:
+        from crabber.client import sn_has_active_crabber_test
+
+        active, _ = sn_has_active_crabber_test(sn_norm)
+        if active:
+            return jsonify({
+                "ok": False,
+                "error": (
+                    "A test is already running on Crabber for this SN (PROC/Testing). "
+                    "Finish or cancel before starting another."
+                ),
+            }), 409
         from config.debug_config import CRABBER_USER_ID
         from crabber.online_test import build_scan_code_map, run_start_test_sequence
         user_id = str(CRABBER_USER_ID or "41").strip()
-        scan_map = build_scan_code_map(scan_items, env_items, sn.strip().upper(), emp)
+        scan_map = build_scan_code_map(scan_items, env_items, sn_norm, emp)
         trial_run = bool(data.get("trial_run"))
         result = run_start_test_sequence(
             machine_id=machine_id,
@@ -2726,6 +2779,11 @@ def api_etf_online_test_start():
         return jsonify({"ok": True, **result})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        try:
+            sn_lock.release()
+        except Exception:
+            pass
 
 
 @bp.route("/api/debug-data", methods=["GET"])

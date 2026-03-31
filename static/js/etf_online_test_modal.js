@@ -11,6 +11,31 @@
   }
 
   let otCtx = { sn: "", wip: null, prepare: null, emp: "SJOP", selectedMachineId: null };
+  let otApiBusy = 0;
+
+  function otIsBusy() {
+    return otApiBusy > 0;
+  }
+  function otPushBusy() {
+    otApiBusy += 1;
+    otSyncActionDisabledState();
+  }
+  function otPopBusy() {
+    otApiBusy = Math.max(0, otApiBusy - 1);
+    otSyncActionDisabledState();
+  }
+  function otSyncActionDisabledState() {
+    const busy = otIsBusy();
+    ["etf-ot-repair-run", "etf-ot-prepare", "etf-ot-pn-add", "etf-ot-pn-del"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = busy;
+    });
+    const startBtn = document.getElementById("etf-ot-start");
+    if (startBtn) {
+      const mid = otCtx.selectedMachineId;
+      startBtn.disabled = busy || mid == null || Number.isNaN(mid);
+    }
+  }
 
   function otShowStep(step) {
     const steps = ["loading", "repair", "config", "machines", "result"];
@@ -85,12 +110,17 @@
         "<option value=\"" + escapeHtml(g) + "\"" + (g === d.default_station ? " selected" : "") + ">" + escapeHtml(g) + "</option>"
       ).join("");
     }
+    otPushBusy();
     return fetch("/api/etf/online-test/pn-list")
       .then((r) => r.json())
       .then((data) => {
         if (data.ok && data.bases) otRenderBases(data.bases);
         otShowStep("config");
-      });
+      })
+      .catch((e) => {
+        otShowResult(false, String(e.message || e), "");
+      })
+      .finally(() => otPopBusy());
   }
 
   function renderOtMachineList() {
@@ -124,7 +154,7 @@
         const picked = document.getElementById("etf-ot-machine-picked");
         if (picked) picked.textContent = "Selected machine ID: " + otCtx.selectedMachineId;
         const startBtn = document.getElementById("etf-ot-start");
-        if (startBtn) startBtn.disabled = isNaN(otCtx.selectedMachineId);
+        if (startBtn) startBtn.disabled = otIsBusy() || isNaN(otCtx.selectedMachineId);
       });
     });
   }
@@ -132,9 +162,11 @@
   function openOnlineTest(sn) {
     const modal = document.getElementById("etf-online-test-modal");
     if (!modal || !sn) return;
+    if (otIsBusy()) return;
     otCtx = { sn: sn.trim().toUpperCase(), wip: null, prepare: null, emp: "SJOP", selectedMachineId: null };
     modal.setAttribute("aria-hidden", "false");
     otShowStep("loading");
+    otPushBusy();
     fetch("/api/etf/online-test/wip?sn=" + encodeURIComponent(otCtx.sn))
       .then((r) => r.json())
       .then((data) => {
@@ -142,11 +174,19 @@
           otShowResult(false, data.error || "WIP request failed", "");
           return;
         }
+        if (data.crabber_test_in_progress) {
+          otShowResult(
+            false,
+            "Crabber already has a test in progress for this SN (PROC/Testing). Finish or cancel before starting another.",
+            "",
+          );
+          return;
+        }
         otCtx.wip = data;
         const title = document.getElementById("etf-ot-title");
         if (title) title.textContent = data.button_label || "Online Test";
         if (data.is_repair) {
-          loadOtReasonCodes().then(() => {
+          return loadOtReasonCodes().then(() => {
             const badge = document.getElementById("etf-ot-repair-badge");
             if (badge) badge.textContent = "Retest (repair)";
             const remark = document.getElementById("etf-ot-remark");
@@ -155,11 +195,11 @@
             if (reEm && !reEm.value) reEm.value = "SJOP";
             otShowStep("repair");
           });
-        } else {
-          showOtConfig().catch((e) => otShowResult(false, String(e.message || e), ""));
         }
+        return showOtConfig();
       })
-      .catch((e) => otShowResult(false, String(e.message || e), ""));
+      .catch((e) => otShowResult(false, String(e.message || e), ""))
+      .finally(() => otPopBusy());
   }
 
   (function bindOnlineTestModal() {
@@ -175,6 +215,7 @@
         window.alert("Select reason code");
         return;
       }
+      otPushBusy();
       fetch("/api/etf/online-test/repair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -190,12 +231,19 @@
         })
         .then((data) => {
           if (!data || !data.ok) return;
+          if (data.crabber_test_in_progress) {
+            window.alert(
+              "Crabber already has a test in progress for this SN. Finish or cancel before continuing.",
+            );
+            return;
+          }
           otCtx.wip = data;
           const t = document.getElementById("etf-ot-title");
           if (t) t.textContent = data.button_label || "Online Test";
           return showOtConfig();
         })
-        .catch((e) => window.alert(String(e)));
+        .catch((e) => window.alert(String(e)))
+        .finally(() => otPopBusy());
     });
 
     document.getElementById("etf-ot-pn")?.addEventListener("change", otUpdatePnPreview);
@@ -205,6 +253,7 @@
       const inp = document.getElementById("etf-ot-pn-new");
       const v = (inp && inp.value || "").trim();
       if (!v) return;
+      otPushBusy();
       fetch("/api/etf/online-test/pn-list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -218,7 +267,9 @@
           if (pn) pn.value = v;
           otUpdatePnPreview();
           if (inp) inp.value = "";
-        });
+        })
+        .catch((e) => window.alert(String(e)))
+        .finally(() => otPopBusy());
     });
 
     document.getElementById("etf-ot-pn-del")?.addEventListener("click", () => {
@@ -231,6 +282,7 @@
         return;
       }
       if (!window.confirm("Remove custom base \"" + base + "\"?")) return;
+      otPushBusy();
       fetch("/api/etf/online-test/pn-list", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
@@ -240,7 +292,9 @@
         .then((data) => {
           if (!data.ok || !data.bases) return;
           otRenderBases(data.bases);
-        });
+        })
+        .catch((e) => window.alert(String(e)))
+        .finally(() => otPopBusy());
     });
 
     document.getElementById("etf-ot-prepare")?.addEventListener("click", () => {
@@ -257,6 +311,7 @@
       }
       const pn = base + "_" + station;
       otCtx.emp = emp;
+      otPushBusy();
       fetch("/api/etf/online-test/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -279,7 +334,8 @@
           renderOtMachineList();
           otShowStep("machines");
         })
-        .catch((e) => window.alert(String(e)));
+        .catch((e) => window.alert(String(e)))
+        .finally(() => otPopBusy());
     });
 
     document.getElementById("etf-ot-back-config")?.addEventListener("click", () => {
@@ -301,6 +357,7 @@
         sfc_ext: p.sfc_ext || "",
         units: p.units,
       };
+      otPushBusy();
       fetch("/api/etf/online-test/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -321,7 +378,8 @@
           }
           otShowResult(true, "Started. Log ID: " + (data.log_id != null ? data.log_id : "(see detail)"), detail);
         })
-        .catch((e) => otShowResult(false, String(e.message || e), ""));
+        .catch((e) => otShowResult(false, String(e.message || e), ""))
+        .finally(() => otPopBusy());
     });
 
     document.getElementById("etf-ot-machine-filter")?.addEventListener("input", () => {

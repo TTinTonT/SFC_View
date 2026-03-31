@@ -290,6 +290,37 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
     return result
 
 
+def sn_has_active_crabber_test(
+    sn: str, *, timeout: int = 12, limit: int = 80
+) -> tuple[bool, Optional[str]]:
+    """
+    True if Crabber log rows for SN show an in-progress test (node_log_event PROC or display Testing).
+
+    Returns (active, crabber_error). crabber_error is set when the Crabber list could not be fetched;
+    (False, None) means fetched OK and no active row.
+    """
+    s = (sn or "").strip()
+    if not s:
+        return False, "sn empty"
+    res = fetch_test_history_for_sn(s, timeout=timeout, limit=limit)
+    if not res.get("ok"):
+        return False, str(res.get("error") or "crabber fetch failed")
+    want = s.upper()
+    for t in res.get("tests") or []:
+        if not isinstance(t, dict):
+            continue
+        row_sn = str(t.get("sn") or t.get("SN") or "").strip().upper()
+        if row_sn and row_sn != want:
+            continue
+        ev = str(t.get("node_log_event") or "").strip().upper()
+        if ev == "PROC":
+            return True, None
+        disp = str(t.get("result") or "").strip().upper()
+        if disp == "TESTING":
+            return True, None
+    return False, None
+
+
 def fetch_log_report_path(sn: str, timeout: int = 15) -> Optional[str]:
     """
     Fetch Log Report File Path for SN.
