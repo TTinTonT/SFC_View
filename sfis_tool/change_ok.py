@@ -349,7 +349,10 @@ def validate_tree_integrity(conn, sn):
     for _, _, row, _, _, _ in numbered_list:
         vsn = str(row.get("VENDOR_SN") or "").strip().upper()
         assy_flag = str(row.get("ASSY_FLAG") or "").strip().upper()
-        if not vsn or assy_flag != "Y" or _is_config_vendor(vsn):
+        sub_model = str(row.get("SUB_MODEL_NAME") or "").strip().upper()
+        # Ignore non-unique PN-like rows in duplicate guard; these are expected repeats and not traceable serialized components.
+        is_pn_like_component = sub_model.endswith("-PN")
+        if not vsn or assy_flag != "Y" or _is_config_vendor(vsn) or is_pn_like_component:
             continue
         dup[vsn] = dup.get(vsn, 0) + 1
     invalid = sorted([k for k, c in dup.items() if c > 1])
