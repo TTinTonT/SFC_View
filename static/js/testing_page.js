@@ -820,7 +820,7 @@
       lockUI('Passing current station...');
       api('/api/debug/repair/pass-jump', {
         method: 'POST',
-        body: { sn: sn, target_group: target, emp_no: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+        body: { sn: sn, target_group: target, emp_no: (inputEmpTop.value || '').trim() }
       }).then(function (res) {
         if (!res.json.ok) { showErr(res.json.error || 'Pass jump failed'); return; }
         showOk('Jump completed.');
@@ -884,7 +884,7 @@
       lockUI('Updating fail...');
       api('/api/debug/repair/fail-input', {
         method: 'POST',
-        body: { sn: sn, error_code: ec, emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+        body: { sn: sn, error_code: ec, emp: (inputEmpTop.value || '').trim() }
       }).then(function (res) {
         if (!res.json.ok) { showErr(res.json.error || 'Update fail failed'); return; }
         failModal.classList.add('hidden');
@@ -896,7 +896,7 @@
     function doRepair(desiredTarget) {
       if (requestPending) return;
       var sn = (inputSn.value || '').trim();
-      var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
+      var emp = (inputEmpTop.value || '').trim();
       if (!sn) { showErr('Search SN first'); return; }
       if (hasInvalidDuplicate) { showErr('Duplicate vendor SN data is invalid. Please fix via IT Kitting first.'); return; }
       if (!selReason.value || !selAction.value || !selDuty.value) { showErr('Please fill Reason/Action/Duty.'); return; }
@@ -934,7 +934,7 @@
       if (typeof forceContinue !== 'boolean') forceContinue = false;
       if (typeof forceDekitOtherTray !== 'boolean') forceDekitOtherTray = false;
       var sn = (inputSn.value || '').trim();
-      var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
+      var emp = (inputEmpTop.value || '').trim();
       if (!sn) { showErr('Search SN first.'); return; }
       if (hasInvalidDuplicate) { showErr('Duplicate vendor SN data is invalid. Please fix via IT Kitting first.'); return; }
       var kitBuilt = buildKitList(true);
@@ -990,7 +990,7 @@
     function doDekit() {
       if (requestPending) return;
       var sn = (inputSn.value || '').trim();
-      var emp = (inputEmpTop.value || 'SJOP').trim() || 'SJOP';
+      var emp = (inputEmpTop.value || '').trim();
       var subtreeNums = getSubtreeNums(selectedRootNum);
       if (!sn) { showErr('Search SN first.'); return; }
       if (!subtreeNums.length) { showErr('Please select one row for dekit.'); return; }
@@ -1025,7 +1025,7 @@
       if ((options.repair_actions || []).indexOf('RETEST') >= 0) selAction.value = 'RETEST';
       if ((options.duty_types || []).indexOf('TEST FIXTURE') >= 0) selDuty.value = 'TEST FIXTURE';
       inputRemark.value = 'Retest';
-      doRepair('FLB');
+      doRepair('__AUTO_RC500__');
     }
     function onRc36() {
       if (!confirm('Confirm RC36 and move station back to FLA?')) return;
@@ -1044,7 +1044,7 @@
       if (!sn || !base) { showErr('Missing SN or base.'); return; }
       var endpoint = station === 'DI' ? '/api/debug/repair/di-next' : '/api/debug/repair/ri-next';
       lockUI('Moving to next station...');
-      api(endpoint, { method: 'POST', body: { sn: sn, base: base, emp_no: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' } }).then(function (res) {
+      api(endpoint, { method: 'POST', body: { sn: sn, base: base, emp_no: (inputEmpTop.value || '').trim() } }).then(function (res) {
         if (!res.json.ok) { showErr(res.json.error || 'Next failed'); return; }
         showOk('Moved to next station.');
         unlockUI();
@@ -1060,7 +1060,7 @@
       lockUI('DO Pass...');
       api('/api/debug/repair/do-pass', {
         method: 'POST',
-        body: { sn: sn, base: base, reason_code: reasonCode, remark: (inputDoRemark.value || '').trim(), emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+        body: { sn: sn, base: base, reason_code: reasonCode, remark: (inputDoRemark.value || '').trim(), emp: (inputEmpTop.value || '').trim() }
       }).then(function (res) {
         if (!res.json.ok) { showErr(res.json.error || 'DO Pass failed'); return; }
         showOk('DO Pass completed.');
@@ -1077,7 +1077,7 @@
       lockUI('DO Fail...');
       api('/api/debug/repair/do-fail', {
         method: 'POST',
-        body: { sn: sn, base: base, reason_code: reasonCode, emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+        body: { sn: sn, base: base, reason_code: reasonCode, emp: (inputEmpTop.value || '').trim() }
       }).then(function (res) {
         if (!res.json.ok) { showErr(res.json.error || 'DO Fail failed'); return; }
         showOk('DO Fail completed.');
@@ -1094,7 +1094,7 @@
       lockUI('RO Next...');
       api('/api/debug/repair/ro-next', {
         method: 'POST',
-        body: { sn: sn, base: base, reason_code: reasonCode, remark: (inputRoNextRemark.value || '').trim(), emp: (inputEmpTop.value || 'SJOP').trim() || 'SJOP' }
+        body: { sn: sn, base: base, reason_code: reasonCode, remark: (inputRoNextRemark.value || '').trim(), emp: (inputEmpTop.value || '').trim() }
       }).then(function (res) {
         if (!res.json.ok) { showErr(res.json.error || 'RO Next failed'); return; }
         showOk('RO Next completed.');

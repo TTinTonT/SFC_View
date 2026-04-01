@@ -236,7 +236,7 @@ def login_flow(username: str, password: str, ip: str) -> Tuple[bool, Optional[st
         conn.close()
 
 
-VALID_PAGE_KEYS = frozenset({"debug", "repair", "jump-station", "kitting", "kitting-sql", "testing"})
+VALID_PAGE_KEYS = frozenset({"debug", "repair", "jump-station", "kitting-sql", "testing"})
 
 
 def get_user_page_permissions(conn, user_id: int) -> set:
@@ -272,3 +272,35 @@ def get_current_user(request) -> Optional[Dict]:
         return get_user_by_token(conn, token)
     finally:
         conn.close()
+
+
+def default_emp_for_ui(user: Optional[Dict]) -> str:
+    """Default EMP / employee ID for form fields: profile employee_id, else username, else SJOP."""
+    if not user:
+        return "SJOP"
+    eid = (user.get("employee_id") or "").strip()
+    if eid:
+        return eid
+    un = (user.get("username") or "").strip()
+    if un:
+        return un
+    return "SJOP"
+
+
+def resolve_sfis_emp(request, explicit: Optional[str] = None, *, last_resort: str = "SJOP") -> str:
+    """
+    EMP for Oracle/SFIS actions. Non-empty explicit (e.g. from JSON body) wins so the user can override.
+    Otherwise logged-in user's employee_id, then username, then last_resort.
+    """
+    if explicit is not None:
+        t = (explicit or "").strip()
+        if t:
+            return t
+    u = getattr(request, "current_user", None) or {}
+    eid = (u.get("employee_id") or "").strip()
+    if eid:
+        return eid
+    un = (u.get("username") or "").strip()
+    if un:
+        return un
+    return last_resort

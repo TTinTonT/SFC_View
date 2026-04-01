@@ -68,7 +68,6 @@
       <a href="/debug/repair" class="nav-btn {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
       <a href="/debug/testing" class="nav-btn {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
       <a href="/debug/jump-station" class="nav-btn {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
-      <a href="/debug/kitting" class="nav-btn {{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
       <a href="/debug/kitting-sql" class="nav-btn active {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
       <a href="/" class="nav-btn">Analytics</a>
       <form method="post" action="/api/auth/logout" style="display: inline;">
@@ -155,6 +154,7 @@
   var newVendorByNum = {};
   var modalMode = 'edit';
   var filterText = '';
+  var kittingDefaultEmpNo = {{ (default_employee_id|default('SJOP'))|tojson }};
 
   var EDIT_MODAL_FIELDS = ['ROWID','SERIAL_NUMBER','MO_NUMBER','MODEL_NAME','REV','FATHER_SN','LINE_NAME','IN_STATION_TIME','SUB_MODEL_NAME','SUB_REV','VENDOR_SN','CUST_PN','CUST_REV','ASSY_ORD','ASSY_FLAG','ASSY_QTY','EMP_NO','GROUP_NAME','CUST_NO','LEVEL_GRADE','LEVEL_NO','PPID_MODEL','SUB_PPID','SLOT','PPID_HEADER','REV_FLAG','DEBUG_FLAG','ASSY_SEQ','DATE_CODE','REFERENCE_TIME','STACK'];
 
@@ -499,7 +499,7 @@
       var existing = byVendor[newV];
       if (!existing || existing.num === node.num) {
         oldToNew[oldV] = newV;
-        updates.push({ node: node, vendorSn: newV, fatherSn: (function () { var f = node.father_sn || ''; return oldToNew[f] !== undefined ? oldToNew[f] : f; })(), empNo: 'T81047' });
+        updates.push({ node: node, vendorSn: newV, fatherSn: (function () { var f = node.father_sn || ''; return oldToNew[f] !== undefined ? oldToNew[f] : f; })(), empNo: kittingDefaultEmpNo });
       } else {
         var S = existing;
         if (treeStructureKey(node.num) !== treeStructureKey(S.num)) { showMsg(false, 'Part structure mismatch, cannot swap.'); return; }
@@ -512,14 +512,14 @@
         if ((child.father_sn || '') !== oldV) return;
         var already = updates.some(function (u) { return u.node.num === child.num; });
         if (already) return;
-        updates.push({ node: child, vendorSn: child.vendor_sn || '', fatherSn: oldToNew[oldV], empNo: 'T81047' });
+        updates.push({ node: child, vendorSn: child.vendor_sn || '', fatherSn: oldToNew[oldV], empNo: kittingDefaultEmpNo });
       });
     }
     for (var p = 0; p < swapPairs.length; p++) {
       var pair = swapPairs[p], R = pair.R, S = pair.S, newR = pair.newVendorR, newS = pair.newVendorS;
       // Swap must assign each row the opposite vendor target; old mapping produced no-op updates.
-      updates.push({ node: R, vendorSn: newR, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (S.father_sn || '') : (R.father_sn || ''), empNo: 'T81047' });
-      updates.push({ node: S, vendorSn: newS, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (R.father_sn || '') : (S.father_sn || ''), empNo: 'T81047' });
+      updates.push({ node: R, vendorSn: newR, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (S.father_sn || '') : (R.father_sn || ''), empNo: kittingDefaultEmpNo });
+      updates.push({ node: S, vendorSn: newS, fatherSn: (R.father_sn || '') !== (S.father_sn || '') ? (R.father_sn || '') : (S.father_sn || ''), empNo: kittingDefaultEmpNo });
     }
     var byRowid = {};
     updates.forEach(function (u) {

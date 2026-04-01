@@ -123,7 +123,6 @@
       <a href="/debug/repair" class="nav-btn {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
       <a href="/debug/testing" class="nav-btn active {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
       <a href="/debug/jump-station" class="nav-btn {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
-      <a href="/debug/kitting" class="nav-btn {{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
       <a href="/debug/kitting-sql" class="nav-btn {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
       <a href="/" class="nav-btn">Analytics</a>
       <form method="post" action="/api/auth/logout" style="display: inline;">
@@ -137,7 +136,7 @@
       <div class="flex gap-2 flex-wrap">
         <input type="text" id="input-sn" class="flex-1 min-w-[15rem] max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Enter SN">
         <label class="text-sm flex items-center gap-2">Employee ID
-          <input type="text" id="input-emp-top" value="SJOP" class="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] w-40">
+          <input type="text" id="input-emp-top" value="{{ default_employee_id|default('SJOP') }}" class="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] w-40" title="Defaults from profile Employee ID; edit anytime">
         </label>
         <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
         <button type="button" id="btn-online-test" class="etf-online-test-btn self-center">Online test</button>
@@ -352,7 +351,7 @@
         <div id="etf-ot-step-repair" class="etf-ot-step" style="display:none;">
           <p class="etf-ot-badge" id="etf-ot-repair-badge">Retest</p>
           <label class="etf-ot-label">Employee ID</label>
-          <input type="text" id="etf-ot-repair-emp" class="etf-ot-input" placeholder="e.g. SJOP" value="SJOP">
+          <input type="text" id="etf-ot-repair-emp" class="etf-ot-input" placeholder="Employee ID" value="{{ default_employee_id|default('SJOP') }}">
           <label class="etf-ot-label">Reason Code</label>
           <select id="etf-ot-reason" class="etf-ot-input"></select>
           <label class="etf-ot-label">Remark</label>
@@ -376,7 +375,7 @@
           </div>
           <p id="etf-ot-pn-preview" class="etf-ot-muted" style="margin:2px 0 0;font-weight:600"></p>
           <label class="etf-ot-label">Employee ID</label>
-          <input type="text" id="etf-ot-emp" class="etf-ot-input" placeholder="e.g. SJOP">
+          <input type="text" id="etf-ot-emp" class="etf-ot-input" placeholder="Employee ID" value="{{ default_employee_id|default('SJOP') }}">
           <label class="etf-ot-label">Tray SN</label>
           <input type="text" id="etf-ot-sn-ro" class="etf-ot-input" readonly>
           <div class="etf-ot-actions">
@@ -407,7 +406,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
   <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js" defer></script>
-  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} };</script>
+  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} }; window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }};</script>
   <script src="/static/js/fa_debug.js" defer></script>
   <script src="/static/js/etf_online_test_modal.js" defer></script>
   <script src="/static/js/etf_terminal_helpers.js" defer></script>

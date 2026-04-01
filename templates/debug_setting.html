@@ -49,7 +49,6 @@
     <a href="/debug/repair" class="{{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
     <a href="/debug/testing" class="{{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
     <a href="/debug/jump-station" class="{{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
-    <a href="/debug/kitting" class="{{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
     <a href="/debug/kitting-sql" class="{{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
     <a href="/">Analytics</a>
     <form method="post" action="/api/auth/logout" style="display: inline;">
@@ -64,6 +63,7 @@
       <table>
         <thead>
           <tr>
+            <th>Employee ID</th>
             <th>Username</th>
             <th>Full name</th>
             <th>Dept</th>
@@ -153,6 +153,18 @@
     </div>
   </div>
 
+  <div id="employee-id-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Employee ID</h3>
+      <p class="hint">Must not be empty (same rule as creating a user).</p>
+      <div class="form-row"><label>ID</label><input type="text" id="eid-input" placeholder="Employee ID"></div>
+      <div style="margin-top: 0.75rem;">
+        <button type="button" class="btn-sm" id="eid-save">Save</button>
+        <button type="button" class="btn-sm" id="eid-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="pages-modal" class="modal-overlay">
     <div class="modal-box">
       <h3>Page permissions – <span id="pages-modal-username"></span></h3>
@@ -166,7 +178,6 @@
         <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-repair" value="repair"> Repair</label>
         <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-testing" value="testing"> Testing (SN)</label>
         <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-jump-station" value="jump-station"> IT Jump</label>
-        <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-kitting" value="kitting"> IT Kitting</label>
         <label class="form-row" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;"><input type="checkbox" id="page-kitting-sql" value="kitting-sql"> IT Kitting SQL</label>
       </div>
       <div style="margin-top: 0.75rem;">
@@ -203,6 +214,9 @@
 
   <script>
   (function() {
+    function escAttr(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    }
     function api(path, opts) {
       opts = opts || {};
       var url = path;
@@ -228,6 +242,7 @@
           var allowedIp = u.allow_all_ip ? 'All' : ((u.allowed_ips && u.allowed_ips[0]) ? u.allowed_ips[0] : '-');
           var locked = u.locked ? 'Yes' : '';
           return '<tr data-user-id="' + u.id + '">' +
+            '<td>' + (u.employee_id != null && String(u.employee_id).trim() !== '' ? String(u.employee_id) : '') + '</td>' +
             '<td>' + (u.username || '') + '</td>' +
             '<td>' + (u.full_name || '') + '</td>' +
             '<td>' + (u.department || '') + '</td>' +
@@ -237,6 +252,7 @@
             '<td>' + allowedIp + '</td>' +
             '<td>' + locked + '</td>' +
             '<td>' +
+              '<button type="button" class="btn-sm btn-employee-id" data-id="' + u.id + '" data-employee-id="' + escAttr(u.employee_id != null && String(u.employee_id).trim() !== '' ? String(u.employee_id) : '') + '">Employee ID</button>' +
               '<button type="button" class="btn-sm btn-reset-pw" data-id="' + u.id + '">Reset PW</button>' +
               '<button type="button" class="btn-sm btn-modify-ip" data-id="' + u.id + '" data-ip="' + (allowedIp !== 'All' && allowedIp !== '-' ? allowedIp : '') + '">Modify IP</button>' +
               '<button type="button" class="btn-sm btn-allow-all" data-id="' + u.id + '" data-allow="' + (u.allow_all_ip ? '1' : '0') + '">' + (u.allow_all_ip ? 'Disallow all IP' : 'Allow all IP') + '</button>' +
@@ -251,6 +267,15 @@
     }
 
     function bindUserActions() {
+      document.querySelectorAll('.btn-employee-id').forEach(function(btn) {
+        btn.onclick = function() {
+          var uid = parseInt(btn.dataset.id, 10);
+          var cur = btn.getAttribute('data-employee-id') || '';
+          document.getElementById('employee-id-modal').dataset.userId = String(uid);
+          document.getElementById('eid-input').value = cur;
+          document.getElementById('employee-id-modal').classList.add('show');
+        };
+      });
       document.querySelectorAll('.btn-reset-pw').forEach(function(btn) {
         btn.onclick = function() {
           if (!confirm('Reset password to 123?')) return;
@@ -313,7 +338,7 @@
           document.getElementById('pages-modal-username').textContent = username || 'User #' + uid;
           api('/api/debug/setting/user/permissions?user_id=' + uid).then(function(d) {
             var pages = (d.ok && d.pages) ? d.pages : [];
-            ['debug','repair','testing','jump-station','kitting','kitting-sql'].forEach(function(k) {
+            ['debug','repair','testing','jump-station','kitting-sql'].forEach(function(k) {
               var cb = document.getElementById('page-' + k);
               if (cb) cb.checked = pages.indexOf(k) !== -1;
             });
@@ -323,7 +348,7 @@
       });
     }
 
-    var pageKeys = ['debug','repair','testing','jump-station','kitting','kitting-sql'];
+    var pageKeys = ['debug','repair','testing','jump-station','kitting-sql'];
     document.getElementById('pages-select-all').onclick = function() {
       pageKeys.forEach(function(k) { var cb = document.getElementById('page-' + k); if (cb) cb.checked = true; });
     };
@@ -499,6 +524,23 @@
       if (end.length >= 5) end = end.slice(0, 5).replace(/^(\d):/, '0$1:');
       api('/api/debug/setting/user/time-window', { method: 'POST', body: { user_id: parseInt(uid, 10), start_time: start || '0:00', end_time: end || '0:00' } }).then(function(d) {
         if (d.ok) { document.getElementById('time-window-modal').classList.remove('show'); loadUsers(); }
+        else alert(d.error || 'Failed');
+      });
+    };
+
+    document.getElementById('eid-cancel').onclick = function() {
+      document.getElementById('employee-id-modal').classList.remove('show');
+    };
+    document.getElementById('employee-id-modal').onclick = function(e) {
+      if (e.target === this) this.classList.remove('show');
+    };
+    document.getElementById('eid-save').onclick = function() {
+      var uid = document.getElementById('employee-id-modal').dataset.userId;
+      if (!uid) return;
+      var eid = document.getElementById('eid-input').value.trim();
+      if (!eid) { alert('Employee ID required'); return; }
+      api('/api/debug/setting/user/employee-id', { method: 'POST', body: { user_id: parseInt(uid, 10), employee_id: eid } }).then(function(d) {
+        if (d.ok) { document.getElementById('employee-id-modal').classList.remove('show'); loadUsers(); }
         else alert(d.error || 'Failed');
       });
     };

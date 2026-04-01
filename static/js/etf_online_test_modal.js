@@ -10,7 +10,14 @@
     return div.innerHTML;
   }
 
-  let otCtx = { sn: "", wip: null, prepare: null, emp: "SJOP", selectedMachineId: null };
+  /** Matches server default_emp_for_ui / resolve_sfis_emp fallback when inputs are empty. */
+  function otProfileEmpFallback() {
+    const w = typeof window !== "undefined" ? window : {};
+    const d = String(w.__DEFAULT_EMPLOYEE_ID__ || "").trim();
+    return d || "SJOP";
+  }
+
+  let otCtx = { sn: "", wip: null, prepare: null, emp: "", selectedMachineId: null };
   let otApiBusy = 0;
 
   function otIsBusy() {
@@ -103,7 +110,7 @@
     const snRo = document.getElementById("etf-ot-sn-ro");
     if (snRo) snRo.value = otCtx.sn;
     const empEl = document.getElementById("etf-ot-emp");
-    if (empEl && !empEl.value) empEl.value = "SJOP";
+    if (empEl && !String(empEl.value || "").trim()) empEl.value = otProfileEmpFallback();
     const st = document.getElementById("etf-ot-station");
     if (st) {
       st.innerHTML = (d.filtered_stations || []).map((g) =>
@@ -163,7 +170,7 @@
     const modal = document.getElementById("etf-online-test-modal");
     if (!modal || !sn) return;
     if (otIsBusy()) return;
-    otCtx = { sn: sn.trim().toUpperCase(), wip: null, prepare: null, emp: "SJOP", selectedMachineId: null };
+    otCtx = { sn: sn.trim().toUpperCase(), wip: null, prepare: null, emp: otProfileEmpFallback(), selectedMachineId: null };
     modal.setAttribute("aria-hidden", "false");
     otShowStep("loading");
     otPushBusy();
@@ -192,7 +199,7 @@
             const remark = document.getElementById("etf-ot-remark");
             if (remark) remark.value = "Retest";
             const reEm = document.getElementById("etf-ot-repair-emp");
-            if (reEm && !reEm.value) reEm.value = "SJOP";
+            if (reEm && !String(reEm.value || "").trim()) reEm.value = otProfileEmpFallback();
             otShowStep("repair");
           });
         }
@@ -210,7 +217,7 @@
     document.getElementById("etf-ot-repair-run")?.addEventListener("click", () => {
       const reason = document.getElementById("etf-ot-reason")?.value || "";
       const remark = document.getElementById("etf-ot-remark")?.value || "Retest";
-      const emp = document.getElementById("etf-ot-repair-emp")?.value || "SJOP";
+      const emp = (document.getElementById("etf-ot-repair-emp")?.value || "").trim();
       if (!reason) {
         window.alert("Select reason code");
         return;
@@ -300,7 +307,7 @@
     document.getElementById("etf-ot-prepare")?.addEventListener("click", () => {
       const base = (document.getElementById("etf-ot-pn")?.value || "").trim();
       const station = (document.getElementById("etf-ot-station")?.value || "").trim();
-      const emp = document.getElementById("etf-ot-emp")?.value || "SJOP";
+      const emp = (document.getElementById("etf-ot-emp")?.value || "").trim();
       if (!base) {
         window.alert("Select a PN base");
         return;
@@ -349,7 +356,7 @@
         sn: otCtx.sn,
         pn_name: p.pn_name,
         selected_station: (document.getElementById("etf-ot-station")?.value || "").trim(),
-        emp: otCtx.emp || document.getElementById("etf-ot-emp")?.value || "SJOP",
+        emp: (otCtx.emp || document.getElementById("etf-ot-emp")?.value || "").trim(),
         machine_id: otCtx.selectedMachineId,
         shelf_proc_data: p.shelf_proc_data,
         scan_items: p.scan_items,

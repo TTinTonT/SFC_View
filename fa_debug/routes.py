@@ -11,9 +11,15 @@ from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, redirect, render_template, request
 
 from analytics.service import run_analytics_query
-from config.app_config import ANALYTICS_CACHE_DIR, TABLE_CONFIG_API_URL, TABLE_CONFIG_COOKIE
+from config.app_config import ANALYTICS_CACHE_DIR
 from config.debug_config import LOOKBACK_HOURS, POLL_INTERVAL_SEC
-from fa_debug.auth import get_current_user, get_user_page_permissions, set_user_page_permissions
+from fa_debug.auth import (
+    default_emp_for_ui,
+    get_current_user,
+    get_user_page_permissions,
+    resolve_sfis_emp,
+    set_user_page_permissions,
+)
 from fa_debug.auth_db import connect_auth_db, ensure_auth_db
 from fa_debug.logic import prepare_debug_rows
 
@@ -25,10 +31,9 @@ _URL_ACCESS_RULES = [
     ("/api/debug/repair/", frozenset({"repair", "testing"})),
     ("/debug/jump-station", frozenset({"jump-station"})),
     ("/api/debug/jump-station/", frozenset({"jump-station"})),
+    ("/debug/kitting", frozenset({"kitting-sql"})),
     ("/debug/kitting-sql", frozenset({"kitting-sql"})),
     ("/api/debug/kitting-sql/", frozenset({"kitting-sql"})),
-    ("/debug/kitting", frozenset({"kitting"})),
-    ("/api/debug/kitting/", frozenset({"kitting"})),
     ("/debug/testing", frozenset({"testing"})),
     ("/api/debug/testing/", frozenset({"testing"})),
     ("/api/debug-query", frozenset({"debug"})),
@@ -71,7 +76,6 @@ def require_auth():
             "debug",
             "repair",
             "jump-station",
-            "kitting",
             "kitting-sql",
             "testing",
         }
@@ -234,31 +238,56 @@ def debug_page():
     """Serve FA Debug Place page."""
     from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
     user = getattr(request, "current_user", None)
-    return render_template("fa_debug.html", ws_terminal_url=WS_TERMINAL_URL, upload_url=UPLOAD_URL, current_user=user, allowed_pages=getattr(request, "allowed_pages", set()))
+    return render_template(
+        "fa_debug.html",
+        ws_terminal_url=WS_TERMINAL_URL,
+        upload_url=UPLOAD_URL,
+        current_user=user,
+        allowed_pages=getattr(request, "allowed_pages", set()),
+        default_employee_id=default_emp_for_ui(user),
+    )
 
 
 @bp.route("/debug/repair")
 def debug_repair():
     """Repair page: SN search, WIP, tree, form, execute."""
-    return render_template("debug_repair.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
+    u = getattr(request, "current_user", None)
+    return render_template(
+        "debug_repair.html",
+        current_user=u,
+        allowed_pages=getattr(request, "allowed_pages", set()),
+        default_employee_id=default_emp_for_ui(u),
+    )
 
 
 @bp.route("/debug/jump-station")
 def debug_jump_station():
     """IT Jump page: move station flow UI."""
-    return render_template("debug_jump_station.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
+    u = getattr(request, "current_user", None)
+    return render_template(
+        "debug_jump_station.html",
+        current_user=u,
+        allowed_pages=getattr(request, "allowed_pages", set()),
+        default_employee_id=default_emp_for_ui(u),
+    )
 
 
 @bp.route("/debug/kitting")
-def debug_kitting():
-    """IT Kitting page: assy tree from external table_config API."""
-    return render_template("debug_kitting.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
+def debug_kitting_redirect():
+    """Old IT Kitting (table_config) removed; send users to IT Kitting SQL."""
+    return redirect("/debug/kitting-sql")
 
 
 @bp.route("/debug/kitting-sql")
 def debug_kitting_sql():
     """IT Kitting SQL page: assy tree by direct Oracle SQL."""
-    return render_template("debug_kitting_sql.html", current_user=getattr(request, "current_user", None), allowed_pages=getattr(request, "allowed_pages", set()))
+    u = getattr(request, "current_user", None)
+    return render_template(
+        "debug_kitting_sql.html",
+        current_user=u,
+        allowed_pages=getattr(request, "allowed_pages", set()),
+        default_employee_id=default_emp_for_ui(u),
+    )
 
 
 @bp.route("/debug/testing")
@@ -266,16 +295,18 @@ def debug_testing():
     """SN-centric Testing page: tray summary, Crabber history, repair flow, kitting, four terminals."""
     from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
 
+    u = getattr(request, "current_user", None)
     return render_template(
         "debug_testing.html",
         ws_terminal_url=WS_TERMINAL_URL,
         upload_url=UPLOAD_URL,
-        current_user=getattr(request, "current_user", None),
+        current_user=u,
         allowed_pages=getattr(request, "allowed_pages", set()),
+        default_employee_id=default_emp_for_ui(u),
     )
 
 
-# --- IT Kitting API (proxy to external table_config_search_data) ---
+# --- IT Kitting SQL: column whitelist for selectData (update/insert) ---
 _TABLE_CONFIG_COLUMNS2_KEYS = [
     "ROWID", "SERIAL_NUMBER", "MO_NUMBER", "MODEL_NAME", "REV", "FATHER_SN", "LINE_NAME", "IN_STATION_TIME",
     "SUB_MODEL_NAME", "SUB_REV", "VENDOR_SN", "CUST_PN", "CUST_REV", "ASSY_ORD", "ASSY_FLAG", "ASSY_QTY",
@@ -484,130 +515,6 @@ def api_kitting_sql_delete():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@bp.route("/api/debug/kitting/assy-data", methods=["GET"])
-def api_kitting_assy_data():
-    """Proxy to external table_config_search_data API. Returns rows for assy tree."""
-    import requests
-    sn = (request.args.get("sn") or "").strip().upper()
-    if not sn:
-        return jsonify({"ok": False, "error": "sn required"}), 400
-    if not TABLE_CONFIG_API_URL:
-        return jsonify({"ok": False, "error": "TABLE_CONFIG_API_URL not configured"}), 500
-    columns2 = {k: "" for k in _TABLE_CONFIG_COLUMNS2_KEYS}
-    columns2["SERIAL_NUMBER"] = sn
-    columns2["IN_STATION_TIME"] = []
-    columns2["REFERENCE_TIME"] = []
-    payload = {
-        "columns2": columns2,
-        "tableSelected": "select a.rowid,a.* from sfism4.r_assy_component_t a where a.assy_flag ='Y'",
-    }
-    url = f"{TABLE_CONFIG_API_URL}/api/common/table_config_search_data"
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if TABLE_CONFIG_COOKIE:
-        headers["Cookie"] = TABLE_CONFIG_COOKIE
-    try:
-        r = requests.post(url, json=payload, timeout=30, headers=headers)
-        if not r.ok:
-            return jsonify({"ok": False, "error": f"External API returned {r.status_code}"}), 502
-        try:
-            data = r.json()
-        except ValueError as je:
-            ct = r.headers.get("Content-Type", "")
-            hint = " (API may require auth; set TABLE_CONFIG_COOKIE from browser)" if "text/html" in ct else ""
-            return jsonify({"ok": False, "error": f"External API returned invalid JSON{hint}"}), 502
-        if isinstance(data, list):
-            return jsonify({"ok": True, "rows": data})
-        return jsonify({"ok": False, "error": "Invalid response format"}), 502
-    except requests.RequestException as e:
-        return jsonify({"ok": False, "error": str(e)}), 502
-
-
-_TABLE_CONFIG_UPDATE_TABLE = "select a.rowid,a.* from sfism4.r_assy_component_T a where a.assy_flag ='Y'"
-
-
-@bp.route("/api/debug/kitting/table-config-update", methods=["POST"])
-def api_kitting_table_config_update():
-    """Proxy to external table_config_update API. Accepts selectData + tableSelected, forwards with Cookie."""
-    import requests
-    data = request.get_json(silent=True) or {}
-    select_data = data.get("selectData")
-    table_selected = data.get("tableSelected") or _TABLE_CONFIG_UPDATE_TABLE
-    if not select_data or not isinstance(select_data, dict):
-        return jsonify({"ok": False, "error": "selectData required"}), 400
-    if not TABLE_CONFIG_API_URL:
-        return jsonify({"ok": False, "error": "TABLE_CONFIG_API_URL not configured"}), 500
-    payload = {"selectData": select_data, "tableSelected": table_selected}
-    url = f"{TABLE_CONFIG_API_URL}/api/common/table_config_update"
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if TABLE_CONFIG_COOKIE:
-        headers["Cookie"] = TABLE_CONFIG_COOKIE
-    try:
-        r = requests.post(url, json=payload, timeout=30, headers=headers)
-        if not r.ok:
-            return jsonify({"ok": False, "error": f"External API returned {r.status_code}"}), 502
-        try:
-            resp = r.json()
-        except ValueError:
-            text = (r.text or "").strip().lower()
-            if text == '"success"' or text == "success":
-                return jsonify({"ok": True})
-            return jsonify({"ok": False, "error": r.text or "Invalid response"}), 502
-        if resp is True or (isinstance(resp, dict) and resp.get("ok") is True):
-            return jsonify({"ok": True})
-        if isinstance(resp, str) and resp.lower() == "success":
-            return jsonify({"ok": True})
-        return jsonify({"ok": True, "raw": resp})
-    except requests.RequestException as e:
-        return jsonify({"ok": False, "error": str(e)}), 502
-
-
-def _table_config_forward(endpoint):
-    """Proxy to external table_config API. Same logic as table_config_update."""
-    import requests
-    data = request.get_json(silent=True) or {}
-    select_data = data.get("selectData")
-    table_selected = data.get("tableSelected") or _TABLE_CONFIG_UPDATE_TABLE
-    if not select_data or not isinstance(select_data, dict):
-        return jsonify({"ok": False, "error": "selectData required"}), 400
-    if not TABLE_CONFIG_API_URL:
-        return jsonify({"ok": False, "error": "TABLE_CONFIG_API_URL not configured"}), 500
-    payload = {"selectData": select_data, "tableSelected": table_selected}
-    url = f"{TABLE_CONFIG_API_URL}/api/common/{endpoint}"
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if TABLE_CONFIG_COOKIE:
-        headers["Cookie"] = TABLE_CONFIG_COOKIE
-    try:
-        r = requests.post(url, json=payload, timeout=30, headers=headers)
-        if not r.ok:
-            return jsonify({"ok": False, "error": f"External API returned {r.status_code}"}), 502
-        try:
-            resp = r.json()
-        except ValueError:
-            text = (r.text or "").strip().lower()
-            if text == '"success"' or text == "success":
-                return jsonify({"ok": True})
-            return jsonify({"ok": False, "error": r.text or "Invalid response"}), 502
-        if resp is True or (isinstance(resp, dict) and resp.get("ok") is True):
-            return jsonify({"ok": True})
-        if isinstance(resp, str) and resp.lower() == "success":
-            return jsonify({"ok": True})
-        return jsonify({"ok": True, "raw": resp})
-    except requests.RequestException as e:
-        return jsonify({"ok": False, "error": str(e)}), 502
-
-
-@bp.route("/api/debug/kitting/table-config-insert", methods=["POST"])
-def api_kitting_table_config_insert():
-    """Proxy to external table_config_insert API."""
-    return _table_config_forward("table_config_insert")
-
-
-@bp.route("/api/debug/kitting/table-config-delete", methods=["POST"])
-def api_kitting_table_config_delete():
-    """Proxy to external table_config_delete API."""
-    return _table_config_forward("table_config_delete")
-
-
 # --- IT Jump (Jump Station) APIs ---
 _WIP_KEYS = ["SERIAL_NUMBER", "MO_NUMBER", "MODEL_NAME", "STATION_NAME", "LINE_NAME", "GROUP_NAME", "NEXT_STATION"]
 
@@ -731,7 +638,7 @@ def api_jump_station_execute():
     repair_pass = data.get("repair_pass") is True
     if not reason and not repair_pass:
         return jsonify({"ok": False, "error": "Jump reason is required."}), 400
-    emp_no = (data.get("emp_no") or "").strip() or (getattr(request, "current_user", None) or {}).get("username") or "WEB"
+    emp_no = resolve_sfis_emp(request, data.get("emp_no"), last_resort="WEB")
     check_jump_station = data.get("check_jump_station") is True
     try:
         from sfis_tool.db import get_conn
@@ -916,7 +823,7 @@ def api_repair_di_next():
     base = (data.get("base") or "").strip()
     if not sn or not base:
         return jsonify({"ok": False, "error": "sn and base required"}), 400
-    emp_no = (data.get("emp_no") or "").strip() or "SJOP"
+    emp_no = resolve_sfis_emp(request, data.get("emp_no"))
     try:
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next
@@ -963,7 +870,7 @@ def api_repair_ri_next():
     base = (data.get("base") or "").strip()
     if not sn or not base:
         return jsonify({"ok": False, "error": "sn and base required"}), 400
-    emp_no = (data.get("emp_no") or "").strip() or "SJOP"
+    emp_no = resolve_sfis_emp(request, data.get("emp_no"))
     try:
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next
@@ -1010,7 +917,7 @@ def api_repair_do_pass():
     base = (data.get("base") or "").strip()
     reason_code = (data.get("reason_code") or "").strip()
     remark = (data.get("remark") or "").strip()
-    emp = (data.get("emp") or "").strip() or "SJOP"
+    emp = resolve_sfis_emp(request, data.get("emp"))
     if not sn or not base or not reason_code:
         return jsonify({"ok": False, "error": "sn, base, and reason_code required"}), 400
     try:
@@ -1084,7 +991,7 @@ def api_repair_do_fail():
     sn = (data.get("sn") or "").strip().upper()
     base = (data.get("base") or "").strip()
     reason_code = (data.get("reason_code") or "").strip()
-    emp = (data.get("emp") or "").strip() or "SJOP"
+    emp = resolve_sfis_emp(request, data.get("emp"))
     if not sn or not base or not reason_code:
         return jsonify({"ok": False, "error": "sn, base, and reason_code required"}), 400
     try:
@@ -1137,7 +1044,7 @@ def api_repair_ro_next():
     base = (data.get("base") or "").strip()
     reason_code = (data.get("reason_code") or "").strip()
     remark = (data.get("remark") or "").strip()
-    emp = (data.get("emp") or "").strip() or "SJOP"
+    emp = resolve_sfis_emp(request, data.get("emp"))
     if not sn or not base:
         return jsonify({"ok": False, "error": "sn and base required"}), 400
     if not reason_code:
@@ -1225,7 +1132,7 @@ def api_repair_pass_jump():
                 return jsonify({"ok": False, "error": "No WIP for this SN."})
             wip = dict(zip(_WIP_KEYS, row))
             v_line = wip.get("LINE_NAME") or ""
-            emp_no = (data.get("emp_no") or "").strip() or "SJOP"
+            emp_no = resolve_sfis_emp(request, data.get("emp_no"))
             jump_param = get_jump_param_from_route(conn, sn, target_group)
             info = get_group_info(conn, v_line, jump_param)
             if not info:
@@ -1325,7 +1232,7 @@ def api_repair_fail_input():
     ec = (data.get("error_code") or "").strip()
     if not sn or not ec:
         return jsonify({"ok": False, "error": "sn and error_code required"}), 400
-    emp = (data.get("emp") or "").strip() or "SJOP"
+    emp = resolve_sfis_emp(request, data.get("emp"))
     try:
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next
@@ -1414,9 +1321,7 @@ def api_repair_execute():
     sn = (data.get("sn") or "").strip()
     if not sn:
         return jsonify({"ok": False, "error": "sn required"}), 400
-    emp = (data.get("emp") or "").strip() or (getattr(request, "current_user", None) or {}).get("username") or ""
-    if not emp:
-        return jsonify({"ok": False, "error": "emp required"}), 400
+    emp = resolve_sfis_emp(request, data.get("emp"))
     reason_code = (data.get("reason_code") or "RC500").strip()
     desired_target = (data.get("desired_target") or "").strip()
     repair_action = (data.get("repair_action") or "REPLACE").strip()
@@ -1439,6 +1344,7 @@ def api_repair_execute():
     try:
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next, validate_next_station_r
+        from sfis_tool.repair_flow import compute_rc500_jump_next_param
         from sfis_tool.repair_ok import (
             check_has_unrepaired,
             execute_repair_ok,
@@ -1688,6 +1594,14 @@ def api_repair_execute():
             if not success:
                 conn.rollback()
                 return jsonify({"ok": False, "error": err})
+            if (
+                action == "repair"
+                and reason_code == "RC500"
+                and desired_target == "__AUTO_RC500__"
+            ):
+                desired_target = compute_rc500_jump_next_param(
+                    conn, sn, next_station, group_name
+                )
             desired_target = desired_target or resolve_jump_target(reason_code, group_name)
             target_group = get_jump_param_from_route(conn, sn, desired_target)
             info = get_group_info(conn, line_name, target_group)
@@ -1845,6 +1759,38 @@ def api_setting_reset_password():
     try:
         pw_hash = hash_password("123")
         conn.execute("UPDATE users SET password_hash = ?, updated_at_ts = ? WHERE id = ?", (pw_hash, int(__import__("time").time()), int(user_id)))
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+@bp.route("/api/debug/setting/user/employee-id", methods=["POST"])
+def api_setting_user_employee_id():
+    """Update user's employee_id (admin only)."""
+    if _setting_admin() is None:
+        return jsonify({"error": "Forbidden"}), 403
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+    employee_id = (data.get("employee_id") or "").strip()
+    if user_id is None:
+        return jsonify({"error": "user_id required"}), 400
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid user_id"}), 400
+    if not employee_id:
+        return jsonify({"error": "employee_id required"}), 400
+    from fa_debug.auth_db import connect_auth_db
+    conn = connect_auth_db()
+    try:
+        cur = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+        if not cur.fetchone():
+            return jsonify({"error": "User not found"}), 404
+        conn.execute(
+            "UPDATE users SET employee_id = ?, updated_at_ts = ? WHERE id = ?",
+            (employee_id, int(__import__("time").time()), user_id),
+        )
         conn.commit()
         return jsonify({"ok": True})
     finally:
@@ -2531,7 +2477,7 @@ def api_etf_online_test_repair():
     sn = (data.get("sn") or "").strip().upper()
     reason_code = (data.get("reason_code") or "").strip()
     remark = (data.get("remark") or "Retest").strip()
-    emp = (data.get("emp") or "").strip() or "SJOP"
+    emp = resolve_sfis_emp(request, data.get("emp"))
     if not sn or not reason_code:
         return jsonify({"ok": False, "error": "sn and reason_code required"}), 400
     sn_lock = _get_sn_lock(sn)
@@ -2720,7 +2666,7 @@ def api_etf_online_test_start():
     data = request.get_json(silent=True) or {}
     sn = (data.get("sn") or "").strip()
     pn_name = (data.get("pn_name") or data.get("pn") or "").strip()
-    emp = (data.get("emp") or data.get("employee_id") or "").strip() or "SJOP"
+    emp = resolve_sfis_emp(request, data.get("emp") or data.get("employee_id"))
     machine_id = data.get("machine_id")
     shelf_proc_data = data.get("shelf_proc_data") or {}
     scan_items = data.get("scan_items") or []

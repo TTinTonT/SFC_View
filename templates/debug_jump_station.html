@@ -43,7 +43,6 @@
       <a href="/debug/repair" class="nav-btn {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
       <a href="/debug/testing" class="nav-btn {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
       <a href="/debug/jump-station" class="nav-btn active {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
-      <a href="/debug/kitting" class="nav-btn {{ 'disabled' if 'kitting' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting' not in ap else '' }}>IT Kitting</a>
       <a href="/debug/kitting-sql" class="nav-btn {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
       <a href="/" class="nav-btn">Analytics</a>
       <form method="post" action="/api/auth/logout" style="display: inline;">
@@ -85,7 +84,7 @@
       </div>
       <div class="mb-3">
         <label class="block text-sm font-medium mb-1">EMP_NO (optional)</label>
-        <input type="text" id="input-emp" class="max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="e.g. A12345">
+        <input type="text" id="input-emp" class="max-w-xs px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]" placeholder="Employee ID (optional)" value="{{ default_employee_id|default('SJOP') }}" title="Prefilled from profile; leave empty to use profile on server">
       </div>
       <button type="button" id="btn-execute" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">Execute Jump</button>
     </div>
