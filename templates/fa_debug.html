@@ -178,6 +178,8 @@
   .timeline-row.header { font-weight: 600; background: var(--color-hover); }
   .timeline-row.pass { background: rgba(16,185,129,0.08); }
   .timeline-row.fail { background: rgba(239,68,68,0.08); }
+  .timeline-row.testing { background: rgba(250, 204, 21, 0.2); }
+  .timeline-row.testing-offline { background: rgba(147, 197, 253, 0.22); }
   .pin-item.blink { animation: blink 0.5s ease 3; }
   @keyframes blink { 50% { background: rgba(99,102,241,0.3); } }
   .pin-btn { background: transparent; border: none; cursor: pointer; padding: 0 0.25rem; }
@@ -506,7 +508,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
   <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js" defer></script>
-  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} }; window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }};</script>
+  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }}, pollIntervalMs: {{ poll_interval_ms|default(60000)|int }} }; window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }};</script>
   <script src="/static/js/fa_debug.js" defer></script>
   <script>window.ETF_STATUS_HIDE_TEST_BTN = true;</script>
   <script src="/static/js/etf_status.js" defer></script>

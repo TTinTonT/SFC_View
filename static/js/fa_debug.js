@@ -7,7 +7,12 @@
   let timelineFilterQuery = "";
   let timelineNextUpdateSec = 60;
   let timelineCountdownInterval = null;
-  const POLL_MS = 60000;
+  const POLL_MS = (() => {
+    const c = typeof window !== 'undefined' ? window.FA_DEBUG_CONFIG : null;
+    const n = c && Number(c.pollIntervalMs);
+    return n > 0 ? n : 60000;
+  })();
+  let fetchDataInFlight = false;
 
   const $ = (id) => document.getElementById(id);
   const el = (tag, attrs, children) => {
@@ -48,6 +53,8 @@
   }
 
   function fetchData(useCustomRange = false) {
+    if (fetchDataInFlight) return Promise.resolve();
+    fetchDataInFlight = true;
     const startEl = $('date-start');
     const endEl = $('date-end');
     const endNowEl = $('end-now');
@@ -102,6 +109,7 @@
         const banner = document.getElementById('server-offline-banner');
         if (banner) banner.classList.add('show');
       })
+      .finally(() => { fetchDataInFlight = false; })
       .then(() => undefined);
   }
 
@@ -120,20 +128,29 @@
           const st = (r.station || "").toLowerCase();
           const ec = (r.error_code || "").toLowerCase();
           const fm = (r.failure_msg || "").toLowerCase();
-          return sn.includes(q) || pn.includes(q) || st.includes(q) || ec.includes(q) || fm.includes(q);
+          const resStr = (r.result || "").toLowerCase();
+          const off = r.crabber_offline === true ? "offline" : "";
+          return sn.includes(q) || pn.includes(q) || st.includes(q) || ec.includes(q) || fm.includes(q)
+            || resStr.includes(q) || (off && off.includes(q));
         })
       : rows;
     displayRows.forEach((r) => {
       const result = (r.result || '').toUpperCase();
       const isPass = result === 'PASS';
+      const isTesting = result.includes('TESTING');
+      const isOffline = r.crabber_offline === true;
+      let rowVariant = 'fail';
+      if (isPass) rowVariant = 'pass';
+      else if (isTesting && isOffline) rowVariant = 'testing-offline';
+      else if (isTesting) rowVariant = 'testing';
       const row = el('div', {
-        className: 'timeline-row ' + (isPass ? 'pass' : 'fail'),
+        className: 'timeline-row ' + rowVariant,
       });
       const bpNa = r.is_bonepile ? 'BP' : 'NA';
       const errTitle = r.failure_msg ? `title="${(r.failure_msg || '').replace(/"/g, '&quot;')}"` : '';
       const logPathCell = makeLogPathCell(r.serial_number);
       row.innerHTML = [
-        `<span>${result || '-'}</span>`,
+        `<span>${escapeHtml(r.result || '-')}</span>`,
         `<span><button type="button" class="pin-btn pin-icon-btn" data-sn="${escapeAttr(r.serial_number)}" title="Pin"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg></button> ${escapeHtml(r.serial_number || '')}</span>`,
         `<span>${escapeHtml(r.part_number || '')}</span>`,
         `<span>${bpNa}</span>`,
