@@ -122,6 +122,7 @@
       {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="nav-btn">Setting</a>{% endif %}
       <a href="/debug/repair" class="nav-btn {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
       <a href="/debug/testing" class="nav-btn active {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
+      <a href="/debug/trial-run" class="nav-btn {{ 'disabled' if 'trial-run' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'trial-run' not in ap else '' }}>Trial Run</a>
       <a href="/debug/jump-station" class="nav-btn {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
       <a href="/debug/kitting-sql" class="nav-btn {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
       <a href="/" class="nav-btn">Analytics</a>

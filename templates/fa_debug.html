@@ -344,6 +344,7 @@
             <a href="/" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Analytics</a>
             <a href="/debug/repair" class="btn-ghost btn-mini {{ 'disabled' if 'repair' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
             <a href="/debug/testing" class="btn-ghost btn-mini {{ 'disabled' if 'testing' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
+            <a href="/debug/trial-run" class="btn-ghost btn-mini {{ 'disabled' if 'trial-run' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'trial-run' not in ap else '' }}>Trial Run</a>
             <a href="/debug/kitting-sql" class="btn-ghost btn-mini {{ 'disabled' if 'kitting-sql' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
             {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">Setting</a>{% endif %}
             <a href="/debug/my-settings" class="btn-ghost btn-mini" style="text-decoration: none; color: inherit;">My settings</a>

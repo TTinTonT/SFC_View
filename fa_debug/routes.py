@@ -36,6 +36,7 @@ _URL_ACCESS_RULES = [
     ("/api/debug/kitting-sql/", frozenset({"kitting-sql"})),
     ("/debug/testing", frozenset({"testing"})),
     ("/api/debug/testing/", frozenset({"testing"})),
+    ("/debug/trial-run", frozenset({"trial-run"})),
     ("/api/debug-query", frozenset({"debug"})),
     ("/api/debug-data", frozenset({"debug"})),
     ("/api/fa-debug/", frozenset({"debug", "testing"})),
@@ -78,6 +79,7 @@ def require_auth():
             "jump-station",
             "kitting-sql",
             "testing",
+            "trial-run",
         }
     finally:
         conn.close()
@@ -300,6 +302,18 @@ def debug_testing():
         "debug_testing.html",
         ws_terminal_url=WS_TERMINAL_URL,
         upload_url=UPLOAD_URL,
+        current_user=u,
+        allowed_pages=getattr(request, "allowed_pages", set()),
+        default_employee_id=default_emp_for_ui(u),
+    )
+
+
+@bp.route("/debug/trial-run")
+def debug_trial_run():
+    """MFG shelf-style test procedure cards (mock data until Crabber/API is wired)."""
+    u = getattr(request, "current_user", None)
+    return render_template(
+        "debug_trial_run.html",
         current_user=u,
         allowed_pages=getattr(request, "allowed_pages", set()),
         default_employee_id=default_emp_for_ui(u),
