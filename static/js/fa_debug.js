@@ -136,21 +136,22 @@
       : rows;
     displayRows.forEach((r) => {
       const result = (r.result || '').toUpperCase();
-      const isPass = result === 'PASS';
+      const isPass = result === 'PASS' || result === 'ALL PASS';
       const isTesting = result.includes('TESTING');
       const isOffline = r.crabber_offline === true;
-      let rowVariant = 'fail';
-      if (isPass) rowVariant = 'pass';
-      else if (isTesting && isOffline) rowVariant = 'testing-offline';
-      else if (isTesting) rowVariant = 'testing';
+      let badgeClass = 'timeline-result-badge--fail';
+      if (result === 'ALL PASS') badgeClass = 'timeline-result-badge--all-pass';
+      else if (isPass) badgeClass = 'timeline-result-badge--pass';
+      else if (isTesting && isOffline) badgeClass = 'timeline-result-badge--testing-offline';
+      else if (isTesting) badgeClass = 'timeline-result-badge--testing';
       const row = el('div', {
-        className: 'timeline-row ' + rowVariant,
+        className: 'timeline-row',
       });
       const bpNa = r.is_bonepile ? 'BP' : 'NA';
       const errTitle = r.failure_msg ? `title="${(r.failure_msg || '').replace(/"/g, '&quot;')}"` : '';
       const logPathCell = makeLogPathCell(r.serial_number);
       row.innerHTML = [
-        `<span>${escapeHtml(r.result || '-')}</span>`,
+        `<span class="timeline-result-badge ${badgeClass}">${escapeHtml(r.result || '-')}</span>`,
         `<span><button type="button" class="pin-btn pin-icon-btn" data-sn="${escapeAttr(r.serial_number)}" title="Pin"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg></button> ${escapeHtml(r.serial_number || '')}</span>`,
         `<span>${escapeHtml(r.part_number || '')}</span>`,
         `<span>${bpNa}</span>`,
@@ -207,7 +208,12 @@
   function getRowsForDrillDown(source) {
     if (source.filter) {
       if (source.filter === 'fail') return rows.filter((r) => (r.result || '').toUpperCase() === 'FAIL');
-      if (source.filter === 'pass') return rows.filter((r) => (r.result || '').toUpperCase() === 'PASS');
+      if (source.filter === 'pass') {
+        return rows.filter((r) => {
+          const x = (r.result || '').toUpperCase();
+          return x === 'PASS' || x === 'ALL PASS';
+        });
+      }
       return rows;
     }
     const sn = source.serial_number || '';
@@ -307,9 +313,7 @@
     if (pinned.has(sn)) {
       pinned.delete(sn);
     } else {
-      const res = (row?.result || '').toUpperCase();
-      const lastResult = res === 'PASS' ? 'PASS' : res === 'FAIL' ? 'FAIL' : 'unknown';
-      pinned.set(sn, { sn, row, lastData: JSON.stringify(row), lastResult, blink: false, expanded: false, pinnedAt: Date.now(), room: row?.room || '–' });
+      pinned.set(sn, { sn, row, lastData: JSON.stringify(row), lastResult: '', blink: false, expanded: false, pinnedAt: Date.now(), room: row?.room || '–', lastNotifiedAt: 0 });
     }
     renderPinPanel();
   }
@@ -327,6 +331,18 @@
     return isFinite(d) ? d.getTime() : null;
   }
 
+  function classifyPinnedResult(latest) {
+    const resUpper = (latest?.result || '').toUpperCase();
+    const offline = latest?.crabber_offline === true || resUpper.includes('OFFLINE');
+    const isTesting = resUpper.includes('TESTING');
+
+    if (resUpper === 'PASS') return { kind: 'pass', label: 'PASS' };
+    if (resUpper === 'ALL PASS') return { kind: 'all-pass', label: 'ALL PASS' };
+    if (resUpper === 'FAIL') return { kind: 'fail', label: 'FAIL' };
+    if (isTesting) return { kind: offline ? 'testing-offline' : 'testing', label: offline ? 'TESTING (OFFLINE)' : 'TESTING' };
+    return { kind: 'unknown', label: latest?.result || '' };
+  }
+
   function checkPinnedUpdates(newRows) {
     if (pinned.size === 0) return;
     const bySn = {};
@@ -341,18 +357,25 @@
       const latest = list[0];
       if (!latest) return;
       const newData = JSON.stringify(latest);
-      const newRes = (latest.result || '').toUpperCase();
-      const newResult = newRes === 'PASS' ? 'PASS' : newRes === 'FAIL' ? 'FAIL' : 'unknown';
       const pinTime = p.pinnedAt != null ? p.pinnedAt : now;
       if (newData !== p.lastData) {
         p.lastData = newData;
         p.row = latest;
-        p.lastResult = newResult;
         const testTime = parseTestTime(latest);
-        if (testTime != null && testTime > pinTime && (newResult === 'PASS' || newResult === 'FAIL')) {
-          p.blink = newResult === 'PASS' ? 'pass' : 'fail';
-          if (newResult === 'PASS' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            new Notification('FA Debug: ' + p.sn, { body: 'Test PASS' });
+        const afterPin = testTime != null && testTime > pinTime;
+        const classified = classifyPinnedResult(latest);
+        p.lastResult = classified.label;
+
+        if (afterPin && classified.kind !== 'unknown') {
+          // Trigger dot animation (blink) until user clicks this pinned item.
+          p.blink = classified.kind;
+
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            p.lastNotifiedAt = now;
+            const body = (classified.label || latest.result || 'Update') +
+              (latest.station ? (' | ' + latest.station) : '') +
+              (latest.test_time ? (' | ' + latest.test_time) : '');
+            new Notification('FA Debug: ' + p.sn, { body });
           }
         }
       }
@@ -450,11 +473,13 @@
       const testTime = parseTestTime(p.row);
       const pinTime = p.pinnedAt != null ? p.pinnedAt : 0;
       const afterPin = testTime != null && pinTime > 0 && testTime > pinTime;
-      const status = afterPin && res === 'PASS' ? 'pass' : afterPin && res === 'FAIL' ? 'fail' : 'unknown';
+      const classified = classifyPinnedResult(p.row);
+      let status = 'unknown';
+      if (afterPin) status = classified.kind;
       const expanded = p.expanded;
       const div = el('div', { className: 'pin-sidebar-item' + (expanded ? '' : ' collapsed') });
       const iconSpan = document.createElement('span');
-      const blinkClass = (p.blink === 'pass' || p.blink === 'fail') ? ' blink' : '';
+      const blinkClass = (p.blink && p.blink !== false) ? ' blink' : '';
       iconSpan.className = 'pin-icon ' + status + blinkClass;
       /* blink stays until user clicks (see click handler: p.blink = false) */
       const snSpan = el('span', { className: 'pin-sn' });

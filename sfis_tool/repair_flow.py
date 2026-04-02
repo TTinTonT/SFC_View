@@ -172,3 +172,47 @@ def build_r_only_targets(base, route_groups):
             out.append({"from": f"R_{base}", "to": gg})
             seen.add(gg)
     return out
+
+
+_WIP_KEYS_MAIN_LINE = [
+    "SERIAL_NUMBER",
+    "MO_NUMBER",
+    "MODEL_NAME",
+    "STATION_NAME",
+    "LINE_NAME",
+    "GROUP_NAME",
+    "NEXT_STATION",
+]
+
+
+def main_line_all_pass_for_sn(conn, sn: str) -> bool:
+    """
+    Same rule as Repair /api/debug/repair/flow-state field all_pass:
+    WIP current node (NEXT_STATION or GROUP_NAME) is at or past T_VI on the ordered route.
+    """
+    from .jump_route import get_route_list
+    from .wip import get_station_and_next
+
+    sn_u = (sn or "").strip().upper()
+    if not sn_u:
+        return False
+    row = get_station_and_next(conn, sn_u)
+    if not row:
+        return False
+    wip = dict(zip(_WIP_KEYS_MAIN_LINE, row))
+    route_cols, route_rows = get_route_list(conn, sn_u)
+    route_items = []
+    for r in route_rows or []:
+        d = dict(zip(route_cols, r))
+        route_items.append(
+            {
+                "step": d.get("STEP"),
+                "group_name": d.get("GROUP_NAME") or "",
+                "group_next": d.get("GROUP_NEXT") or "",
+            }
+        )
+    groups_ordered = build_groups_ordered(route_items)
+    current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+    tvi_idx = groups_ordered.index("T_VI") if "T_VI" in groups_ordered else -1
+    current_idx = groups_ordered.index(current_node) if current_node in groups_ordered else -1
+    return bool(tvi_idx >= 0 and current_idx >= tvi_idx)

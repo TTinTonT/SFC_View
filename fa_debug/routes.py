@@ -261,6 +261,56 @@ def _enrich_proc_part_numbers(rows: List[dict]) -> None:
         pass
 
 
+def _apply_timeline_all_pass_labels(rows: List[dict]) -> None:
+    """
+    When Repair-style main_line_all_pass (WIP at or past T_VI), relabel only the
+    **newest** PASS row per SN (by test_time_dt) to ALL PASS. Older PASS rows for
+    the same SN stay PASS — current WIP must not repaint every historical line.
+    Skips Crabber PROC rows.
+    """
+    from collections import defaultdict
+
+    by_sn: dict[str, List[dict]] = defaultdict(list)
+    for r in rows:
+        if not isinstance(r, dict) or r.get("crabber_proc"):
+            continue
+        if str(r.get("result") or "").strip().upper() != "PASS":
+            continue
+        sn = (r.get("serial_number") or "").strip().upper()
+        if sn:
+            by_sn[sn].append(r)
+    if not by_sn:
+        return
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.repair_flow import main_line_all_pass_for_sn
+
+        conn = get_conn()
+        try:
+            for sn, pass_rows in by_sn.items():
+                try:
+                    ok = main_line_all_pass_for_sn(conn, sn)
+                except Exception:
+                    ok = False
+                if not ok or not pass_rows:
+                    continue
+                best: dict | None = None
+                best_dt: datetime | None = None
+                for r in pass_rows:
+                    dt = r.get("test_time_dt")
+                    if not isinstance(dt, datetime):
+                        continue
+                    if best_dt is None or dt >= best_dt:
+                        best_dt = dt
+                        best = r
+                if best is not None:
+                    best["result"] = "ALL PASS"
+        finally:
+            conn.close()
+    except Exception as e:
+        _logger.warning("timeline ALL PASS labeling failed: %s", e)
+
+
 def _fetch_debug_data(user_start, user_end):
     global _prev_proc_sns_prod, _prev_proc_sns_offline
     try:
@@ -376,6 +426,11 @@ def _fetch_debug_data(user_start, user_end):
     except Exception as e:
         _logger.warning("merge_timeline_with_crabber_proc failed: %s", e)
         merged_rows = prepared
+
+    try:
+        _apply_timeline_all_pass_labels(merged_rows)
+    except Exception as e:
+        _logger.warning("timeline ALL PASS step failed: %s", e)
 
     return {"summary": computed["summary"], "rows": merged_rows, "l11_sns": computed.get("l11_sns", [])}
 

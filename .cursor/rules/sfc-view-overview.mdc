@@ -1,0 +1,21 @@
+---
+description: SFC_View FA Debug stack — auth, permissions, SFIS layout
+alwaysApply: true
+---
+
+# SFC_View — FA Debug overview
+
+- **App:** Flask; FA Debug lives in blueprint `fa_debug` (`fa_debug/routes.py`, prefix often empty with full paths like `/debug/...`, `/api/debug/...`).
+- **Auth:** SQLite auth DB (`fa_debug/auth_db.py`). Session user = `get_current_user(request)`; row includes `employee_id`, `username` (never expose `password_hash` in templates or JSON).
+- **EMP / Employee ID:** New APIs should use `resolve_sfis_emp(request, body_value)`; form defaults use `default_emp_for_ui(user)` in `render_template`. Users can override in the UI.
+- **Page permissions:** Keys are `debug`, `repair`, `testing`, `jump-station`, `kitting-sql` (there is no separate `kitting` page). Admin grants via Setting → Pages.
+- **IT Kitting:** Only **IT Kitting SQL** (`/debug/kitting-sql`, `/api/debug/kitting-sql/*`). Old `/debug/kitting` redirects to kitting-sql.
+- **SFIS / Oracle:** DB connection and queries under `sfis_tool/` (`db.py`, `sql_queries.py`, `repair_ok.py`, `repair_flow.py`, `jump_route.py`, etc.). Keep FA routes thin: validate input, call `sfis_tool`, return JSON.
+- **Front-end:** Repair/Testing share patterns — `templates/debug_repair.html`, `debug_testing.html`, `static/js/testing_page.js`; ETF online test modal `static/js/etf_online_test_modal.js` + modal markup on Testing page.
+- **Repair detail:** For UI modes, fail input, and RC rules, follow `.cursor/rules/repair-debug-ui.mdc` when editing those files.
+
+## Cursor rules — ask before adding, keep in sync
+
+- If the chat reveals a **new** convention worth a **new** `.cursor/rules/*.mdc` file (or a big new section), **do not create it silently**. First **ask the user** in one short message: proposed rule name, scope (`globs` vs `alwaysApply`), and 1–2 lines why. **Only after they agree** (or refine), add or edit the file with valid YAML frontmatter.
+- If an **existing** rule is **out of date** vs the code (wrong paths, removed features, changed APIs), **update that rule** in the same change when fixing related code, or propose the diff and ask if the user prefers to review first.
+- Prefer **small, focused** rules or short edits; split topics instead of one huge file. After adding/updating a rule, mention which file changed so the user can review in `.cursor/rules/`.
