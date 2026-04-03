@@ -173,7 +173,7 @@
   .mb-5 { margin-bottom: 1.25rem; }
   /* Timeline */
   .timeline { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 10px; overflow: auto; max-height: 400px; }
-  .timeline-row { display: grid; grid-template-columns: 80px 1fr 1fr 80px 120px 1fr minmax(100px, 140px); gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-size: 0.875rem; align-items: center; }
+  .timeline-row { display: grid; grid-template-columns: 80px 1fr 1fr 80px 120px 1fr minmax(88px, 130px); gap: 0.5rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); font-size: 0.875rem; align-items: center; }
   .timeline-row:last-child { border-bottom: none; }
   .timeline-row.header { font-weight: 600; background: var(--color-hover); }
   /* Result column badges only (no full-row tint) */
@@ -201,6 +201,9 @@
   @keyframes blink { 50% { background: rgba(99,102,241,0.3); } }
   .pin-btn { background: transparent; border: none; cursor: pointer; padding: 0 0.25rem; }
   .log-path-btn { font-size: 0.75rem; padding: 0.2rem 0.4rem; }
+  .crabber-unc-copy { position: relative; display: inline-flex; align-items: center; gap: 0.2rem; }
+  .crabber-unc-path { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .crabber-unc-copied { box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.55); border-radius: 4px; }
   /* ETF */
   .etf-filter { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.875rem; min-width: 200px; }
   .etf-mac-key-label { font-size: 0.8125rem; color: var(--color-muted); }
@@ -278,7 +281,8 @@
   .sn-debug-terminals { display: flex; flex-direction: column; gap: 0; }
   .sn-debug-terminal { min-height: 200px; height: 380px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
   .sn-debug-terminal .xterm { width: 100% !important; flex: 1 !important; min-height: 0; }
-  .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; }
+  .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; overscroll-behavior: contain; }
+  .sn-debug-terminal { overscroll-behavior: contain; }
   /* Pin bar - right side, below header, horizontal pill bars overlay (no frame) */
   .pin-sidebar { position: fixed; top: 72px; right: 12px; left: auto; bottom: auto; z-index: 90; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; pointer-events: none; }
   .pin-sidebar .pin-sidebar-body { pointer-events: auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
@@ -296,6 +300,11 @@
   .pin-icon.testing.blink { animation: blink-yellow 0.6s ease infinite; }
   .pin-icon.testing-offline.blink { animation: blink-blue 0.6s ease infinite; }
   .pin-icon.all-pass.blink { animation: blink-neon 0.6s ease infinite; }
+  .pin-icon.unknown.blink { animation: blink-unknown 0.6s ease infinite; }
+  @keyframes blink-unknown {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(156, 163, 175, 0.85); transform: translateY(0) scale(1); }
+    50% { opacity: 0.55; box-shadow: 0 0 8px 2px rgba(209, 213, 219, 0.95); transform: translateY(-2px) scale(1.12); }
+  }
   @keyframes blink-green {
     0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--color-success); transform: translateY(0) scale(1); }
     50% { opacity: 0.65; box-shadow: 0 0 7px 2px var(--color-success); transform: translateY(-2px) scale(1.15); }
@@ -444,7 +453,7 @@
         </div>
         <div class="timeline">
           <div class="timeline-row header">
-            <span>Result</span><span>SN</span><span>PN</span><span>BP/NA</span><span>Time</span><span>Station</span><span>Log Path</span>
+            <span>Result</span><span>SN</span><span>PN</span><span>BP/NA</span><span>Time</span><span>Station</span><span title="Oberon L10 UNC folder (copy)">Log UNC</span>
           </div>
           <div id="timeline-body"></div>
         </div>
@@ -535,7 +544,7 @@
               <th>BP</th>
               <th>ROOM</th>
               <th>FAILURE MSG</th>
-              <th>LOG PATH</th>
+              <th>LOG UNC</th>
             </tr>
           </thead>
           <tbody id="modal-drill-tbody">
@@ -549,7 +558,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
   <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js" defer></script>
-  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }}, pollIntervalMs: {{ poll_interval_ms|default(60000)|int }} }; window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }};</script>
+  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }}, pollIntervalMs: {{ poll_interval_ms|default(60000)|int }} }; window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }}; window.CRABBER_LOG_UNC_ROOT = {{ (crabber_log_unc_root|default(''))|tojson }};</script>
+  <script src="/static/js/crabber_log_unc.js" defer></script>
   <script src="/static/js/fa_debug.js" defer></script>
   <script>window.ETF_STATUS_HIDE_TEST_BTN = true;</script>
   <script src="/static/js/etf_status.js" defer></script>

@@ -432,7 +432,13 @@ def _fetch_debug_data(user_start, user_end):
     except Exception as e:
         _logger.warning("timeline ALL PASS step failed: %s", e)
 
-    return {"summary": computed["summary"], "rows": merged_rows, "l11_sns": computed.get("l11_sns", [])}
+    return {
+        "summary": computed["summary"],
+        "rows": merged_rows,
+        "l11_sns": computed.get("l11_sns", []),
+        # Same pass/fail per SN as KPI (analytics pass_rules); drill-down must use this, not raw PASS rows.
+        "sn_pass": computed.get("_sn_pass") or {},
+    }
 
 
 def _run_poller():
@@ -449,6 +455,7 @@ def _run_poller():
                         "summary": data["summary"],
                         "rows": data["rows"],
                         "l11_sns": data.get("l11_sns", []),
+                        "sn_pass": data.get("sn_pass") or {},
                         "start": start_dt.isoformat(),
                         "end": end_dt.isoformat(),
                     }
@@ -475,12 +482,15 @@ def _ensure_poller():
 def debug_page():
     """Serve FA Debug Place page."""
     from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
+    from crabber.log_unc_path import get_crabber_log_unc_root
+
     user = getattr(request, "current_user", None)
     return render_template(
         "fa_debug.html",
         ws_terminal_url=WS_TERMINAL_URL,
         upload_url=UPLOAD_URL,
         poll_interval_ms=POLL_INTERVAL_MS,
+        crabber_log_unc_root=get_crabber_log_unc_root(),
         current_user=user,
         allowed_pages=getattr(request, "allowed_pages", set()),
         default_employee_id=default_emp_for_ui(user),
@@ -533,12 +543,14 @@ def debug_kitting_sql():
 def debug_testing():
     """SN-centric Testing page: tray summary, Crabber history, repair flow, kitting, four terminals."""
     from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
+    from crabber.log_unc_path import get_crabber_log_unc_root
 
     u = getattr(request, "current_user", None)
     return render_template(
         "debug_testing.html",
         ws_terminal_url=WS_TERMINAL_URL,
         upload_url=UPLOAD_URL,
+        crabber_log_unc_root=get_crabber_log_unc_root(),
         current_user=u,
         allowed_pages=getattr(request, "allowed_pages", set()),
         default_employee_id=default_emp_for_ui(u),
@@ -1011,6 +1023,7 @@ def api_repair_flow_state():
             build_repair_chain,
             build_r_only_targets,
             get_dido_suffix_from_node,
+            is_di_do_ri_ro_wip_node,
         )
         conn = get_conn()
         try:
@@ -1032,7 +1045,10 @@ def api_repair_flow_state():
             current_dido_station = get_dido_suffix_from_node(current_node) if ui_mode == "repair_dido" else ""
             tvi_idx = groups_ordered.index("T_VI") if "T_VI" in groups_ordered else -1
             current_idx = groups_ordered.index(current_node) if current_node in groups_ordered else -1
-            all_pass = bool(tvi_idx >= 0 and current_idx >= tvi_idx)
+            if is_di_do_ri_ro_wip_node(current_node):
+                all_pass = False
+            else:
+                all_pass = bool(tvi_idx >= 0 and current_idx >= tvi_idx)
             return jsonify({
                 "ok": True,
                 "wip": _serialize_wip(wip),
@@ -2559,7 +2575,14 @@ def api_debug_query():
             data = _fetch_debug_data(start_dt, end_dt)
             if data is None:
                 return jsonify({"error": "SFC API request failed"}), 502
-    return jsonify({"ok": True, "summary": data["summary"], "rows": data["rows"]})
+    return jsonify(
+        {
+            "ok": True,
+            "summary": data["summary"],
+            "rows": data["rows"],
+            "sn_pass": data.get("sn_pass") or {},
+        }
+    )
 
 
 @bp.route("/api/debug/log-path-debug", methods=["GET"])
@@ -2978,5 +3001,19 @@ def api_debug_data():
     with _debug_cache_lock:
         data = _debug_cache
     if data is None:
-        return jsonify({"ok": True, "summary": {"total": 0, "pass": 0, "fail": 0}, "rows": []})
-    return jsonify({"ok": True, "summary": data["summary"], "rows": data["rows"]})
+        return jsonify(
+            {
+                "ok": True,
+                "summary": {"total": 0, "pass": 0, "fail": 0},
+                "rows": [],
+                "sn_pass": {},
+            }
+        )
+    return jsonify(
+        {
+            "ok": True,
+            "summary": data["summary"],
+            "rows": data["rows"],
+            "sn_pass": data.get("sn_pass") or {},
+        }
+    )

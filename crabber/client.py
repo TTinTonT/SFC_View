@@ -11,6 +11,8 @@ from urllib.parse import quote
 
 import requests
 
+from crabber.log_unc_path import build_crabber_log_folder_unc, extract_node_log_id
+
 
 def _get_config():
     try:
@@ -286,7 +288,8 @@ def fetch_test_history_for_sn(
       sn, station, result (display: Canceled / Testing / API Pass|Fail|…),
       test_time (legacy: same as start time source), log_time (ISO UTC, prefer API log_time),
       sfc_event_date (ISO UTC when test finished / SFC posted; empty while PROC/TPSQ or missing),
-      node_log_id, pn, pn_name, machine, machine_id, phase, project, node_log_event (raw, for UI polling),
+      node_log_id, exe_log_id, log_folder_unc (Oberon UNC uses node_log_id segment), pn, pn_name, machine, machine_id,
+      phase, project, node_log_event (raw, for UI polling),
       procedure, revision (for Crabber UI deep-link cookie + processing_info query).
     """
     base, token = _get_config()
@@ -320,12 +323,9 @@ def fetch_test_history_for_sn(
             break
         if not isinstance(it, dict):
             continue
-        node_log_id = (
-            it.get("node_log_id")
-            or it.get("nodeLogId")
-            or it.get("log_id")
-            or it.get("id")
-        )
+        node_log_id_str = extract_node_log_id(it)
+        _exe_raw = it.get("exe_log_id") if it.get("exe_log_id") is not None else it.get("exeLogId")
+        exe_log_id_str = str(_exe_raw).strip() if _exe_raw is not None else ""
         node_log_event = str(
             it.get("node_log_event") or it.get("nodeLogEvent") or ""
         ).strip()
@@ -341,6 +341,11 @@ def fetch_test_history_for_sn(
         ).strip()
         if not log_time_iso:
             log_time_iso = test_time
+        log_folder_unc = (
+            build_crabber_log_folder_unc(log_time_iso, node_log_id_str)
+            if node_log_id_str
+            else ""
+        )
         sfc_raw = it.get("sfc_event_date") or it.get("sfcEventDate")
         sfc_event_date = str(sfc_raw).strip() if sfc_raw is not None and str(sfc_raw).strip() else ""
         pn_name = str(
@@ -378,7 +383,9 @@ def fetch_test_history_for_sn(
                 "test_time": test_time,
                 "log_time": log_time_iso,
                 "sfc_event_date": sfc_event_date,
-                "node_log_id": str(node_log_id).strip() if node_log_id else "",
+                "node_log_id": node_log_id_str,
+                "exe_log_id": exe_log_id_str,
+                "log_folder_unc": log_folder_unc,
                 "pn": pn_name,
                 "pn_name": pn_name,
                 "machine": str(

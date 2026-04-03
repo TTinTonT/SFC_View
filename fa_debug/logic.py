@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from analytics.bp_check import add_bp_to_rows
 from crabber.client import tier_from_crabber_station
+from crabber.log_unc_path import build_crabber_log_folder_unc, extract_node_log_id
 
 
 def prepare_debug_rows(rows: List[dict]) -> List[dict]:
@@ -86,6 +87,12 @@ def timeline_row_from_crabber_proc(item: dict, offline: bool) -> Optional[dict]:
     ).strip()
     part_number = (item.get("part_number") or "").strip() or pn_name
     res_label = "TESTING (OFFLINE)" if offline else "TESTING"
+    node_log_id_str = extract_node_log_id(item)
+    crabber_log_unc = (
+        build_crabber_log_folder_unc(log_iso, node_log_id_str)
+        if node_log_id_str
+        else ""
+    )
     return {
         "serial_number": sn,
         "work_order": "",
@@ -100,6 +107,7 @@ def timeline_row_from_crabber_proc(item: dict, offline: bool) -> Optional[dict]:
         "station_instance": "",
         "crabber_proc": True,
         "crabber_offline": bool(offline),
+        "crabber_log_unc": crabber_log_unc,
     }
 
 

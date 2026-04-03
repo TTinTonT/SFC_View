@@ -185,10 +185,31 @@ _WIP_KEYS_MAIN_LINE = [
 ]
 
 
+def is_di_do_ri_ro_wip_node(node: str) -> bool:
+    """
+    True if WIP NEXT_STATION/GROUP_NAME is on the DI/DO/RI/RO rework path.
+
+    Those nodes may appear after T_VI in the flattened route list but are not
+    main-line completion; they must not satisfy main-line all_pass (Repair + Debug timeline).
+    """
+    n = normalize_station_name(node or "")
+    if not n:
+        return False
+    if n.startswith("R_"):
+        n = n[2:]
+    if "_" not in n:
+        return False
+    last = n.rsplit("_", 1)[-1].upper()
+    return last in ("DI", "DO", "RI", "RO")
+
+
 def main_line_all_pass_for_sn(conn, sn: str) -> bool:
     """
     Same rule as Repair /api/debug/repair/flow-state field all_pass:
     WIP current node (NEXT_STATION or GROUP_NAME) is at or past T_VI on the ordered route.
+
+    Nodes on the DI/DO/RI/RO rework suffix path (e.g. FCT_DI) never count as main-line
+    all pass even if they appear after T_VI in a flattened route list.
     """
     from .jump_route import get_route_list
     from .wip import get_station_and_next
@@ -215,4 +236,6 @@ def main_line_all_pass_for_sn(conn, sn: str) -> bool:
     current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
     tvi_idx = groups_ordered.index("T_VI") if "T_VI" in groups_ordered else -1
     current_idx = groups_ordered.index(current_node) if current_node in groups_ordered else -1
+    if is_di_do_ri_ro_wip_node(current_node):
+        return False
     return bool(tvi_idx >= 0 and current_idx >= tvi_idx)

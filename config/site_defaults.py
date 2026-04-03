@@ -40,6 +40,8 @@ DEFAULT = {
     "CRABBER_TOKEN": "06939a6ac0ed828115deba6a6bed85de77c715bb",
     "CRABBER_USER_ID": "41",
     "CRABBER_SITENAME": "SanJose",
+    # Oberon L10 log share (UNC prefix; folder segment = node_log_id + log_time UTC)
+    "CRABBER_LOG_UNC_ROOT": r"\\10.16.137.111\Oberon\L10",
     # ETF
     "SFC_TRAY_STATUS_URL": "http://10.16.137.115/SFCAPI/SFC/Test_Fixture_Status",
     "SFC_LEVEL_GRADE": "L10",

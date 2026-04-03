@@ -289,7 +289,7 @@
       snError.classList.add('hidden');
       resultMsg.classList.add('hidden');
       if (crabberTbody) {
-        crabberTbody.innerHTML = '<tr><td colspan="6" style="color:var(--color-muted)">—</td></tr>';
+        crabberTbody.innerHTML = '<tr><td colspan="7" style="color:var(--color-muted)">—</td></tr>';
       }
       ['sum-room', 'sum-pn-tray', 'sum-wip', 'sum-bmc', 'sum-sys', 'sum-tray-msg'].forEach(function (id) {
         var el = document.getElementById(id);
@@ -403,7 +403,7 @@
       if (!tests.length) {
         stopCrabberPoll();
         var err = (crabber && crabber.error) ? crabber.error : 'No Crabber rows (check API or SN).';
-        crabberTbody.innerHTML = '<tr><td colspan="6" style="color:var(--color-muted)">' + rcEscHtml(err) + '</td></tr>';
+        crabberTbody.innerHTML = '<tr><td colspan="7" style="color:var(--color-muted)">' + rcEscHtml(err) + '</td></tr>';
         return;
       }
       crabberTbody.innerHTML = tests.map(function (t) {
@@ -413,7 +413,14 @@
         var endDisp = endIso ? formatCrabberCali(endIso) : '—';
         var rs = String(t.result || '').toUpperCase();
         var rowCls = rs === 'FAIL' ? 'crabber-row-fail' : (rs === 'PASS' ? 'crabber-row-pass' : (rs === 'TESTING' ? 'crabber-row-testing' : ''));
-        return '<tr class="' + rowCls + '"><td>' + rcEscHtml(startDisp) + '</td><td>' + rcEscHtml(endDisp) + '</td><td>' + rcEscHtml(t.station || '') + '</td><td>' + rcEscHtml(t.result || '') + '</td><td>' + rcEscHtml(t.pn || '') + '</td><td>' + rcEscHtml(t.machine || '') + '</td></tr>';
+        var uncPath = (t.log_folder_unc && String(t.log_folder_unc).trim()) || '';
+        if (!uncPath && typeof CrabberLogUnc !== 'undefined' && window.CRABBER_LOG_UNC_ROOT) {
+          uncPath = CrabberLogUnc.buildPath(window.CRABBER_LOG_UNC_ROOT, startIso, t.node_log_id || '') || '';
+        }
+        var uncHtml = (typeof CrabberLogUnc !== 'undefined' && CrabberLogUnc.copyBtnHtml)
+          ? CrabberLogUnc.copyBtnHtml(uncPath)
+          : (uncPath ? rcEscHtml(uncPath) : '—');
+        return '<tr class="' + rowCls + '"><td>' + rcEscHtml(startDisp) + '</td><td>' + rcEscHtml(endDisp) + '</td><td>' + rcEscHtml(t.station || '') + '</td><td>' + rcEscHtml(t.result || '') + '</td><td>' + rcEscHtml(t.pn || '') + '</td><td>' + rcEscHtml(t.machine || '') + '</td><td>' + uncHtml + '</td></tr>';
       }).join('');
     }
     function renderTree() {
@@ -1256,6 +1263,18 @@
     }
 
     window.addEventListener('beforeunload', stopCrabberPoll);
+
+    if (crabberTbody) {
+      crabberTbody.addEventListener('click', function (e) {
+        var btn = e.target.closest('.crabber-unc-copy');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof CrabberLogUnc !== 'undefined' && CrabberLogUnc.performCopy) {
+          CrabberLogUnc.performCopy(btn);
+        }
+      });
+    }
 
     loadOptions();
 })();
