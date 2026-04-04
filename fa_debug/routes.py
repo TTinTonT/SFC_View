@@ -2,17 +2,27 @@
 """FA Debug Place Flask blueprint: /debug route, /api/debug-query, /api/debug-data, background poller."""
 
 import json
+import logging
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from datetime import datetime, timedelta
+from typing import List
 
 from flask import Blueprint, jsonify, redirect, render_template, request
 
 from analytics.service import run_analytics_query
 from config.app_config import ANALYTICS_CACHE_DIR
-from config.debug_config import LOOKBACK_HOURS, POLL_INTERVAL_SEC
+from config.debug_config import (
+    CRABBER_PAGE_TIMEOUT_SEC,
+    CRABBER_PROC_RECONCILE_MAX_SN,
+    CRABBER_RECONCILE_TIMEOUT_SEC,
+    LOOKBACK_HOURS,
+    POLL_INTERVAL_MS,
+    POLL_INTERVAL_SEC,
+)
 from fa_debug.auth import (
     default_emp_for_ui,
     get_current_user,
@@ -21,9 +31,14 @@ from fa_debug.auth import (
     set_user_page_permissions,
 )
 from fa_debug.auth_db import connect_auth_db, ensure_auth_db
-from fa_debug.logic import prepare_debug_rows
+from fa_debug.logic import (
+    merge_timeline_with_crabber_proc,
+    prepare_debug_rows,
+    timeline_rows_from_crabber_proc_items,
+)
 
 bp = Blueprint("fa_debug", __name__, url_prefix="", template_folder="../templates")
+_logger = logging.getLogger(__name__)
 
 # (prefix, frozenset of page_key values — user needs ANY of these, unless admin)
 _URL_ACCESS_RULES = [
@@ -139,6 +154,9 @@ def _merge_pn_base_list():
 _debug_cache_lock = threading.Lock()
 _debug_cache = None
 _poller_started = False
+_prev_proc_lock = threading.Lock()
+_prev_proc_sns_prod: set = set()
+_prev_proc_sns_offline: set = set()
 _repair_sn_locks_guard = threading.Lock()
 _repair_sn_locks = {}
 _repair_request_cache = {}
@@ -198,29 +216,256 @@ def _parse_dt(s, is_end=False):
     return None
 
 
+def _enrich_proc_part_numbers(rows: List[dict]) -> None:
+    """Fill part_number from Oracle WIP MODEL_NAME, then ETF tray cache."""
+    if not rows:
+        return
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.wip import get_station_and_next
+
+        conn = get_conn()
+        try:
+            for r in rows:
+                sn = (r.get("serial_number") or "").strip().upper()
+                if not sn:
+                    continue
+                try:
+                    row = get_station_and_next(conn, sn)
+                    if row and len(row) > 2:
+                        model = (row[2] or "").strip()
+                        if model:
+                            r["part_number"] = model
+                except Exception:
+                    pass
+        finally:
+            conn.close()
+    except Exception:
+        pass
+    try:
+        from etf.routes import etf_search_rows_cached
+
+        for r in rows:
+            if (r.get("part_number") or "").strip():
+                continue
+            sn = (r.get("serial_number") or "").strip()
+            if not sn:
+                continue
+            try:
+                for h in etf_search_rows_cached(sn):
+                    pn = (h.get("pn") or "").strip()
+                    if pn:
+                        r["part_number"] = pn
+                        break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _apply_timeline_all_pass_labels(rows: List[dict]) -> None:
+    """
+    When Repair-style main_line_all_pass (WIP at or past T_VI), relabel only the
+    **newest** PASS row per SN (by test_time_dt) to ALL PASS. Older PASS rows for
+    the same SN stay PASS — current WIP must not repaint every historical line.
+    Skips Crabber PROC rows.
+    """
+    from collections import defaultdict
+
+    by_sn: dict[str, List[dict]] = defaultdict(list)
+    for r in rows:
+        if not isinstance(r, dict) or r.get("crabber_proc"):
+            continue
+        if str(r.get("result") or "").strip().upper() != "PASS":
+            continue
+        sn = (r.get("serial_number") or "").strip().upper()
+        if sn:
+            by_sn[sn].append(r)
+    if not by_sn:
+        return
+    try:
+        from sfis_tool.db import get_conn
+        from sfis_tool.repair_flow import main_line_all_pass_for_sn
+
+        conn = get_conn()
+        try:
+            for sn, pass_rows in by_sn.items():
+                try:
+                    ok = main_line_all_pass_for_sn(conn, sn)
+                except Exception:
+                    ok = False
+                if not ok or not pass_rows:
+                    continue
+                best: dict | None = None
+                best_dt: datetime | None = None
+                for r in pass_rows:
+                    dt = r.get("test_time_dt")
+                    if not isinstance(dt, datetime):
+                        continue
+                    if best_dt is None or dt >= best_dt:
+                        best_dt = dt
+                        best = r
+                if best is not None:
+                    best["result"] = "ALL PASS"
+        finally:
+            conn.close()
+    except Exception as e:
+        _logger.warning("timeline ALL PASS labeling failed: %s", e)
+
+
 def _fetch_debug_data(user_start, user_end):
-    conn = None
+    global _prev_proc_sns_prod, _prev_proc_sns_offline
     try:
         computed = run_analytics_query(user_start, user_end, aggregation="daily")
     except RuntimeError:
         return None
     prepared = prepare_debug_rows(computed["rows"])
-    return {"summary": computed["summary"], "rows": prepared, "l11_sns": computed.get("l11_sns", [])}
+
+    from crabber.client import (
+        _extract_items_list,
+        extract_l10_proc_first_per_sn,
+        fetch_search_log_items_json,
+        reconcile_l10_proc_items_for_sns,
+    )
+
+    def load_page(is_trial: bool):
+        js, err = fetch_search_log_items_json(
+            sn="",
+            cur_page=1,
+            is_trial=is_trial,
+            timeout=CRABBER_PAGE_TIMEOUT_SEC,
+        )
+        if err:
+            return [], err
+        items = _extract_items_list(js) or []
+        return extract_l10_proc_first_per_sn(items), None
+
+    prod_items: list = []
+    off_items: list = []
+    try:
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fp = ex.submit(load_page, False)
+            fo = ex.submit(load_page, True)
+            prod_items, err_p = fp.result()
+            off_items, err_o = fo.result()
+        if err_p:
+            _logger.warning("Crabber production search_log_items: %s", err_p)
+        if err_o:
+            _logger.warning("Crabber offline search_log_items: %s", err_o)
+    except Exception as e:
+        _logger.warning("Crabber parallel page fetch failed: %s", e)
+
+    page_p_sns = {
+        str(it.get("sn") or "").strip().upper()
+        for it in prod_items
+        if str(it.get("sn") or "").strip()
+    }
+    page_o_sns = {
+        str(it.get("sn") or "").strip().upper()
+        for it in off_items
+        if str(it.get("sn") or "").strip()
+    }
+
+    with _prev_proc_lock:
+        prev_p = set(_prev_proc_sns_prod)
+        prev_o = set(_prev_proc_sns_offline)
+
+    dropped_p = prev_p - page_p_sns
+    dropped_o = prev_o - page_o_sns
+    cap = max(0, CRABBER_PROC_RECONCILE_MAX_SN)
+    try:
+        extra_p = reconcile_l10_proc_items_for_sns(
+            list(dropped_p)[:cap],
+            False,
+            timeout=CRABBER_RECONCILE_TIMEOUT_SEC,
+        )
+        extra_o = reconcile_l10_proc_items_for_sns(
+            list(dropped_o)[:cap],
+            True,
+            timeout=CRABBER_RECONCILE_TIMEOUT_SEC,
+        )
+    except Exception as e:
+        _logger.warning("Crabber PROC reconcile failed: %s", e)
+        extra_p = []
+        extra_o = []
+
+    seen_p = set(page_p_sns)
+    for it in extra_p:
+        snu = str(it.get("sn") or "").strip().upper()
+        if snu and snu not in seen_p:
+            prod_items.append(it)
+            seen_p.add(snu)
+    seen_o = set(page_o_sns)
+    for it in extra_o:
+        snu = str(it.get("sn") or "").strip().upper()
+        if snu and snu not in seen_o:
+            off_items.append(it)
+            seen_o.add(snu)
+
+    final_prod_sns = {
+        str(it.get("sn") or "").strip().upper()
+        for it in prod_items
+        if str(it.get("sn") or "").strip()
+    }
+    final_off_sns_raw = {
+        str(it.get("sn") or "").strip().upper()
+        for it in off_items
+        if str(it.get("sn") or "").strip()
+    }
+    with _prev_proc_lock:
+        _prev_proc_sns_prod = set(final_prod_sns)
+        _prev_proc_sns_offline = {s for s in final_off_sns_raw if s not in final_prod_sns}
+
+    proc_prod_rows = timeline_rows_from_crabber_proc_items(prod_items, False)
+    proc_off_rows = timeline_rows_from_crabber_proc_items(off_items, True)
+    try:
+        _enrich_proc_part_numbers(proc_prod_rows + proc_off_rows)
+    except Exception as e:
+        _logger.warning("PROC part_number enrich failed: %s", e)
+
+    try:
+        merged_rows = merge_timeline_with_crabber_proc(prepared, proc_prod_rows, proc_off_rows)
+    except Exception as e:
+        _logger.warning("merge_timeline_with_crabber_proc failed: %s", e)
+        merged_rows = prepared
+
+    try:
+        _apply_timeline_all_pass_labels(merged_rows)
+    except Exception as e:
+        _logger.warning("timeline ALL PASS step failed: %s", e)
+
+    return {
+        "summary": computed["summary"],
+        "rows": merged_rows,
+        "l11_sns": computed.get("l11_sns", []),
+        # Same pass/fail per SN as KPI (analytics pass_rules); drill-down must use this, not raw PASS rows.
+        "sn_pass": computed.get("_sn_pass") or {},
+    }
 
 
 def _run_poller():
     global _debug_cache
     while True:
+        t0 = time.monotonic()
         try:
             end_dt = datetime.now()
             start_dt = end_dt - timedelta(hours=LOOKBACK_HOURS)
             data = _fetch_debug_data(start_dt, end_dt)
             if data:
                 with _debug_cache_lock:
-                    _debug_cache = {"summary": data["summary"], "rows": data["rows"], "l11_sns": data.get("l11_sns", []), "start": start_dt.isoformat(), "end": end_dt.isoformat()}
-        except Exception:
-            pass
-        threading.Event().wait(POLL_INTERVAL_SEC)
+                    _debug_cache = {
+                        "summary": data["summary"],
+                        "rows": data["rows"],
+                        "l11_sns": data.get("l11_sns", []),
+                        "sn_pass": data.get("sn_pass") or {},
+                        "start": start_dt.isoformat(),
+                        "end": end_dt.isoformat(),
+                    }
+        except Exception as e:
+            _logger.warning("debug poller cycle failed: %s", e)
+        elapsed = time.monotonic() - t0
+        wait_sec = max(0.0, float(POLL_INTERVAL_SEC) - elapsed)
+        threading.Event().wait(wait_sec)
 
 
 def _ensure_poller():
@@ -239,11 +484,15 @@ def _ensure_poller():
 def debug_page():
     """Serve FA Debug Place page."""
     from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
+    from crabber.log_unc_path import get_crabber_log_unc_root
+
     user = getattr(request, "current_user", None)
     return render_template(
         "fa_debug.html",
         ws_terminal_url=WS_TERMINAL_URL,
         upload_url=UPLOAD_URL,
+        poll_interval_ms=POLL_INTERVAL_MS,
+        crabber_log_unc_root=get_crabber_log_unc_root(),
         current_user=user,
         allowed_pages=getattr(request, "allowed_pages", set()),
         default_employee_id=default_emp_for_ui(user),
@@ -296,12 +545,14 @@ def debug_kitting_sql():
 def debug_testing():
     """SN-centric Testing page: tray summary, Crabber history, repair flow, kitting, four terminals."""
     from config.debug_config import UPLOAD_URL, WS_TERMINAL_URL
+    from crabber.log_unc_path import get_crabber_log_unc_root
 
     u = getattr(request, "current_user", None)
     return render_template(
         "debug_testing.html",
         ws_terminal_url=WS_TERMINAL_URL,
         upload_url=UPLOAD_URL,
+        crabber_log_unc_root=get_crabber_log_unc_root(),
         current_user=u,
         allowed_pages=getattr(request, "allowed_pages", set()),
         default_employee_id=default_emp_for_ui(u),
@@ -786,6 +1037,7 @@ def api_repair_flow_state():
             build_repair_chain,
             build_r_only_targets,
             get_dido_suffix_from_node,
+            is_di_do_ri_ro_wip_node,
         )
         conn = get_conn()
         try:
@@ -807,7 +1059,10 @@ def api_repair_flow_state():
             current_dido_station = get_dido_suffix_from_node(current_node) if ui_mode == "repair_dido" else ""
             tvi_idx = groups_ordered.index("T_VI") if "T_VI" in groups_ordered else -1
             current_idx = groups_ordered.index(current_node) if current_node in groups_ordered else -1
-            all_pass = bool(tvi_idx >= 0 and current_idx >= tvi_idx)
+            if is_di_do_ri_ro_wip_node(current_node):
+                all_pass = False
+            else:
+                all_pass = bool(tvi_idx >= 0 and current_idx >= tvi_idx)
             return jsonify({
                 "ok": True,
                 "wip": _serialize_wip(wip),
@@ -2334,7 +2589,14 @@ def api_debug_query():
             data = _fetch_debug_data(start_dt, end_dt)
             if data is None:
                 return jsonify({"error": "SFC API request failed"}), 502
-    return jsonify({"ok": True, "summary": data["summary"], "rows": data["rows"]})
+    return jsonify(
+        {
+            "ok": True,
+            "summary": data["summary"],
+            "rows": data["rows"],
+            "sn_pass": data.get("sn_pass") or {},
+        }
+    )
 
 
 @bp.route("/api/debug/log-path-debug", methods=["GET"])
@@ -2753,5 +3015,19 @@ def api_debug_data():
     with _debug_cache_lock:
         data = _debug_cache
     if data is None:
-        return jsonify({"ok": True, "summary": {"total": 0, "pass": 0, "fail": 0}, "rows": []})
-    return jsonify({"ok": True, "summary": data["summary"], "rows": data["rows"]})
+        return jsonify(
+            {
+                "ok": True,
+                "summary": {"total": 0, "pass": 0, "fail": 0},
+                "rows": [],
+                "sn_pass": {},
+            }
+        )
+    return jsonify(
+        {
+            "ok": True,
+            "summary": data["summary"],
+            "rows": data["rows"],
+            "sn_pass": data.get("sn_pass") or {},
+        }
+    )

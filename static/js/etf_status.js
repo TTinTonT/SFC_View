@@ -62,6 +62,23 @@
   }
   const pinnedSns = new Set();
   const roomCache = {};
+
+  function buildEtfPinnedSidebarPayload() {
+    return Array.from(pinnedSns).map((k) => {
+      const r =
+        lastDisplayRows.find((x) => (x.sn || x.pn || x.bmc_ip) === k) ||
+        allRows.find((x) => (x.sn || x.pn || x.bmc_ip) === k);
+      const sn = r && r.sn ? String(r.sn).trim() : k;
+      const sfc = sfcSnMap[sn] || {};
+      return {
+        rowKey: k,
+        sn,
+        room: currentRoom,
+        sfcLastEnd: (sfc.last_end_time || "").trim(),
+        sfcRemark: (sfc.remark || "").trim(),
+      };
+    });
+  }
   let lastDisplayRows = [];
   let sfcSnMap = {};
   let assySnMap = {};
@@ -458,11 +475,7 @@
     }
     renderTable(allRows);
     if (typeof window.etfUpdatePinnedSns === "function") {
-      window.etfUpdatePinnedSns(Array.from(pinnedSns).map((k) => ({
-        rowKey: k,
-        sn: lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === k)?.sn || k,
-        room: currentRoom,
-      })));
+      window.etfUpdatePinnedSns(buildEtfPinnedSidebarPayload());
     }
   }
 
@@ -470,11 +483,7 @@
     pinnedSns.delete(rowKey);
     renderTable(allRows);
     if (typeof window.etfUpdatePinnedSns === "function") {
-      window.etfUpdatePinnedSns(Array.from(pinnedSns).map((k) => ({
-        rowKey: k,
-        sn: lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === k)?.sn || k,
-        room: currentRoom,
-      })));
+      window.etfUpdatePinnedSns(buildEtfPinnedSidebarPayload());
     }
   };
 
@@ -754,11 +763,7 @@
     });
 
     if (pinnedSns.size > 0 && typeof window.etfUpdatePinnedSns === "function") {
-      window.etfUpdatePinnedSns(Array.from(pinnedSns).map((k) => ({
-        rowKey: k,
-        sn: lastDisplayRows.find((r) => (r.sn || r.pn || r.bmc_ip) === k)?.sn || k,
-        room: currentRoom,
-      })));
+      window.etfUpdatePinnedSns(buildEtfPinnedSidebarPayload());
     }
 
     setupResizeHandles();

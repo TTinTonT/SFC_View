@@ -4,10 +4,17 @@
 (function () {
   let rows = [];
   let summary = { total: 0, pass: 0, fail: 0 };
+  /** SN -> bool, same semantics as KPI pass (server analytics pass_rules). */
+  let snPass = {};
   let timelineFilterQuery = "";
   let timelineNextUpdateSec = 60;
   let timelineCountdownInterval = null;
-  const POLL_MS = 60000;
+  const POLL_MS = (() => {
+    const c = typeof window !== 'undefined' ? window.FA_DEBUG_CONFIG : null;
+    const n = c && Number(c.pollIntervalMs);
+    return n > 0 ? n : 60000;
+  })();
+  let fetchDataInFlight = false;
 
   const $ = (id) => document.getElementById(id);
   const el = (tag, attrs, children) => {
@@ -48,6 +55,8 @@
   }
 
   function fetchData(useCustomRange = false) {
+    if (fetchDataInFlight) return Promise.resolve();
+    fetchDataInFlight = true;
     const startEl = $('date-start');
     const endEl = $('date-end');
     const endNowEl = $('end-now');
@@ -83,6 +92,7 @@
         }
         summary = data.summary || { total: 0, pass: 0, fail: 0 };
         rows = data.rows || [];
+        snPass = data.sn_pass && typeof data.sn_pass === 'object' ? data.sn_pass : {};
         checkPinnedUpdates(rows);
         render();
         timelineNextUpdateSec = POLL_MS / 1000;
@@ -102,6 +112,7 @@
         const banner = document.getElementById('server-offline-banner');
         if (banner) banner.classList.add('show');
       })
+      .finally(() => { fetchDataInFlight = false; })
       .then(() => undefined);
   }
 
@@ -120,26 +131,42 @@
           const st = (r.station || "").toLowerCase();
           const ec = (r.error_code || "").toLowerCase();
           const fm = (r.failure_msg || "").toLowerCase();
-          return sn.includes(q) || pn.includes(q) || st.includes(q) || ec.includes(q) || fm.includes(q);
+          const resStr = (r.result || "").toLowerCase();
+          const off = r.crabber_offline === true ? "offline" : "";
+          const unc = (r.crabber_log_unc || "").toLowerCase();
+          return sn.includes(q) || pn.includes(q) || st.includes(q) || ec.includes(q) || fm.includes(q)
+            || resStr.includes(q) || (off && off.includes(q)) || unc.includes(q);
         })
       : rows;
     displayRows.forEach((r) => {
       const result = (r.result || '').toUpperCase();
-      const isPass = result === 'PASS';
+      const isPass = result === 'PASS' || result === 'ALL PASS';
+      const isTesting = result.includes('TESTING');
+      const isOffline = r.crabber_offline === true;
+      let badgeClass = 'timeline-result-badge--fail';
+      if (result === 'ALL PASS') badgeClass = 'timeline-result-badge--all-pass';
+      else if (isPass) badgeClass = 'timeline-result-badge--pass';
+      else if (isTesting && isOffline) badgeClass = 'timeline-result-badge--testing-offline';
+      else if (isTesting) badgeClass = 'timeline-result-badge--testing';
       const row = el('div', {
-        className: 'timeline-row ' + (isPass ? 'pass' : 'fail'),
+        className: 'timeline-row',
       });
       const bpNa = r.is_bonepile ? 'BP' : 'NA';
       const errTitle = r.failure_msg ? `title="${(r.failure_msg || '').replace(/"/g, '&quot;')}"` : '';
-      const logPathCell = makeLogPathCell(r.serial_number);
+      const uncPath = (r.crabber_log_unc || '').trim();
+      const uncCell = uncPath
+        ? ((typeof CrabberLogUnc !== 'undefined' && CrabberLogUnc.copyBtnHtml)
+          ? CrabberLogUnc.copyBtnHtml(uncPath)
+          : `<span class="text-xs">${escapeHtml(uncPath)}</span>`)
+        : makeLogPathCell(r.serial_number);
       row.innerHTML = [
-        `<span>${result || '-'}</span>`,
+        `<span class="timeline-result-badge ${badgeClass}">${escapeHtml(r.result || '-')}</span>`,
         `<span><button type="button" class="pin-btn pin-icon-btn" data-sn="${escapeAttr(r.serial_number)}" title="Pin"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg></button> ${escapeHtml(r.serial_number || '')}</span>`,
         `<span>${escapeHtml(r.part_number || '')}</span>`,
         `<span>${bpNa}</span>`,
         `<span>${escapeHtml(r.test_time || '')}</span>`,
         `<span ${errTitle}>${escapeHtml(r.station || '')} ${r.error_code ? `(${escapeHtml(r.error_code)})` : ''}</span>`,
-        `<span class="log-path-cell">${logPathCell}</span>`,
+        `<span class="timeline-unc-cell">${uncCell}</span>`,
       ].join('');
       body.appendChild(row);
 
@@ -147,29 +174,51 @@
       if (pinBtn) pinBtn.addEventListener('click', (e) => { e.stopPropagation(); togglePin(r.serial_number, r); });
       const logPathBtn = row.querySelector('.log-path-btn');
       if (logPathBtn) logPathBtn.addEventListener('click', (e) => { e.stopPropagation(); fetchAndShowLogPath(logPathBtn, r.serial_number); });
-      row.addEventListener('click', (e) => { if (!e.target.closest('.pin-btn') && !e.target.closest('.log-path-btn')) openDrillDown(r); });
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.pin-btn') || e.target.closest('.log-path-btn') || e.target.closest('.crabber-unc-copy')) return;
+        openDrillDown(r);
+      });
     });
   }
 
   function makeLogPathCell(sn) {
     if (!sn) return '-';
-    return '<button type="button" class="log-path-btn" data-sn="' + escapeAttr(sn) + '" title="Get log path from Crabber">Get log</button>';
+    return '<button type="button" class="log-path-btn" data-sn="' + escapeAttr(sn) + '" title="Get UNC from Crabber log path">Get UNC</button>';
   }
+
+  function uncFromCrabberLogPath(path) {
+    const raw = String(path || '').trim();
+    if (!raw) return '';
+    if (raw.startsWith('\\\\')) return raw;
+    const m = raw.match(/\/mnt\/l10\/(\d{4})\/(\d{2})\/(\d{2})\/([^\/\s]+)/i);
+    if (!m) return '';
+    const y = m[1];
+    const mo = m[2];
+    const d = m[3];
+    const logId = m[4];
+    const root = (window.CRABBER_LOG_UNC_ROOT || '').trim();
+    if (!root) return '';
+    if (typeof CrabberLogUnc !== 'undefined' && CrabberLogUnc.buildPath) {
+      const iso = y + '-' + mo + '-' + d + 'T00:00:00Z';
+      return CrabberLogUnc.buildPath(root, iso, logId) || '';
+    }
+    return root.replace(/[\\/]+$/, '') + '\\' + y + '\\' + mo + '\\' + d + '\\' + logId;
+  }
+
   function fetchAndShowLogPath(btnOrCell, sn) {
-    const cell = btnOrCell && btnOrCell.classList && btnOrCell.classList.contains('log-path-btn') ? btnOrCell.closest('.log-path-cell') || btnOrCell.parentElement : btnOrCell;
+    const cell = btnOrCell && btnOrCell.classList && btnOrCell.classList.contains('log-path-btn')
+      ? btnOrCell.closest('.timeline-unc-cell, .log-path-cell') || btnOrCell.parentElement
+      : btnOrCell;
     if (!cell || !sn) return;
     cell.innerHTML = '<span class="text-muted">...</span>';
     fetch('/api/debug/log-path?sn=' + encodeURIComponent(sn))
       .then((r) => r.json())
       .then((data) => {
-        if (data.ok && data.path) {
-          const path = data.path;
-          const isUrl = /^https?:\/\//i.test(path);
-          if (isUrl) {
-            cell.innerHTML = '<a href="' + escapeAttr(path) + '" target="_blank" rel="noopener">Open log</a>';
-          } else {
-            cell.innerHTML = '<span title="' + escapeAttr(path) + '">' + escapeHtml(path.length > 30 ? path.slice(0, 30) + '...' : path) + '</span>';
-          }
+        const unc = (data && data.ok && data.path) ? uncFromCrabberLogPath(data.path) : '';
+        if (unc) {
+          cell.innerHTML = (typeof CrabberLogUnc !== 'undefined' && CrabberLogUnc.copyBtnHtml)
+            ? CrabberLogUnc.copyBtnHtml(unc)
+            : '<span class="text-xs" title="' + escapeAttr(unc) + '">' + escapeHtml(unc) + '</span>';
         } else {
           cell.innerHTML = '<span class="text-muted">N/A</span>';
         }
@@ -190,11 +239,56 @@
   function getRowsForDrillDown(source) {
     if (source.filter) {
       if (source.filter === 'fail') return rows.filter((r) => (r.result || '').toUpperCase() === 'FAIL');
-      if (source.filter === 'pass') return rows.filter((r) => (r.result || '').toUpperCase() === 'PASS');
+      if (source.filter === 'pass') {
+        return rows.filter((r) => {
+          const x = (r.result || '').toUpperCase();
+          return x === 'PASS' || x === 'ALL PASS';
+        });
+      }
       return rows;
     }
     const sn = source.serial_number || '';
     return rows.filter((r) => (r.serial_number || '') === sn);
+  }
+
+  function latestRowForSn(sn) {
+    const t = (sn || '').trim();
+    if (!t) return null;
+    let best = null;
+    let bestMs = -Infinity;
+    rows.forEach((r) => {
+      if ((r.serial_number || '').trim() !== t) return;
+      const ms = r.test_time_dt ? new Date(r.test_time_dt).getTime() : 0;
+      if (best == null || ms >= bestMs) {
+        best = r;
+        bestMs = ms;
+      }
+    });
+    return best;
+  }
+
+  /**
+   * KPI Pass/Fail/Total counts use server sn_pass + pass_rules (latest row per SN).
+   * Drill-down must list the same SN set, one representative row each (newest in merged timeline).
+   */
+  function drillDownRowsForKpiFilter(filter) {
+    if (!snPass || typeof snPass !== 'object' || !Object.keys(snPass).length) return null;
+    const sns = Object.keys(snPass).filter((k) => {
+      if (filter === 'pass') return snPass[k] === true;
+      if (filter === 'fail') return snPass[k] === false;
+      return true;
+    });
+    const out = [];
+    sns.forEach((sn) => {
+      const r = latestRowForSn(sn);
+      if (r) out.push(r);
+    });
+    out.sort((a, b) => {
+      const tb = b.test_time_dt ? new Date(b.test_time_dt).getTime() : 0;
+      const ta = a.test_time_dt ? new Date(a.test_time_dt).getTime() : 0;
+      return tb - ta;
+    });
+    return out;
   }
 
   function groupBySn(rowsToGroup) {
@@ -230,9 +324,16 @@
     const roomEl = $('modal-drill-room');
     const tbody = $('modal-drill-tbody');
     if (!modal || !tbody) return;
-    const filteredRows = getRowsForDrillDown(rowOrFilter);
-    const snRows = groupBySn(filteredRows);
     const isFilter = rowOrFilter && 'filter' in rowOrFilter;
+    let snRows;
+    if (isFilter && (rowOrFilter.filter === 'pass' || rowOrFilter.filter === 'fail' || rowOrFilter.filter === 'total')) {
+      const aligned = drillDownRowsForKpiFilter(rowOrFilter.filter);
+      if (aligned != null) snRows = aligned;
+    }
+    if (snRows == null) {
+      const filteredRows = getRowsForDrillDown(rowOrFilter);
+      snRows = groupBySn(filteredRows);
+    }
     const filterLabel = isFilter ? (rowOrFilter.filter === 'fail' ? 'Fail' : rowOrFilter.filter === 'pass' ? 'Pass' : 'Total') : '';
     const singleSn = !isFilter && rowOrFilter ? (rowOrFilter.serial_number || '') : '';
     if (titleEl) titleEl.textContent = isFilter ? filterLabel + ' \u2022 ' + filterLabel : ('SN: ' + (singleSn || '-'));
@@ -261,7 +362,11 @@
           '<td>' + escapeHtml(bpVal) + '</td>' +
           '<td class="room-cell" data-sn="' + escapeAttr(sn) + '">-</td>' +
           '<td>' + escapeHtml(String(failureMsg).slice(0, 80)) + (String(failureMsg).length > 80 ? '...' : '') + '</td>' +
-          '<td class="log-path-cell">' + (sn ? '<button type="button" class="log-path-btn" data-sn="' + escapeAttr(sn) + '" title="Get log path from Crabber">Get log</button>' : '-') + '</td>' +
+          '<td class="timeline-unc-cell">' + ((r.crabber_log_unc || '').trim()
+            ? ((typeof CrabberLogUnc !== 'undefined' && CrabberLogUnc.copyBtnHtml)
+              ? CrabberLogUnc.copyBtnHtml((r.crabber_log_unc || '').trim())
+              : '<span class="text-xs">' + escapeHtml((r.crabber_log_unc || '').trim()) + '</span>')
+            : (sn ? '<button type="button" class="log-path-btn" data-sn="' + escapeAttr(sn) + '" title="Get UNC from Crabber log path">Get UNC</button>' : '-')) + '</td>' +
           '</tr>';
       }).join('');
     }
@@ -287,12 +392,12 @@
   let pinPanelExpanded = true;
 
   function togglePin(sn, row) {
-    if (pinned.has(sn)) {
-      pinned.delete(sn);
+    const key = (sn || '').trim();
+    if (!key) return;
+    if (pinned.has(key)) {
+      pinned.delete(key);
     } else {
-      const res = (row?.result || '').toUpperCase();
-      const lastResult = res === 'PASS' ? 'PASS' : res === 'FAIL' ? 'FAIL' : 'unknown';
-      pinned.set(sn, { sn, row, lastData: JSON.stringify(row), lastResult, blink: false, expanded: false, pinnedAt: Date.now(), room: row?.room || '–' });
+      pinned.set(key, { sn: key, row, lastData: JSON.stringify(row), lastResult: '', blink: false, expanded: false, pinnedAt: Date.now(), room: row?.room || '–', lastNotifiedAt: 0 });
     }
     renderPinPanel();
   }
@@ -300,42 +405,100 @@
   function parseTestTime(row) {
     if (!row) return null;
     const dt = row.test_time_dt;
-    if (dt) {
+    if (dt != null) {
       const t = typeof dt === 'string' ? new Date(dt) : dt;
-      return isFinite(t) ? t.getTime() : null;
+      if (t && typeof t.getTime === 'function' && isFinite(t.getTime())) return t.getTime();
     }
     const s = (row.test_time || '').trim();
     if (!s) return null;
-    const d = new Date(s.replace(/\//g, '-'));
-    return isFinite(d) ? d.getTime() : null;
+    const m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+    if (m) {
+      const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+      return isFinite(d.getTime()) ? d.getTime() : null;
+    }
+    const d = new Date(s.replace(/\//g, '-').replace(' ', 'T'));
+    return isFinite(d.getTime()) ? d.getTime() : null;
+  }
+
+  /** Newest test row for an SN (timeline order is not guaranteed — PROC + SFC rows interleave). */
+  function newestRowForSn(list) {
+    if (!list || list.length === 0) return null;
+    let best = list[0];
+    let bestT = parseTestTime(best);
+    if (bestT == null) bestT = -Infinity;
+    for (let i = 1; i < list.length; i++) {
+      const r = list[i];
+      const t = parseTestTime(r);
+      const tt = t != null ? t : -Infinity;
+      if (tt > bestT) {
+        bestT = tt;
+        best = r;
+      }
+    }
+    return best;
+  }
+
+  function classifyPinnedResult(latest) {
+    const resUpper = (latest?.result || '').toUpperCase();
+    const offline = latest?.crabber_offline === true || resUpper.includes('OFFLINE');
+    const isTesting = resUpper.includes('TESTING');
+
+    if (resUpper === 'PASS') return { kind: 'pass', label: 'PASS' };
+    if (resUpper === 'ALL PASS') return { kind: 'all-pass', label: 'ALL PASS' };
+    if (resUpper === 'FAIL') return { kind: 'fail', label: 'FAIL' };
+    if (isTesting) return { kind: offline ? 'testing-offline' : 'testing', label: offline ? 'TESTING (OFFLINE)' : 'TESTING' };
+    return { kind: 'unknown', label: latest?.result || '' };
+  }
+
+  /** SFC tray last_end_time "YYYY/MM/DD HH:mm:ss" → epoch ms (local), same as Testing table. */
+  function parseEtfSfcEndMs(s) {
+    if (!s || typeof s !== 'string') return null;
+    const m = s.trim().match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    return isFinite(d.getTime()) ? d.getTime() : null;
+  }
+
+  function classifyEtfSfcRemark(remark) {
+    const u = (remark || '').toUpperCase();
+    if (u.includes('FAIL')) return { kind: 'fail', label: remark || 'FAIL' };
+    if (u.includes('PASS')) return { kind: 'pass', label: remark || 'PASS' };
+    return { kind: 'unknown', label: remark || '–' };
   }
 
   function checkPinnedUpdates(newRows) {
     if (pinned.size === 0) return;
     const bySn = {};
     newRows.forEach((r) => {
-      const s = r.serial_number || '';
+      const s = (r.serial_number || '').trim();
+      if (!s) return;
       if (!bySn[s]) bySn[s] = [];
       bySn[s].push(r);
     });
     const now = Date.now();
     pinned.forEach((p) => {
-      const list = bySn[p.sn] || [];
-      const latest = list[0];
+      const snKey = (p.sn || '').trim();
+      const list = bySn[snKey] || [];
+      const latest = newestRowForSn(list);
       if (!latest) return;
+      p.row = latest;
       const newData = JSON.stringify(latest);
-      const newRes = (latest.result || '').toUpperCase();
-      const newResult = newRes === 'PASS' ? 'PASS' : newRes === 'FAIL' ? 'FAIL' : 'unknown';
       const pinTime = p.pinnedAt != null ? p.pinnedAt : now;
       if (newData !== p.lastData) {
         p.lastData = newData;
-        p.row = latest;
-        p.lastResult = newResult;
         const testTime = parseTestTime(latest);
-        if (testTime != null && testTime > pinTime && (newResult === 'PASS' || newResult === 'FAIL')) {
-          p.blink = newResult === 'PASS' ? 'pass' : 'fail';
-          if (newResult === 'PASS' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            new Notification('FA Debug: ' + p.sn, { body: 'Test PASS' });
+        const afterPin = testTime != null && testTime > pinTime;
+        const classified = classifyPinnedResult(latest);
+        p.lastResult = classified.label;
+
+        if (afterPin && classified.kind !== 'unknown') {
+          p.blink = classified.kind;
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            p.lastNotifiedAt = now;
+            const body = (classified.label || latest.result || 'Update') +
+              (latest.station ? (' | ' + latest.station) : '') +
+              (latest.test_time ? (' | ' + latest.test_time) : '');
+            new Notification('FA Debug: ' + p.sn, { body });
           }
         }
       }
@@ -433,11 +596,13 @@
       const testTime = parseTestTime(p.row);
       const pinTime = p.pinnedAt != null ? p.pinnedAt : 0;
       const afterPin = testTime != null && pinTime > 0 && testTime > pinTime;
-      const status = afterPin && res === 'PASS' ? 'pass' : afterPin && res === 'FAIL' ? 'fail' : 'unknown';
+      const classified = classifyPinnedResult(p.row);
+      let status = 'unknown';
+      if (afterPin) status = classified.kind;
       const expanded = p.expanded;
       const div = el('div', { className: 'pin-sidebar-item' + (expanded ? '' : ' collapsed') });
       const iconSpan = document.createElement('span');
-      const blinkClass = (p.blink === 'pass' || p.blink === 'fail') ? ' blink' : '';
+      const blinkClass = (p.blink && p.blink !== false) ? ' blink' : '';
       iconSpan.className = 'pin-icon ' + status + blinkClass;
       /* blink stays until user clicks (see click handler: p.blink = false) */
       const snSpan = el('span', { className: 'pin-sn' });
@@ -473,14 +638,33 @@
       div.title = expanded ? 'Click to collapse' : 'Click to expand';
       body.appendChild(div);
     });
-    etfPinnedSns.forEach(({ rowKey, sn, room }) => {
-      const div = el('div', { className: 'pin-sidebar-item collapsed' });
+    etfPinnedSns.forEach((ep) => {
+      const rowKey = ep.rowKey;
+      const sn = ep.sn || rowKey || '–';
+      const room = ep.room || 'ETF';
+      const endMs = parseEtfSfcEndMs(ep.sfcLastEnd || '');
+      const pinnedAt = ep.pinnedAt != null ? ep.pinnedAt : 0;
+      const afterPin = endMs != null && pinnedAt > 0 && endMs > pinnedAt;
+      const classified = classifyEtfSfcRemark(ep.sfcRemark || '');
+      let status = 'unknown';
+      if (afterPin) status = classified.kind !== 'unknown' ? classified.kind : 'testing';
+      const expanded = !!ep.expanded;
+      const div = el('div', { className: 'pin-sidebar-item' + (expanded ? '' : ' collapsed') });
       const iconSpan = document.createElement('span');
-      iconSpan.className = 'pin-icon unknown';
+      const blinkClass = ep.blink && ep.blink !== false ? ' blink' : '';
+      iconSpan.className = 'pin-icon ' + status + blinkClass;
       const snSpan = el('span', { className: 'pin-sn' });
-      snSpan.textContent = sn || rowKey || '–';
+      snSpan.textContent = sn;
+      snSpan.title = sn;
+      const remark = (ep.sfcRemark || '').trim() || '–';
+      const pinTimeStr = pinnedAt > 0 ? (function () {
+        const d = new Date(pinnedAt);
+        return 'Pinned ' + d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+      }()) : '';
+      const detailsText = (room || 'ETF') + ' | ' + remark + (pinTimeStr ? ' | ' + pinTimeStr : '');
       const details = el('div', { className: 'pin-details' });
-      details.textContent = (room || 'ETF') + ' | –';
+      details.textContent = detailsText;
+      details.title = detailsText;
       const unpinBtn = el('button', { type: 'button', className: 'unpin' });
       unpinBtn.textContent = '×';
       unpinBtn.title = 'Unpin';
@@ -488,21 +672,23 @@
       div.appendChild(snSpan);
       div.appendChild(details);
       div.appendChild(unpinBtn);
-      let etfExpanded = false;
       unpinBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (typeof window.etfUnpinSn === 'function') window.etfUnpinSn(rowKey);
         else {
-          etfPinnedSns.splice(etfPinnedSns.findIndex((x) => x.rowKey === rowKey), 1);
+          const ix = etfPinnedSns.findIndex((x) => x.rowKey === rowKey);
+          if (ix >= 0) etfPinnedSns.splice(ix, 1);
           renderPinSidebar();
         }
       });
       div.addEventListener('click', (e) => {
         if (!e.target.classList.contains('unpin')) {
-          etfExpanded = !etfExpanded;
-          div.classList.toggle('collapsed', !etfExpanded);
+          ep.expanded = !expanded;
+          ep.blink = false;
+          renderPinSidebar();
         }
       });
+      div.title = expanded ? 'Click to collapse' : 'Click to expand';
       body.appendChild(div);
     });
     sidebar.appendChild(body);
@@ -571,6 +757,15 @@
     const timelineFilterEl = $('timeline-filter');
     if (timelineFilterEl) timelineFilterEl.addEventListener('input', () => { timelineFilterQuery = timelineFilterEl.value; render(); });
 
+    $('timeline-body')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.crabber-unc-copy');
+      if (!btn) return;
+      e.stopPropagation();
+      if (typeof CrabberLogUnc !== 'undefined' && CrabberLogUnc.performCopy) {
+        CrabberLogUnc.performCopy(btn);
+      }
+    });
+
     const endNowEl = $('end-now');
     const endDateWrap = $('end-date-wrap');
     const toggleEndDateVisibility = () => {
@@ -612,6 +807,32 @@
 
   const snDebugPanels = new Map();
   let etfPinnedSns = [];
+
+  window.etfUpdatePinnedSns = function (items) {
+    const prevMap = new Map(etfPinnedSns.map((x) => [x.rowKey, x]));
+    const now = Date.now();
+    etfPinnedSns = (items || []).map((it) => {
+      const prev = prevMap.get(it.rowKey);
+      const pinnedAt = prev && prev.pinnedAt != null ? prev.pinnedAt : now;
+      const sig = (it.sfcLastEnd || '') + '|' + (it.sfcRemark || '');
+      const endMs = parseEtfSfcEndMs(it.sfcLastEnd || '');
+      const afterPin = endMs != null && endMs > pinnedAt;
+      const classified = classifyEtfSfcRemark(it.sfcRemark || '');
+      const sigChanged = prev && sig !== (prev.lastSig || '');
+      let blink = prev && prev.blink ? prev.blink : false;
+      if (prev && afterPin && sigChanged) {
+        blink = classified.kind !== 'unknown' ? classified.kind : 'testing';
+      }
+      return {
+        ...it,
+        pinnedAt,
+        lastSig: sig,
+        blink,
+        expanded: prev && prev.expanded != null ? prev.expanded : false,
+      };
+    });
+    renderPinSidebar();
+  };
 
   function getConfig() {
     return window.FA_DEBUG_CONFIG || {};
@@ -1087,11 +1308,6 @@
 
   window.etfGetSnPanel = function(rowKey) {
     return snDebugPanels.get(rowKey) || null;
-  };
-
-  window.etfUpdatePinnedSns = function(items) {
-    etfPinnedSns = items || [];
-    renderPinSidebar();
   };
 
   function onReady() {

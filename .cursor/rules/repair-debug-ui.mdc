@@ -18,4 +18,4 @@ alwaysApply: false
   - validate EC using `REPLACE(ERROR_CODE, ' ', '')` with error types `E/W`
   - call `SFIS1.NEW_TEST_INPUT_Z`
   - commit only when returned `RES='OK'`, otherwise rollback
-- Employee ID source is top Search area and defaults to `SJOP`.
+- Employee ID: top Search area / repair payloads; default from profile `employee_id` then `username` (server `resolve_sfis_emp`); user can edit fields.

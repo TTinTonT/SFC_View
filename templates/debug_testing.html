@@ -34,9 +34,32 @@
   .modal-box { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; max-width: 44rem; width: 94%; max-height: 80vh; overflow: auto; }
   .table-compact { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   .table-compact th, .table-compact td { border-bottom: 1px solid var(--color-border); padding: 0.4rem 0.25rem; text-align: left; }
-  .crabber-row-fail { background: rgba(239, 68, 68, 0.18); }
-  .crabber-row-pass { background: rgba(34, 197, 94, 0.18); }
-  .crabber-row-testing { background: rgba(250, 204, 21, 0.2); }
+  /* Crabber Test history: status pill only (same idea as FA Debug timeline) */
+  .timeline-result-badge {
+    display: inline-block;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    line-height: 1.25;
+    letter-spacing: 0.02em;
+  }
+  .timeline-result-badge--pass { background: rgba(16, 185, 129, 0.18); color: #059669; border: 1px solid rgba(16, 185, 129, 0.35); }
+  .timeline-result-badge--fail { background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); }
+  .timeline-result-badge--testing { background: rgba(250, 204, 21, 0.35); color: #92400e; border: 1px solid rgba(217, 119, 6, 0.35); }
+  .timeline-result-badge--testing-offline { background: rgba(147, 197, 253, 0.35); color: #1d4ed8; border: 1px solid rgba(59, 130, 246, 0.4); }
+  .timeline-result-badge--all-pass {
+    color: #00ff88;
+    background: linear-gradient(145deg, rgba(0, 55, 40, 0.92), rgba(0, 90, 55, 0.88));
+    border: 1px solid #00ff88;
+    box-shadow: 0 0 14px rgba(0, 255, 136, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    text-shadow: 0 0 10px rgba(0, 255, 160, 0.75);
+  }
+  .timeline-result-badge--other { background: var(--color-hover); color: var(--color-text); border: 1px solid var(--color-border); font-weight: 600; }
+  .crabber-unc-copy { position: relative; display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.45rem; font-size: 0.7rem; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); cursor: pointer; white-space: nowrap; }
+  .crabber-unc-copy:hover { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+  .crabber-unc-path { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .crabber-unc-copied { box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.55); border-radius: 4px; }
   .ec-valid { color: #16a34a; font-weight: 600; }
   .tree-row-flag-y { background: rgba(22, 163, 74, 0.15); }
   .tree-row-flag-n { background: rgba(220, 38, 38, 0.15); }
@@ -67,11 +90,12 @@
   .term-cell-h { padding: 0.35rem 0.5rem; background: #2d2d2d; color: #94a3b8; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
   /* Outer = fixed frame; inner pane = exact pixel box xterm FitAddon measures (avoids flex + fit mismatch). */
   .sn-debug-terminal { min-height: 240px; height: 368px; position: relative; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; padding-bottom: 8px; }
-  .sn-debug-terminal-pane { flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; overflow: hidden; }
+  .sn-debug-terminal-pane { flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; overflow: hidden; overscroll-behavior: contain; }
   /* Shrink xterm fit box (not viewport padding) so last row + cursor stay inside the painted area */
   .sn-debug-terminal-pane.terminal-pure-xterm { padding-bottom: 22px; box-sizing: border-box; }
   .sn-debug-terminal .xterm { width: 100% !important; flex: 1 !important; min-height: 0; }
-  .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; }
+  .sn-debug-terminal .xterm-viewport { overflow-y: auto !important; overflow-x: hidden; padding-bottom: 20px; overscroll-behavior: contain; }
+  .sn-debug-terminal { overscroll-behavior: contain; }
   .sn-debug-ai-controls { display: flex; gap: 0.35rem; flex-wrap: wrap; }
   .sn-debug-ai-controls .sn-debug-btn { background: #3d3d3d; color: #94a3b8; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; border: none; cursor: pointer; }
   .sn-debug-ai-controls .sn-debug-btn:hover { background: var(--color-primary); color: white; }
@@ -104,6 +128,37 @@
   .etf-ot-machine-item.selected { background: rgba(99, 102, 241, 0.12); outline: 2px solid var(--color-primary); }
   .etf-ot-machine-item .occ { color: #c2410c; font-size: 0.75rem; }
   .etf-ot-pre { font-size: 0.7rem; max-height: 160px; overflow: auto; background: var(--color-bg); padding: 0.5rem; border-radius: 6px; white-space: pre-wrap; word-break: break-all; }
+  /* Pin sidebar (shared with FA Debug via fa_debug.js) */
+  .pin-sidebar { position: fixed; top: 72px; right: 12px; left: auto; bottom: auto; z-index: 90; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; pointer-events: none; }
+  .pin-sidebar .pin-sidebar-body { pointer-events: auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .pin-sidebar-item { display: flex; flex-direction: row; align-items: center; gap: 0; border-radius: 999px; background: #424242; color: #E0E0E0; padding: 0.35rem 0.5rem; font-size: 0.75rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); transition: max-width 0.25s ease, padding 0.2s ease; max-width: 420px; overflow: hidden; }
+  .pin-sidebar-item:hover { background: #4D4D4D; }
+  .pin-sidebar-item .pin-icon { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-right: 0.4rem; }
+  .pin-icon.pass { background: var(--color-success); }
+  .pin-icon.fail { background: var(--color-danger); }
+  .pin-icon.testing { background: rgba(250, 204, 21, 0.98); box-shadow: 0 0 10px rgba(250, 204, 21, 0.45); }
+  .pin-icon.testing-offline { background: rgba(59, 130, 246, 0.98); box-shadow: 0 0 10px rgba(59, 130, 246, 0.45); }
+  .pin-icon.all-pass { background: rgba(0, 255, 136, 0.98); box-shadow: 0 0 14px rgba(0, 255, 136, 0.55); }
+  .pin-icon.unknown { background: #9ca3af; }
+  .pin-icon.pass.blink { animation: pin-blink-green 0.6s ease infinite; }
+  .pin-icon.fail.blink { animation: pin-blink-red 0.6s ease infinite; }
+  .pin-icon.testing.blink { animation: pin-blink-yellow 0.6s ease infinite; }
+  .pin-icon.testing-offline.blink { animation: pin-blink-blue 0.6s ease infinite; }
+  .pin-icon.all-pass.blink { animation: pin-blink-neon 0.6s ease infinite; }
+  .pin-icon.unknown.blink { animation: pin-blink-unknown 0.6s ease infinite; }
+  @keyframes pin-blink-green { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--color-success); transform: translateY(0) scale(1); } 50% { opacity: 0.65; box-shadow: 0 0 7px 2px var(--color-success); transform: translateY(-2px) scale(1.15); } }
+  @keyframes pin-blink-red { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--color-danger); transform: translateY(0) scale(1); } 50% { opacity: 0.65; box-shadow: 0 0 7px 2px var(--color-danger); transform: translateY(-2px) scale(1.15); } }
+  @keyframes pin-blink-yellow { 0%, 100% { opacity: 1; transform: translateY(0) scale(1); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.95); } 50% { opacity: 0.65; transform: translateY(-2px) scale(1.15); box-shadow: 0 0 8px 2px rgba(250, 204, 21, 0.95); } }
+  @keyframes pin-blink-blue { 0%, 100% { opacity: 1; transform: translateY(0) scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.95); } 50% { opacity: 0.65; transform: translateY(-2px) scale(1.15); box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.95); } }
+  @keyframes pin-blink-neon { 0%, 100% { opacity: 1; transform: translateY(0) scale(1); box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.95); } 50% { opacity: 0.75; transform: translateY(-2px) scale(1.15); box-shadow: 0 0 10px 3px rgba(0, 255, 136, 0.95); } }
+  @keyframes pin-blink-unknown { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(156, 163, 175, 0.85); transform: translateY(0) scale(1); } 50% { opacity: 0.55; box-shadow: 0 0 8px 2px rgba(209, 213, 219, 0.95); transform: translateY(-2px) scale(1.12); } }
+  .pin-sidebar-item .pin-sn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; flex-shrink: 0; }
+  .pin-sidebar-item .pin-details { display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 0.5rem; padding-left: 0.5rem; border-left: 1px solid rgba(255,255,255,0.2); font-size: 0.7rem; color: #D3D3D3; flex: 1; min-width: 0; }
+  .pin-sidebar-item.collapsed .pin-details { display: none; margin: 0; padding: 0; border: none; max-width: 0; overflow: hidden; }
+  .pin-sidebar-item .unpin { margin-left: 0.35rem; padding-left: 0.35rem; border-left: 1px solid rgba(255,255,255,0.2); background: transparent; border: none; cursor: pointer; font-size: 1rem; color: #D3D3D3; flex-shrink: 0; line-height: 1; }
+  .pin-sidebar-item .unpin:hover { color: #fff; }
+  .pin-icon-btn { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; color: var(--color-muted); border-radius: 4px; }
+  .pin-icon-btn:hover { color: var(--color-primary); background: var(--color-hover); }
   /* After theme_shared (height:100% on html,body): let the document grow so you can scroll to the bottom of the terminal grid */
   html { height: auto; min-height: 100%; }
   body {
@@ -160,9 +215,9 @@
     <div class="overflow-x-auto mb-2">
       <table class="table-compact w-full">
         <thead>
-          <tr><th>Start (Cali)</th><th>End (Cali)</th><th>Station</th><th>Result</th><th>PN</th><th>Machine</th></tr>
+          <tr><th>Start (Cali)</th><th>End (Cali)</th><th>Station</th><th>Result</th><th>PN</th><th>Machine</th><th title="Oberon L10 UNC folder">Log UNC</th></tr>
         </thead>
-        <tbody id="crabber-tbody"><tr><td colspan="6" class="text-[var(--color-muted)]">Search an SN to load history.</td></tr></tbody>
+        <tbody id="crabber-tbody"><tr><td colspan="7" class="text-[var(--color-muted)]">Search an SN to load history.</td></tr></tbody>
       </table>
     </div>
 
@@ -407,7 +462,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
   <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js" defer></script>
-  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} }; window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }};</script>
+  <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} }; window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }}; window.CRABBER_LOG_UNC_ROOT = {{ (crabber_log_unc_root|default(''))|tojson }};</script>
+  <script src="/static/js/crabber_log_unc.js" defer></script>
   <script src="/static/js/fa_debug.js" defer></script>
   <script src="/static/js/etf_online_test_modal.js" defer></script>
   <script src="/static/js/etf_terminal_helpers.js" defer></script>

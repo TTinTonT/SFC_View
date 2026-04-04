@@ -5,8 +5,19 @@ import os
 
 from config.site_defaults import get_default
 
-POLL_INTERVAL_SEC = 60
+# Server poller and browser poll: same interval (ms passed to fa_debug.html as pollIntervalMs).
+POLL_INTERVAL_SEC = int(os.environ.get("POLL_INTERVAL_SEC", get_default("POLL_INTERVAL_SEC") or 60))
+POLL_INTERVAL_MS = POLL_INTERVAL_SEC * 1000
 LOOKBACK_HOURS = 24
+
+# Crabber timeline: global search_log_items page-1 + per-SN reconcile budget
+CRABBER_PAGE_TIMEOUT_SEC = int(os.environ.get("CRABBER_PAGE_TIMEOUT_SEC", get_default("CRABBER_PAGE_TIMEOUT_SEC") or 22))
+CRABBER_PROC_RECONCILE_MAX_SN = int(
+    os.environ.get("CRABBER_PROC_RECONCILE_MAX_SN", get_default("CRABBER_PROC_RECONCILE_MAX_SN") or 15)
+)
+CRABBER_RECONCILE_TIMEOUT_SEC = int(
+    os.environ.get("CRABBER_RECONCILE_TIMEOUT_SEC", get_default("CRABBER_RECONCILE_TIMEOUT_SEC") or 10)
+)
 
 WS_TERMINAL_URL = os.environ.get("WS_TERMINAL_URL", get_default("WS_TERMINAL_URL"))
 UPLOAD_URL = os.environ.get("UPLOAD_URL", get_default("UPLOAD_URL"))
@@ -33,3 +44,5 @@ CRABBER_BASE_URL = os.environ.get("CRABBER_BASE_URL", get_default("CRABBER_BASE_
 CRABBER_TOKEN = os.environ.get("CRABBER_TOKEN", get_default("CRABBER_TOKEN"))
 CRABBER_USER_ID = str(os.environ.get("CRABBER_USER_ID", get_default("CRABBER_USER_ID") or "41")).strip()
 CRABBER_SITENAME = (os.environ.get("CRABBER_SITENAME", get_default("CRABBER_SITENAME") or "SanJose")).strip()
+# Oberon L10 log share UNC prefix (see crabber.log_unc_path); override with CRABBER_LOG_UNC_ROOT
+CRABBER_LOG_UNC_ROOT = os.environ.get("CRABBER_LOG_UNC_ROOT", get_default("CRABBER_LOG_UNC_ROOT") or "").strip()

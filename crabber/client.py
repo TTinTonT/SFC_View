@@ -6,9 +6,12 @@ Flow:
   1. GET /api/search_log_items/?sn=XXX -> get latest node_log_id
   2. GET /api/get_node_info/?node_log_id=XXX -> extract Log Report File Path from Log-Info section
 """
-from typing import Any, Optional
+from typing import Any, List, Optional, Tuple
+from urllib.parse import quote
 
 import requests
+
+from crabber.log_unc_path import build_crabber_log_folder_unc, extract_node_log_id
 
 
 def _get_config():
@@ -24,6 +27,126 @@ def _headers(token: str) -> dict:
         "Accept": "application/json, text/plain, */*",
         "Authorization": f"Token {token}" if token else "",
     }
+
+
+def build_search_log_items_url(
+    base: str,
+    sn: str = "",
+    cur_page: int = 1,
+    is_trial: bool = False,
+) -> str:
+    """Crabber search_log_items query; sn may be empty for global recent logs."""
+    trial = "true" if is_trial else "false"
+    sn_q = quote((sn or "").strip(), safe="")
+    root = (base or "").strip().rstrip("/")
+    return (
+        f"{root}/api/search_log_items/"
+        f"?cur_page={int(cur_page)}&project=&station=&phase=&precondition=&label_data=&result=All"
+        f"&spid=&machine=&pn=&from_date=&to_date=&sfc=&cal_total=false&is_trial={trial}"
+        f"&sn={sn_q}"
+    )
+
+
+def fetch_search_log_items_json(
+    sn: str = "",
+    cur_page: int = 1,
+    is_trial: bool = False,
+    timeout: int = 20,
+) -> Tuple[Optional[dict], Optional[str]]:
+    """
+    GET search_log_items; returns (response_dict, error_str).
+    On failure response_dict is None.
+    """
+    base, token = _get_config()
+    if not base:
+        return None, "CRABBER_BASE_URL empty"
+    url = build_search_log_items_url(base, sn=sn, cur_page=cur_page, is_trial=is_trial)
+    try:
+        r = requests.get(url, headers=_headers(token), timeout=timeout)
+        if not r.ok:
+            return None, f"HTTP {r.status_code}"
+        data = r.json()
+        if not isinstance(data, dict):
+            return None, "response is not a JSON object"
+        return data, None
+    except Exception as e:
+        return None, str(e)
+
+
+def tier_from_crabber_station(station: str) -> Optional[str]:
+    """L10 if SYSTEM in station, L11 if FVT (FVT checked first). Else None."""
+    s = (station or "").strip()
+    if "FVT" in s:
+        return "L11"
+    if "SYSTEM" in s:
+        return "L10"
+    return None
+
+
+def reconcile_l10_proc_items_for_sns(
+    sns: List[str],
+    is_trial: bool,
+    *,
+    timeout: int = 10,
+    limit: int = 50,
+) -> List[dict]:
+    """
+    For each SN, if latest rows still contain L10 PROC, return one dict per SN (fetch_test_history shape).
+    """
+    out: List[dict] = []
+    want_seen: set = set()
+    for sn in sns:
+        s = (sn or "").strip()
+        if not s:
+            continue
+        ku = s.upper()
+        if ku in want_seen:
+            continue
+        want_seen.add(ku)
+        res = fetch_test_history_for_sn(s, timeout=timeout, limit=limit, is_trial=is_trial)
+        if not res.get("ok"):
+            continue
+        for t in res.get("tests") or []:
+            if not isinstance(t, dict):
+                continue
+            if str(t.get("node_log_event") or "").strip().upper() != "PROC":
+                continue
+            st = str(t.get("station") or "").strip()
+            if tier_from_crabber_station(st) != "L10":
+                continue
+            row_sn = str(t.get("sn") or "").strip().upper()
+            if row_sn and row_sn != ku:
+                continue
+            out.append(t)
+            break
+    return out
+
+
+def extract_l10_proc_first_per_sn(items: Any) -> List[dict]:
+    """
+    From search_log_items log_list (newest first): first PROC row per SN, L10 only.
+    """
+    if not isinstance(items, list):
+        return []
+    seen: set = set()
+    out: List[dict] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if str(it.get("node_log_event") or it.get("nodeLogEvent") or "").strip().upper() != "PROC":
+            continue
+        st = str(it.get("station") or it.get("Station") or "").strip()
+        if tier_from_crabber_station(st) != "L10":
+            continue
+        sn = str(it.get("sn") or it.get("SN") or "").strip()
+        if not sn:
+            continue
+        ku = sn.upper()
+        if ku in seen:
+            continue
+        seen.add(ku)
+        out.append(it)
+    return out
 
 
 def _extract_items_list(obj: Any) -> Optional[list]:
@@ -69,12 +192,7 @@ def get_sn_tier_from_crabber(sn: str, timeout: int = 15) -> Optional[str]:
     if not base or not (sn or "").strip():
         return None
     sn = sn.strip()
-    search_url = (
-        f"{base}/api/search_log_items/"
-        f"?cur_page=1&project=&station=&phase=&precondition=&label_data=&result=All"
-        f"&spid=&machine=&pn=&from_date=&to_date=&sfc=&cal_total=false&is_trial=false"
-        f"&sn={sn}"
-    )
+    search_url = build_search_log_items_url(base, sn=sn, cur_page=1, is_trial=False)
     try:
         r = requests.get(search_url, headers=_headers(token), timeout=timeout)
         if not r.ok:
@@ -160,7 +278,9 @@ def _derive_crabber_display_result(raw_result: str, node_log_event: str) -> str:
     return (raw_result or "").strip()
 
 
-def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> dict:
+def fetch_test_history_for_sn(
+    sn: str, timeout: int = 20, limit: int = 100, is_trial: bool = False
+) -> dict:
     """
     List test log rows for SN from Crabber search_log_items (no per-row node detail fetch).
 
@@ -168,7 +288,8 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
       sn, station, result (display: Canceled / Testing / API Pass|Fail|…),
       test_time (legacy: same as start time source), log_time (ISO UTC, prefer API log_time),
       sfc_event_date (ISO UTC when test finished / SFC posted; empty while PROC/TPSQ or missing),
-      node_log_id, pn, pn_name, machine, machine_id, phase, project, node_log_event (raw, for UI polling),
+      node_log_id, exe_log_id, log_folder_unc (Oberon UNC uses node_log_id segment), pn, pn_name, machine, machine_id,
+      phase, project, node_log_event (raw, for UI polling),
       procedure, revision (for Crabber UI deep-link cookie + processing_info query).
     """
     base, token = _get_config()
@@ -177,12 +298,7 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
         result["error"] = "CRABBER_BASE_URL empty or sn empty"
         return result
     sn = sn.strip()
-    search_url = (
-        f"{base}/api/search_log_items/"
-        f"?cur_page=1&project=&station=&phase=&precondition=&label_data=&result=All"
-        f"&spid=&machine=&pn=&from_date=&to_date=&sfc=&cal_total=false&is_trial=false"
-        f"&sn={sn}"
-    )
+    search_url = build_search_log_items_url(base, sn=sn, cur_page=1, is_trial=is_trial)
     try:
         r = requests.get(search_url, headers=_headers(token), timeout=timeout)
         if not r.ok:
@@ -207,12 +323,9 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
             break
         if not isinstance(it, dict):
             continue
-        node_log_id = (
-            it.get("node_log_id")
-            or it.get("nodeLogId")
-            or it.get("log_id")
-            or it.get("id")
-        )
+        node_log_id_str = extract_node_log_id(it)
+        _exe_raw = it.get("exe_log_id") if it.get("exe_log_id") is not None else it.get("exeLogId")
+        exe_log_id_str = str(_exe_raw).strip() if _exe_raw is not None else ""
         node_log_event = str(
             it.get("node_log_event") or it.get("nodeLogEvent") or ""
         ).strip()
@@ -228,6 +341,11 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
         ).strip()
         if not log_time_iso:
             log_time_iso = test_time
+        log_folder_unc = (
+            build_crabber_log_folder_unc(log_time_iso, node_log_id_str)
+            if node_log_id_str
+            else ""
+        )
         sfc_raw = it.get("sfc_event_date") or it.get("sfcEventDate")
         sfc_event_date = str(sfc_raw).strip() if sfc_raw is not None and str(sfc_raw).strip() else ""
         pn_name = str(
@@ -265,7 +383,9 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
                 "test_time": test_time,
                 "log_time": log_time_iso,
                 "sfc_event_date": sfc_event_date,
-                "node_log_id": str(node_log_id).strip() if node_log_id else "",
+                "node_log_id": node_log_id_str,
+                "exe_log_id": exe_log_id_str,
+                "log_folder_unc": log_folder_unc,
                 "pn": pn_name,
                 "pn_name": pn_name,
                 "machine": str(
@@ -291,7 +411,7 @@ def fetch_test_history_for_sn(sn: str, timeout: int = 20, limit: int = 100) -> d
 
 
 def sn_has_active_crabber_test(
-    sn: str, *, timeout: int = 12, limit: int = 80
+    sn: str, *, timeout: int = 12, limit: int = 80, is_trial: bool = False
 ) -> tuple[bool, Optional[str]]:
     """
     True if Crabber log rows for SN show an in-progress test (node_log_event PROC or display Testing).
@@ -302,7 +422,7 @@ def sn_has_active_crabber_test(
     s = (sn or "").strip()
     if not s:
         return False, "sn empty"
-    res = fetch_test_history_for_sn(s, timeout=timeout, limit=limit)
+    res = fetch_test_history_for_sn(s, timeout=timeout, limit=limit, is_trial=is_trial)
     if not res.get("ok"):
         return False, str(res.get("error") or "crabber fetch failed")
     want = s.upper()
@@ -334,12 +454,7 @@ def fetch_log_report_path(sn: str, timeout: int = 15) -> Optional[str]:
     sn = sn.strip()
 
     # Step 1: Search logs by SN
-    search_url = (
-        f"{base}/api/search_log_items/"
-        f"?cur_page=1&project=&station=&phase=&precondition=&label_data=&result=All"
-        f"&spid=&machine=&pn=&from_date=&to_date=&sfc=&cal_total=false&is_trial=false"
-        f"&sn={sn}"
-    )
+    search_url = build_search_log_items_url(base, sn=sn, cur_page=1, is_trial=False)
     try:
         r = requests.get(search_url, headers=_headers(token), timeout=timeout)
         if not r.ok:
@@ -414,12 +529,7 @@ def fetch_log_report_path_debug(sn: str, timeout: int = 15) -> dict:
     result["has_token"] = bool(token)
 
     # Step 1
-    search_url = (
-        f"{base}/api/search_log_items/"
-        f"?cur_page=1&project=&station=&phase=&precondition=&label_data=&result=All"
-        f"&spid=&machine=&pn=&from_date=&to_date=&sfc=&cal_total=false&is_trial=false"
-        f"&sn={sn}"
-    )
+    search_url = build_search_log_items_url(base, sn=sn, cur_page=1, is_trial=False)
     result["step1"]["url"] = search_url
     try:
         r = requests.get(search_url, headers=_headers(token), timeout=timeout)
