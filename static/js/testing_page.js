@@ -397,6 +397,17 @@
         return s;
       }
     }
+    function crabberResultBadgeClass(rs) {
+      var r = String(rs || '').toUpperCase();
+      if (r === 'ALL PASS') return 'timeline-result-badge timeline-result-badge--all-pass';
+      if (r === 'PASS') return 'timeline-result-badge timeline-result-badge--pass';
+      if (r === 'FAIL') return 'timeline-result-badge timeline-result-badge--fail';
+      if (r.indexOf('TESTING') !== -1 && r.indexOf('OFFLINE') !== -1) {
+        return 'timeline-result-badge timeline-result-badge--testing-offline';
+      }
+      if (r.indexOf('TESTING') !== -1) return 'timeline-result-badge timeline-result-badge--testing';
+      return 'timeline-result-badge timeline-result-badge--other';
+    }
     function renderCrabberTable(crabber) {
       if (!crabberTbody) return;
       var tests = (crabber && crabber.ok && Array.isArray(crabber.tests)) ? crabber.tests : [];
@@ -412,7 +423,7 @@
         var endIso = (t.sfc_event_date && String(t.sfc_event_date).trim()) ? String(t.sfc_event_date).trim() : '';
         var endDisp = endIso ? formatCrabberCali(endIso) : '—';
         var rs = String(t.result || '').toUpperCase();
-        var rowCls = rs === 'FAIL' ? 'crabber-row-fail' : (rs === 'PASS' ? 'crabber-row-pass' : (rs === 'TESTING' ? 'crabber-row-testing' : ''));
+        var badgeCls = crabberResultBadgeClass(rs);
         var uncPath = (t.log_folder_unc && String(t.log_folder_unc).trim()) || '';
         if (!uncPath && typeof CrabberLogUnc !== 'undefined' && window.CRABBER_LOG_UNC_ROOT) {
           uncPath = CrabberLogUnc.buildPath(window.CRABBER_LOG_UNC_ROOT, startIso, t.node_log_id || '') || '';
@@ -420,7 +431,8 @@
         var uncHtml = (typeof CrabberLogUnc !== 'undefined' && CrabberLogUnc.copyBtnHtml)
           ? CrabberLogUnc.copyBtnHtml(uncPath)
           : (uncPath ? rcEscHtml(uncPath) : '—');
-        return '<tr class="' + rowCls + '"><td>' + rcEscHtml(startDisp) + '</td><td>' + rcEscHtml(endDisp) + '</td><td>' + rcEscHtml(t.station || '') + '</td><td>' + rcEscHtml(t.result || '') + '</td><td>' + rcEscHtml(t.pn || '') + '</td><td>' + rcEscHtml(t.machine || '') + '</td><td>' + uncHtml + '</td></tr>';
+        var resultCell = '<span class="' + badgeCls + '">' + rcEscHtml(t.result || '') + '</span>';
+        return '<tr><td>' + rcEscHtml(startDisp) + '</td><td>' + rcEscHtml(endDisp) + '</td><td>' + rcEscHtml(t.station || '') + '</td><td>' + resultCell + '</td><td>' + rcEscHtml(t.pn || '') + '</td><td>' + rcEscHtml(t.machine || '') + '</td><td>' + uncHtml + '</td></tr>';
       }).join('');
     }
     function renderTree() {
