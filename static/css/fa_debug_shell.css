@@ -1,0 +1,195 @@
+/**
+ * Shared FA Debug shell: sticky header, nav (btn-ghost), theme, main content area.
+ * Add class "fa-debug-shell" on <html> (with h-full if needed).
+ */
+html.fa-debug-shell,
+html.fa-debug-shell body {
+  height: 100%;
+}
+html.fa-debug-shell body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color 0.3s, color 0.3s;
+  font-size: 15px;
+  line-height: 1.6;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+}
+html.fa-debug-shell .app-wrapper {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+}
+html.fa-debug-shell header {
+  background: var(--color-surface);
+  border-bottom: 2px solid var(--color-border);
+  padding: 0.75rem 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+/* Full-width content (minus header padding); avoid a narrow 1400px column on large monitors */
+html.fa-debug-shell .header-content {
+  max-width: none;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+html.fa-debug-shell .header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+html.fa-debug-shell .header-row > h1 {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: var(--color-text);
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+html.fa-debug-shell .header-filters {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--color-border);
+}
+html.fa-debug-shell .header-filters .input-field {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8125rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+}
+html.fa-debug-shell .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+html.fa-debug-shell .icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  border: 1.5px solid var(--color-border);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+html.fa-debug-shell .icon-btn:hover {
+  background: var(--color-hover);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  transform: translateY(-1px);
+}
+html.fa-debug-shell .btn-ghost {
+  background: transparent;
+  color: var(--color-muted);
+  padding: 0.625rem 1.25rem;
+  border-radius: 10px;
+  border: 1.5px solid var(--color-border);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+html.fa-debug-shell .btn-ghost:hover {
+  background: var(--color-hover);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+html.fa-debug-shell .btn-mini {
+  padding: 0.45rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+html.fa-debug-shell .btn-primary {
+  background: var(--color-primary);
+  color: white;
+  padding: 0.625rem 1.25rem;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+html.fa-debug-shell .btn-primary:hover {
+  background: #4f46e5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+html.fa-debug-shell .btn-primary.btn-mini {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.875rem;
+}
+html.fa-debug-shell .btn-ghost.btn-mini.fa-nav-active {
+  background: var(--color-primary);
+  color: #fff !important;
+  border-color: var(--color-primary);
+}
+html.fa-debug-shell .btn-ghost.btn-mini.fa-nav-active:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff !important;
+}
+html.fa-debug-shell .btn-ghost.disabled,
+html.fa-debug-shell .btn-mini.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+html.fa-debug-shell main {
+  max-width: none;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  box-sizing: border-box;
+}
+/* Chỉ trang FA Debug (/debug): giới hạn nội dung 90% chiều ngang */
+html.fa-debug-shell main.fa-debug-main-max-90 {
+  max-width: 90%;
+}
+html.fa-debug-shell .text-muted {
+  color: var(--color-muted);
+}
+html.fa-debug-shell .btn-spinner {
+  display: inline-block;
+  margin-left: 0.35rem;
+  animation: fa-debug-spin 0.8s linear infinite;
+}
+html.fa-debug-shell .btn-primary .btn-spinner {
+  opacity: 0.9;
+}
+@keyframes fa-debug-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

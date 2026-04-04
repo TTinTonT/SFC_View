@@ -1,23 +1,20 @@
 <!doctype html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full fa-debug-shell">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Repair – Debug</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <link rel="stylesheet" href="/static/css/fa_debug_shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
   <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
-  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); margin: 0; padding: 0; }
   .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 100%; width: 100%; margin: 0 auto; }
-  .nav-links { margin-bottom: 1.5rem; font-size: 0.875rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-  .nav-btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; text-decoration: none; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; }
-  .nav-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .nav-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .nav-btn.disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
-  .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
-  .btn-logout:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
   .msg-error { color: #dc2626; }
   .msg-ok { color: #16a34a; }
   .hidden { display: none !important; }
@@ -61,22 +58,12 @@
   .tree-new-sn-input.out-scope { opacity: 0.65; }
   </style>
 </head>
-<body>
+<body class="h-full">
+  <div id="app-wrapper" class="app-wrapper">
+    {% set fa_debug_active = 'repair' %}
+    {% include 'partials/fa_debug_header.html' %}
+    <main>
   <div class="panel">
-    <div class="nav-links">
-      {% set ap = allowed_pages or [] %}
-      <a href="/debug" class="nav-btn {{ 'disabled' if 'debug' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
-      {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="nav-btn">Setting</a>{% endif %}
-      <a href="/debug/repair" class="nav-btn active {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
-      <a href="/debug/testing" class="nav-btn {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
-      <a href="/debug/jump-station" class="nav-btn {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
-      <a href="/debug/kitting-sql" class="nav-btn {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
-      <a href="/" class="nav-btn">Analytics</a>
-      <form method="post" action="/api/auth/logout" style="display: inline;">
-        <button type="submit" class="btn-logout">Logout</button>
-      </form>
-    </div>
-
     <h1 class="text-2xl font-bold mb-3">Repair</h1>
     <div class="mb-4">
       <label class="block text-sm font-medium mb-1">Serial Number</label>
@@ -197,6 +184,7 @@
 
     <p id="result-msg" class="text-sm hidden"></p>
   </div>
+    </main>
   <div id="loading-overlay" class="loading-overlay hidden">
     <div id="loading-text" class="loading-box">Processing...</div>
   </div>
@@ -1190,5 +1178,7 @@
     loadOptions();
   })();
   </script>
+  <script src="/static/js/fa_debug_theme.js" defer></script>
+  </div>
 </body>
 </html>

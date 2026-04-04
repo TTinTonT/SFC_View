@@ -512,10 +512,19 @@
   try { notepadExpanded = localStorage.getItem(NOTEPAD_EXPANDED_KEY) !== 'false'; } catch (_) {}
   let notepadSaveTimer = null;
 
+  const NOTEPAD_WIDTH_EXPANDED = 260;
+  const NOTEPAD_WIDTH_COLLAPSED = 40;
+
   function updateLeftSidebars() {
     const notepadEl = $('notepad-sidebar');
-    const pinEl = $('pin-sidebar');
     const app = document.getElementById('app-wrapper') || document.querySelector('.app-wrapper');
+    if (app) {
+      let leftPad = '';
+      if (notepadEl) {
+        leftPad = notepadEl.classList.contains('expanded') ? NOTEPAD_WIDTH_EXPANDED : NOTEPAD_WIDTH_COLLAPSED;
+      }
+      app.style.paddingLeft = leftPad ? leftPad + 'px' : '';
+    }
     const pinW = 0;
     if (app) app.style.marginRight = pinW ? pinW + 'px' : '';
   }
@@ -707,38 +716,17 @@
     });
   }
 
-  function initTheme() {
-    const dark = localStorage.getItem('fa-debug-theme') === 'dark';
-    document.documentElement.classList.toggle('dark', dark);
-    const sunEl = $('sun-icon');
-    const moonEl = $('moon-icon');
-    if (sunEl) sunEl.classList.toggle('hidden', !dark);
-    if (moonEl) moonEl.classList.toggle('hidden', dark);
-  }
-
-  function toggleTheme() {
-    const dark = !document.documentElement.classList.contains('dark');
-    document.documentElement.classList.toggle('dark', dark);
-    localStorage.setItem('fa-debug-theme', dark ? 'dark' : 'light');
-    const sunEl = $('sun-icon');
-    const moonEl = $('moon-icon');
-    if (sunEl) sunEl.classList.toggle('hidden', !dark);
-    if (moonEl) moonEl.classList.toggle('hidden', dark);
-  }
-
   function init() {
     if (!document.getElementById('kpi-total-val')) {
       return;
     }
     setDefaultDates();
-    initTheme();
     renderNotepadSidebar();
-    fetchData(false);
+    applyFilter();
 
     const applyBtn = $('apply-filter');
     if (applyBtn) applyBtn.addEventListener('click', applyFilter);
 
-    $('theme-toggle')?.addEventListener('click', toggleTheme);
     $('modal-close')?.addEventListener('click', closeDrillDown);
     $('modal-drill')?.addEventListener('click', (e) => {
       const logBtn = e.target.closest('.log-path-btn');
