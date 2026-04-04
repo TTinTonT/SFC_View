@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/css/theme_shared.css">
   <link rel="stylesheet" href="/static/css/fa_debug_shell.css">
+  <link rel="stylesheet" href="/static/css/fa_debug_notepad.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
@@ -453,6 +454,7 @@
   <script>window.FA_DEBUG_CONFIG = { wsUrl: {{ ws_terminal_url|tojson }}, uploadUrl: {{ upload_url|tojson }} }; window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }}; window.CRABBER_LOG_UNC_ROOT = {{ (crabber_log_unc_root|default(''))|tojson }};</script>
   <script src="/static/js/crabber_log_unc.js" defer></script>
   <script src="/static/js/fa_debug_theme.js" defer></script>
+  <script src="/static/js/fa_debug_notepad.js" defer></script>
   <script src="/static/js/fa_debug.js" defer></script>
   <script src="/static/js/etf_online_test_modal.js" defer></script>
   <script src="/static/js/etf_terminal_helpers.js" defer></script>

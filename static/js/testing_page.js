@@ -1289,4 +1289,8 @@
     }
 
     loadOptions();
+
+    if (typeof window.initFaDebugNotepad === 'function') {
+      window.initFaDebugNotepad({ mode: 'corner', storagePrefix: 'fa-testing-notepad' });
+    }
 })();
