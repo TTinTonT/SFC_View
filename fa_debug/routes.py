@@ -842,10 +842,10 @@ def api_testing_overview():
             out["tray"] = {
                 "connected": False,
                 "row": None,
-                "message": "Không tìm được kết nối đến SN này (tray cache).",
+                "message": "No tray DHCP cache row found for this SN.",
             }
     except Exception as e:
-        out["tray"] = {"connected": False, "row": None, "message": str(e)}
+        out["tray"] = {"connected": False, "row": None, "message": f"Tray cache lookup failed: {e}"}
 
     try:
         from sfis_tool.db import get_conn
