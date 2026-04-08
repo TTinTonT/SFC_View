@@ -246,6 +246,7 @@
         </label>
         <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
         <button type="button" id="btn-online-test" class="etf-online-test-btn self-center">Online test</button>
+        <button type="button" id="btn-offline-replay" class="etf-online-test-btn self-center">Raw offline test</button>
         <span id="auto-refresh-countdown" class="self-center text-xs text-[var(--color-muted)]">Auto refresh: —</span>
       </div>
       <p id="sn-error" class="mt-1 text-sm msg-error hidden"></p>
@@ -515,6 +516,41 @@
       </div>
     </div>
   </div>
+  <div id="etf-offline-replay-modal" class="etf-ot-modal" aria-hidden="true">
+    <div class="etf-ot-backdrop"></div>
+    <div class="etf-ot-dialog" role="dialog" aria-labelledby="etf-or-title">
+      <div class="etf-ot-header">
+        <h3 id="etf-or-title" class="etf-ot-title">Raw Offline Test</h3>
+        <button type="button" class="etf-ot-close" id="etf-or-close" title="Close">&times;</button>
+      </div>
+      <div class="etf-ot-body">
+        <label class="etf-ot-label">SN</label>
+        <div class="etf-ot-row">
+          <input type="text" id="etf-or-sn" class="etf-ot-input etf-ot-flex" placeholder="Serial number">
+          <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-or-search">Search runs</button>
+        </div>
+        <datalist id="etf-or-host-list"></datalist>
+        <div class="etf-ot-row">
+          <input type="text" id="etf-or-host" class="etf-ot-input etf-ot-flex" list="etf-or-host-list" placeholder="Execution host/IP (saved + TCS suggestions)" value="10.16.138.67">
+          <input type="text" id="etf-or-slot" class="etf-ot-input" style="max-width:180px" placeholder="Slot (e.g. 08)">
+        </div>
+        <label class="etf-ot-label">SKU override (optional)</label>
+        <input type="text" id="etf-or-sku" class="etf-ot-input etf-ot-flex" placeholder="Default from site config / UUT (e.g. l10_prod_ts2)">
+        <label class="etf-ot-muted" style="display:block;margin-top:0.25rem;">
+          <input type="checkbox" id="etf-or-allow-incomplete">
+          Allow replay for incomplete/special run
+        </label>
+        <div id="etf-or-list" class="etf-ot-machine-list" style="max-height:260px;margin-top:0.6rem;"></div>
+        <p id="etf-or-picked" class="etf-ot-muted"></p>
+        <p id="etf-or-tcs" class="etf-ot-muted" style="margin-top:0.5rem;white-space:pre-wrap;"></p>
+        <div class="etf-ot-actions">
+          <button type="button" class="etf-ot-btn" id="etf-or-prepare">Prepare replay</button>
+          <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-or-run" disabled>Run on jump terminal</button>
+        </div>
+        <pre id="etf-or-preview" class="etf-ot-pre"></pre>
+      </div>
+    </div>
+  </div>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js" defer></script>
@@ -525,6 +561,7 @@
   <script src="/static/js/fa_debug_notepad.js" defer></script>
   <script src="/static/js/fa_debug.js" defer></script>
   <script src="/static/js/etf_online_test_modal.js" defer></script>
+  <script src="/static/js/etf_offline_replay_modal.js" defer></script>
   <script src="/static/js/etf_terminal_helpers.js" defer></script>
   <script src="/static/js/testing_page.js" defer></script>
   </div>

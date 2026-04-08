@@ -849,6 +849,7 @@
       stopTermWatch();
       var prevKey = termRowKey;
       termRowKey = sn.toUpperCase();
+      window.termRowKey = termRowKey;
       if (prevKey && prevKey !== termRowKey && typeof window.etfCloseSnPanel === 'function') {
         try { window.etfCloseSnPanel(prevKey); } catch (e1) {}
       }

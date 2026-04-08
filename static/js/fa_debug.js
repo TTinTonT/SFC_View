@@ -1252,6 +1252,19 @@
     return snDebugPanels.get(rowKey) || null;
   };
 
+  window.etfSendSshText = function(rowKey, text) {
+    const panel = snDebugPanels.get(rowKey);
+    if (!panel || !panel.ssh || !panel.ssh.ws) return { ok: false, error: "ssh panel not ready" };
+    const ws = panel.ssh.ws;
+    if (ws.readyState !== WebSocket.OPEN) return { ok: false, error: "ssh websocket not open" };
+    try {
+      ws.send(String(text == null ? "" : text));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) };
+    }
+  };
+
   function onReady() {
     init();
   }

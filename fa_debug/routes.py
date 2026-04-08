@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+import shlex
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -55,6 +56,7 @@ _URL_ACCESS_RULES = [
     ("/api/debug-data", frozenset({"debug"})),
     ("/api/fa-debug/", frozenset({"debug", "testing"})),
     ("/api/etf/online-test/", frozenset({"debug", "testing"})),
+    ("/api/etf/offline-replay/", frozenset({"debug", "testing"})),
     ("/api/debug/log-path-debug", frozenset({"debug"})),
     ("/api/debug/log-path", frozenset({"debug", "testing"})),
     ("/debug", frozenset({"debug"})),
@@ -2992,6 +2994,104 @@ def api_etf_online_test_start():
             sn_lock.release()
         except Exception:
             pass
+
+
+@bp.route("/api/etf/offline-replay/search", methods=["POST"])
+def api_etf_offline_replay_search():
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    try:
+        from config.debug_config import CRABBER_REPLAY_TIMEOUT_SEC
+        from crabber.client import fetch_search_log_items_all_pages
+        from crabber.replay_map import group_runs_by_station, normalize_run_row
+
+        items, first_page, err = fetch_search_log_items_all_pages(
+            sn=sn,
+            is_trial=False,
+            timeout=CRABBER_REPLAY_TIMEOUT_SEC,
+        )
+        if err:
+            return jsonify({"ok": False, "error": err}), 502
+        normalized = [normalize_run_row(it) for it in (items or [])]
+        grouped = group_runs_by_station(normalized)
+        return jsonify({
+            "ok": True,
+            "sn": sn,
+            "total_pages": (first_page or {}).get("total_pages"),
+            "total_logs": (first_page or {}).get("total_logs"),
+            "runs": normalized,
+            "runs_by_station": grouped,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/offline-replay/prepare", methods=["POST"])
+def api_etf_offline_replay_prepare():
+    data = request.get_json(silent=True) or {}
+    selected = data.get("selectedRun") if isinstance(data.get("selectedRun"), dict) else data
+    overrides = data.get("overrides") if isinstance(data.get("overrides"), dict) else {}
+    node_log_id = (selected.get("node_log_id") or "").strip() if isinstance(selected, dict) else ""
+    if not node_log_id:
+        return jsonify({"ok": False, "error": "selectedRun.node_log_id required"}), 400
+    try:
+        from config.debug_config import CRABBER_REPLAY_TIMEOUT_SEC, REPLAY_DATACENTER_CMD
+        from crabber.client import fetch_node_info
+        from crabber.replay_map import prepare_replay
+        from fa_debug.replay_ssh import push_datafile_text, resolve_datacenter_script_path
+
+        detail, err = fetch_node_info(
+            node_log_id,
+            execute_log_id="",
+            all_detail=False,
+            load_tcs=True,
+            timeout=CRABBER_REPLAY_TIMEOUT_SEC,
+        )
+        if err or not detail:
+            return jsonify({"ok": False, "error": err or "failed to fetch node detail"}), 502
+        result = prepare_replay(selected, detail, overrides)
+
+        if result.get("runnable"):
+            datafile_text = result.get("datafilePreview") or ""
+            filename = f"datafile_{(selected.get('sn') or 'sn').strip()}_{node_log_id}.txt"
+            remote_path, push_err = push_datafile_text(
+                filename,
+                datafile_text,
+                host_override=str(overrides.get("execution_host") or "").strip(),
+            )
+            if remote_path:
+                process = result.get("resolvedProcess") or ""
+                factory = result.get("resolvedFactoryCode") or ""
+                bundle_main = str(
+                    (((result.get("resolvedExecutionProfile") or {}).get("bundle_paths") or {}).get("MAIN_BUNDLE") or "")
+                ).strip()
+                bundle_aux = str(
+                    (((result.get("resolvedExecutionProfile") or {}).get("bundle_paths") or {}).get("AUX_BUNDLE") or "")
+                ).strip()
+                script_path, script_err = resolve_datacenter_script_path(
+                    host_override=str(overrides.get("execution_host") or "").strip(),
+                    bundle_main=bundle_main,
+                    bundle_aux=bundle_aux,
+                    cmd_name=REPLAY_DATACENTER_CMD or "run_datacenter.sh",
+                )
+                if not script_path:
+                    result["runnable"] = False
+                    result.setdefault("reasons", []).append(f"script resolve failed: {script_err}")
+                    return jsonify({"ok": True, **result})
+                result["remote_datafile_path"] = remote_path
+                result["commandPreview"] = (
+                    f"{shlex.quote(script_path)} --process={shlex.quote(str(process))} "
+                    f"--factory={shlex.quote(str(factory))} --datafile={shlex.quote(str(remote_path))}"
+                )
+            else:
+                result["runnable"] = False
+                result.setdefault("reasons", []).append(f"datafile push failed: {push_err}")
+
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/debug-data", methods=["GET"])

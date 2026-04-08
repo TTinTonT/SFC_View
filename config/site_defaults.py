@@ -42,6 +42,18 @@ DEFAULT = {
     "CRABBER_SITENAME": "SanJose",
     # Oberon L10 log share (UNC prefix; folder segment = node_log_id + log_time UTC)
     "CRABBER_LOG_UNC_ROOT": r"\\10.16.137.111\Oberon\L10",
+    # Crabber replay / raw offline test
+    "CRABBER_REPLAY_TIMEOUT_SEC": "25",
+    "REPLAY_EXECUTION_HOST": "10.16.138.67",
+    "REPLAY_SSH_USER": "",
+    "REPLAY_SSH_PASSWORD": "",
+    "REPLAY_DATAFILE_DIR": "/tmp/replay_datafiles",
+    "REPLAY_DATACENTER_CMD": "run_datacenter.sh",
+    "REPLAY_MAIN_BUNDLE_ROOT": "",
+    "REPLAY_AUX_BUNDLE_ROOT": "",
+    "REPLAY_TEST_BAY_PORT_MAP": "{}",
+    "REPLAY_FACTORY_CODE_DEFAULT": "",
+    "REPLAY_DEFAULT_SKU": "l10_prod_ts2",
     # ETF
     "SFC_TRAY_STATUS_URL": "http://10.16.137.115/SFCAPI/SFC/Test_Fixture_Status",
     "SFC_LEVEL_GRADE": "L10",
