@@ -248,8 +248,10 @@
         <button type="button" id="btn-online-test" class="etf-online-test-btn self-center">Online test</button>
         <button type="button" id="btn-offline-replay" class="etf-online-test-btn self-center">Raw offline test</button>
         <span id="etf-offline-replay-inline-status" class="self-center text-xs font-medium text-[var(--color-muted)] whitespace-nowrap" title="">Replay: —</span>
+        <button type="button" id="etf-or-view-console" class="etf-online-test-btn self-center" hidden title="Console log snapshot from execution host (saved when replay finished)">View console log</button>
         <span id="auto-refresh-countdown" class="self-center text-xs text-[var(--color-muted)]">Auto refresh: —</span>
       </div>
+      <pre id="etf-or-console-view" class="mt-2 w-full max-w-full text-xs p-2 rounded border border-[var(--color-border)] bg-[var(--color-bg)] overflow-auto whitespace-pre-wrap font-mono" style="max-height:240px" hidden></pre>
       <p id="sn-error" class="mt-1 text-sm msg-error hidden"></p>
     </div>
 

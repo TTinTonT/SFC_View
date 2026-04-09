@@ -7,7 +7,14 @@
     return d.innerHTML;
   }
 
-  var state = { selected: null, prepared: null, pollTimer: null };
+  var state = {
+    selected: null,
+    prepared: null,
+    pollTimer: null,
+    cleanupCalled: false,
+    replayConsoleText: null,
+    replayConsoleReadError: "",
+  };
   var LS_TCS = "etfOfflineReplayTcsMeta";
 
   function stopReplayPoll() {
@@ -64,6 +71,25 @@
     el.textContent = lines.join("\n");
   }
 
+  function syncConsoleLogButton() {
+    var vbtn = $("etf-or-view-console");
+    if (!vbtn) return;
+    vbtn.hidden = state.replayConsoleText === null;
+  }
+
+  function resetReplayConsoleUi() {
+    state.replayConsoleText = null;
+    state.replayConsoleReadError = "";
+    var vbtn = $("etf-or-view-console");
+    var vpre = $("etf-or-console-view");
+    if (vbtn) vbtn.hidden = true;
+    if (vpre) {
+      vpre.hidden = true;
+      vpre.textContent = "";
+    }
+    syncConsoleLogButton();
+  }
+
   function fetchReplayStatusOnce() {
     if (!state.prepared || !state.prepared.status_url) return;
     fetch(state.prepared.status_url, {
@@ -77,6 +103,22 @@
           return;
         }
         updateReplayStatusBadge(j.status, j.error_summary, j);
+        if ((j.status === "pass" || j.status === "fail") && j.replay_run_id && !state.cleanupCalled) {
+          state.cleanupCalled = true;
+          fetch(
+            "/api/etf/offline-replay/cleanup/" + encodeURIComponent(j.replay_run_id),
+            { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" } }
+          )
+            .then(function (r) { return r.json(); })
+            .then(function (cj) {
+              if (cj && cj.ok) {
+                state.replayConsoleText = typeof cj.console_text === "string" ? cj.console_text : "";
+                state.replayConsoleReadError = cj && cj.console_read_error ? String(cj.console_read_error) : "";
+                syncConsoleLogButton();
+              }
+            })
+            .catch(function () {});
+        }
         if (j.status === "pass" || j.status === "fail" || j.status === "timeout" || j.status === "error") {
           stopReplayPoll();
         }
@@ -165,6 +207,8 @@
     if ($("etf-or-replay-status")) $("etf-or-replay-status").textContent = "";
     state.selected = null;
     state.prepared = null;
+    state.cleanupCalled = false;
+    resetReplayConsoleUi();
     modal.setAttribute("aria-hidden", "false");
   }
 
@@ -215,6 +259,8 @@
   function prepareReplay() {
     if (!state.selected) { $("etf-or-preview").textContent = "Select one run first."; return; }
     stopReplayPoll();
+    state.cleanupCalled = false;
+    resetReplayConsoleUi();
     if ($("etf-or-replay-status")) $("etf-or-replay-status").textContent = "";
     var overrides = {
       execution_host: (($("etf-or-host") && $("etf-or-host").value) || "").trim(),
@@ -319,6 +365,25 @@
     if (prepareBtn) prepareBtn.addEventListener("click", prepareReplay);
     var runBtn = $("etf-or-run");
     if (runBtn) runBtn.addEventListener("click", runOnTerminal);
+    var vbtn = $("etf-or-view-console");
+    if (vbtn) {
+      vbtn.addEventListener("click", function () {
+        var pre = $("etf-or-console-view");
+        if (!pre) return;
+        var willShow = !!pre.hidden;
+        if (willShow) {
+          var body = state.replayConsoleText !== null ? state.replayConsoleText : "";
+          if (state.replayConsoleText === null) {
+            pre.textContent = "No console snapshot yet.";
+          } else if (body === "" && !state.replayConsoleReadError) {
+            pre.textContent = "(Console snapshot empty.)";
+          } else {
+            pre.textContent = body + (state.replayConsoleReadError ? "\n\n[Read note: " + state.replayConsoleReadError + "]" : "");
+          }
+        }
+        pre.hidden = !willShow;
+      });
+    }
   }
 
   document.addEventListener("visibilitychange", function () {

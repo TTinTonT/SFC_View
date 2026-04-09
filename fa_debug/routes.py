@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+import posixpath
 import shlex
 import threading
 import time
@@ -188,6 +189,12 @@ def _replay_manifest_get(replay_run_id: str) -> Dict[str, Any] | None:
     with _replay_manifest_lock:
         m = _replay_manifest.get(replay_run_id)
         return dict(m) if m else None
+
+
+def _replay_manifest_update(replay_run_id: str, updates: Dict[str, Any]) -> None:
+    with _replay_manifest_lock:
+        if replay_run_id in _replay_manifest:
+            _replay_manifest[replay_run_id].update(updates)
 
 
 def _get_sn_lock(sn):
@@ -3151,10 +3158,15 @@ def api_etf_offline_replay_prepare():
                                 "execution_host": host_ov,
                                 "remote_console_log_path": console_path,
                                 "remote_exit_code_path": exit_path,
+                                "remote_datafile_path": remote_path,
+                                "resolved_script_path": script_path,
+                                "bundle_root": posixpath.dirname(script_path),
                                 "created_at": time.time(),
                                 "run_timeout_sec": REPLAY_RUN_TIMEOUT_SEC,
                                 "sn": sn_safe,
                                 "node_log_id": node_log_id,
+                                "already_cleaned": False,
+                                "console_text_snapshot": "",
                             },
                         )
             else:
@@ -3310,6 +3322,90 @@ def api_etf_offline_replay_status(replay_run_id: str):
             remote_console_log_exists=log_ok,
             remote_exit_code_exists=True,
             remote_exit_code=rc,
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/offline-replay/cleanup/<replay_run_id>", methods=["POST"])
+def api_etf_offline_replay_cleanup(replay_run_id: str):
+    """Read bounded console snapshot, remove Nautilus run artifacts + replay files on execution host (idempotent)."""
+    rid = (replay_run_id or "").strip()
+    if not rid:
+        return jsonify({"ok": False, "error": "replay_run_id required"}), 400
+    try:
+        from config.debug_config import REPLAY_CLEANUP_CONSOLE_MAX_BYTES
+
+        from fa_debug.replay_ssh import (
+            cleanup_nautilus_run_artifacts,
+            read_console_snapshot_and_parse_text,
+            remove_replay_three_files,
+        )
+
+        meta = _replay_manifest_get(rid)
+        if not meta:
+            return jsonify({"ok": False, "error": "unknown or expired replay_run_id"}), 404
+
+        snap_existing = str(meta.get("console_text_snapshot") or "")
+        if meta.get("already_cleaned"):
+            return jsonify(
+                {
+                    "ok": True,
+                    "replay_run_id": rid,
+                    "already_cleaned": True,
+                    "nautilus_deleted": [],
+                    "nautilus_note": "already cleaned",
+                    "replay_deleted": [],
+                    "console_text": snap_existing,
+                    "console_truncated": False,
+                }
+            )
+
+        host_ov = str(meta.get("execution_host") or "").strip()
+        bundle_root = str(meta.get("bundle_root") or "").strip()
+        log_path = str(meta.get("remote_console_log_path") or "").strip()
+        exit_path = str(meta.get("remote_exit_code_path") or "").strip()
+        data_path = str(meta.get("remote_datafile_path") or "").strip()
+
+        console_text = ""
+        parse_text = ""
+        truncated = False
+        read_err: str | None = None
+        if log_path:
+            console_text, parse_text, truncated, read_err = read_console_snapshot_and_parse_text(
+                host_ov,
+                log_path,
+                max_bytes=REPLAY_CLEANUP_CONSOLE_MAX_BYTES,
+            )
+        if read_err:
+            console_text = ""
+            parse_text = ""
+            truncated = False
+
+        nautilus_deleted, nautilus_note = cleanup_nautilus_run_artifacts(host_ov, bundle_root, parse_text)
+        replay_deleted, replay_errors = remove_replay_three_files(host_ov, data_path, log_path, exit_path)
+
+        _replay_manifest_update(
+            rid,
+            {
+                "already_cleaned": True,
+                "console_text_snapshot": console_text,
+            },
+        )
+
+        return jsonify(
+            {
+                "ok": True,
+                "replay_run_id": rid,
+                "already_cleaned": False,
+                "nautilus_deleted": nautilus_deleted,
+                "nautilus_note": nautilus_note,
+                "replay_deleted": replay_deleted,
+                "replay_delete_errors": replay_errors,
+                "console_text": console_text,
+                "console_truncated": truncated,
+                "console_read_error": (read_err or "")[:500],
+            }
         )
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

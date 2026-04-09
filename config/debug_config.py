@@ -93,3 +93,6 @@ REPLAY_BACKEND_COPY_MODE = (
     os.environ.get("REPLAY_BACKEND_COPY_MODE", get_default("REPLAY_BACKEND_COPY_MODE") or "disabled") or "disabled"
 ).strip().lower()
 REPLAY_BACKEND_LOG_DIR = (os.environ.get("REPLAY_BACKEND_LOG_DIR", get_default("REPLAY_BACKEND_LOG_DIR") or "")).strip()
+REPLAY_CLEANUP_CONSOLE_MAX_BYTES = int(
+    os.environ.get("REPLAY_CLEANUP_CONSOLE_MAX_BYTES", get_default("REPLAY_CLEANUP_CONSOLE_MAX_BYTES") or 2097152) or 2097152
+)
