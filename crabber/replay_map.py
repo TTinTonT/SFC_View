@@ -99,6 +99,42 @@ def _safe_value(v: str) -> bool:
     return True
 
 
+def _is_fla_replay_context(test_bay_location: str, selected: Dict[str, Any]) -> bool:
+    """FLA-only: allow missing DUT_IP when bay/machine/station clearly indicates FLA (not FLB)."""
+    tl = _as_str(test_bay_location).upper()
+    if "_FLA_" in tl or tl.startswith("FLA_"):
+        return True
+    machine = _as_str(selected.get("machine")).upper()
+    if "_FLA_" in machine or "-FLA_" in machine:
+        return True
+    st = _as_str(selected.get("station")).upper()
+    if "FLA" in st and "FLB" not in st:
+        return True
+    return False
+
+
+def validate_replay_datafile_override(text: str) -> Optional[str]:
+    """Return error message if user-supplied datafile text is unsafe; None if OK."""
+    if not _as_str(text):
+        return None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if ":" not in line:
+            return "invalid datafile line (expected KEY:VALUE)"
+        key, _, val = line.partition(":")
+        ku = key.strip().upper()
+        vs = val.strip()
+        if not SAFE_KEY_RE.match(ku):
+            return f"invalid datafile key: {ku}"
+        if any(hint in ku for hint in BLOCKED_NAME_HINTS):
+            return f"blocked datafile key: {ku}"
+        if not _safe_value(vs):
+            return f"unsafe value for {ku}"
+    return None
+
+
 def _resolve_process(uut_map: Dict[str, str], selected_station: str) -> Tuple[str, List[str], bool]:
     candidates: List[str] = []
     for key in ("MFG_DIAG_PROCESS", "PROCESS"):
@@ -282,7 +318,8 @@ def prepare_replay(
     selected = normalize_run_row(selected_run or {})
     ui_overrides = ui_overrides or {}
     reasons: List[str] = []
-    allow_incomplete = bool(ui_overrides.get("allow_incomplete_or_special"))
+    allow_raw = ui_overrides.get("allow_incomplete_or_special")
+    allow_incomplete = True if allow_raw is None else bool(allow_raw)
     if selected.get("incomplete_or_special") and not allow_incomplete:
         reasons.append("run is incomplete_or_special")
     reasons.extend(_cross_check(selected, detail_payload or {}))
@@ -312,11 +349,7 @@ def prepare_replay(
     reasons.extend(bundle_reasons)
 
     test_server_ips, machine_tags = _extract_tcs_server_meta(detail_payload or {})
-    sku_val = (
-        _as_str(ui_overrides.get("sku"))
-        or _select_value("SKU", uut_map or {}, basic, "")
-        or _as_str(REPLAY_DEFAULT_SKU)
-    )
+    sku_val = _select_value("SKU", uut_map or {}, basic, "") or _as_str(REPLAY_DEFAULT_SKU)
 
     direct_map = {
         "PRODUCT": _select_value("PRODUCT_NAME", uut_map or {}, basic, ""),
@@ -342,6 +375,8 @@ def prepare_replay(
         "PRODUCT", "SKU", "PROCESS", "SN", "PN", "PBR", "BMC_IP", "BMC_MAC", "DUT_IP", "DUT_MAC",
         "PDB_CHASSIS_SN", "PDB_CHASSIS_PN", "MIDPLANE_SN", "MIDPLANE_PN",
     )
+    if _is_fla_replay_context(test_bay_location, selected):
+        required = tuple(k for k in required if k != "DUT_IP")
     for key in required:
         if not _as_str(direct_map.get(key)):
             reasons.append(f"missing required field: {key}")

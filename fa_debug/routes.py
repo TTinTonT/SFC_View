@@ -3079,7 +3079,7 @@ def api_etf_offline_replay_prepare():
             REPLAY_STATUS_POLL_HINT_MS,
         )
         from crabber.client import fetch_node_info
-        from crabber.replay_map import prepare_replay
+        from crabber.replay_map import prepare_replay, validate_replay_datafile_override
         from fa_debug.replay_ssh import (
             build_remote_replay_log_paths,
             build_wrapped_replay_command,
@@ -3103,7 +3103,16 @@ def api_etf_offline_replay_prepare():
         result = prepare_replay(selected, detail, overrides)
 
         if result.get("runnable"):
-            datafile_text = result.get("datafilePreview") or ""
+            override_df = overrides.get("datafile_text")
+            if isinstance(override_df, str) and override_df.strip():
+                v_err = validate_replay_datafile_override(override_df)
+                if v_err:
+                    result["runnable"] = False
+                    result.setdefault("reasons", []).append(f"datafile override invalid: {v_err}")
+                    return jsonify({"ok": True, **result})
+                datafile_text = override_df
+            else:
+                datafile_text = result.get("datafilePreview") or ""
             filename = f"datafile_{(selected.get('sn') or 'sn').strip()}_{node_log_id}.txt"
             remote_path, push_err = push_datafile_text(
                 filename,

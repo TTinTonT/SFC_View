@@ -166,6 +166,7 @@
   .etf-ot-modal[aria-hidden="true"] { display: none !important; }
   .etf-ot-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
   .etf-ot-dialog { position: relative; z-index: 1; width: 100%; max-width: 520px; max-height: 90vh; overflow: auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+  .etf-ot-dialog.etf-or-dialog { max-width: min(980px, 96vw); max-height: 94vh; }
   .etf-ot-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--color-border); }
   .etf-ot-title { font-size: 1.1rem; font-weight: 700; margin: 0; color: var(--color-text); }
   .etf-ot-close { background: none; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--color-muted); }
@@ -521,7 +522,7 @@
   </div>
   <div id="etf-offline-replay-modal" class="etf-ot-modal" aria-hidden="true">
     <div class="etf-ot-backdrop"></div>
-    <div class="etf-ot-dialog" role="dialog" aria-labelledby="etf-or-title">
+    <div class="etf-ot-dialog etf-or-dialog" role="dialog" aria-labelledby="etf-or-title">
       <div class="etf-ot-header">
         <h3 id="etf-or-title" class="etf-ot-title">Raw Offline Test</h3>
         <button type="button" class="etf-ot-close" id="etf-or-close" title="Close">&times;</button>
@@ -537,19 +538,16 @@
           <input type="text" id="etf-or-host" class="etf-ot-input etf-ot-flex" list="etf-or-host-list" placeholder="Execution host/IP (saved + TCS suggestions)" value="10.16.138.67">
           <input type="text" id="etf-or-slot" class="etf-ot-input" style="max-width:180px" placeholder="Slot (e.g. 08)">
         </div>
-        <label class="etf-ot-label">SKU override (optional)</label>
-        <input type="text" id="etf-or-sku" class="etf-ot-input etf-ot-flex" placeholder="Default from site config / UUT (e.g. l10_prod_ts2)">
-        <label class="etf-ot-muted" style="display:block;margin-top:0.25rem;">
-          <input type="checkbox" id="etf-or-allow-incomplete">
-          Allow replay for incomplete/special run
-        </label>
         <div id="etf-or-list" class="etf-ot-machine-list" style="max-height:260px;margin-top:0.6rem;"></div>
         <p id="etf-or-picked" class="etf-ot-muted"></p>
+        <div id="etf-or-datafile-wrap" class="etf-ot-field" hidden>
+          <label class="etf-ot-label" for="etf-or-datafile">Datafile</label>
+          <textarea id="etf-or-datafile" class="etf-ot-input" rows="14" style="width:100%;max-width:100%;font-family:ui-monospace,monospace;font-size:11px;line-height:1.35;resize:vertical;box-sizing:border-box;" spellcheck="false" placeholder="Filled when you pick a run; edit before running."></textarea>
+        </div>
         <p id="etf-or-tcs" class="etf-ot-muted" style="margin-top:0.5rem;white-space:pre-wrap;"></p>
         <p id="etf-or-replay-status" class="etf-ot-muted" style="margin-top:0.5rem;white-space:pre-wrap;font-weight:500;"></p>
         <div class="etf-ot-actions">
-          <button type="button" class="etf-ot-btn" id="etf-or-prepare">Prepare replay</button>
-          <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-or-run" disabled>Run on jump terminal</button>
+          <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-or-prepare-run" disabled>Prepare &amp; run on jump terminal</button>
         </div>
         <pre id="etf-or-preview" class="etf-ot-pre"></pre>
       </div>
