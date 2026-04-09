@@ -7,8 +7,92 @@
     return d.innerHTML;
   }
 
-  var state = { selected: null, prepared: null };
+  var state = { selected: null, prepared: null, pollTimer: null };
   var LS_TCS = "etfOfflineReplayTcsMeta";
+
+  function stopReplayPoll() {
+    if (state.pollTimer) {
+      clearInterval(state.pollTimer);
+      state.pollTimer = null;
+    }
+  }
+
+  function updateInlineReplayStatus(status, summary) {
+    var el = $("etf-offline-replay-inline-status");
+    if (!el) return;
+    var s = String(status || "").toLowerCase();
+    el.className = "self-center text-xs font-medium whitespace-nowrap";
+    var text = "Replay: —";
+    if (s === "pass") {
+      el.classList.add("text-green-600");
+      text = "Replay: PASS";
+    } else if (s === "fail") {
+      el.classList.add("text-red-600");
+      text = "Replay: FAIL";
+    } else if (s === "running") {
+      el.classList.add("text-[var(--color-muted)]");
+      text = "Replay: running…";
+    } else if (s === "prepared") {
+      el.classList.add("text-[var(--color-muted)]");
+      text = "Replay: waiting…";
+    } else if (s === "timeout") {
+      el.classList.add("text-amber-600");
+      text = "Replay: timeout";
+    } else if (s === "error") {
+      el.classList.add("text-amber-600");
+      text = "Replay: error";
+    } else if (s === "unknown") {
+      el.classList.add("text-[var(--color-muted)]");
+      text = "Replay: unknown";
+    } else {
+      el.classList.add("text-[var(--color-muted)]");
+      text = "Replay: " + String(status || "—");
+    }
+    el.textContent = text;
+    if (summary) el.setAttribute("title", summary);
+    else el.removeAttribute("title");
+  }
+
+  function updateReplayStatusBadge(status, summary, full) {
+    updateInlineReplayStatus(status, summary);
+    var el = $("etf-or-replay-status");
+    if (!el) return;
+    var lines = ["Replay status: " + String(status || "-")];
+    if (summary) lines.push("Summary: " + summary);
+    if (full && full.remote_console_log_path) lines.push("Console log (remote): " + full.remote_console_log_path);
+    if (full && full.remote_exit_code !== undefined && full.remote_exit_code !== null) lines.push("Exit code: " + full.remote_exit_code);
+    el.textContent = lines.join("\n");
+  }
+
+  function fetchReplayStatusOnce() {
+    if (!state.prepared || !state.prepared.status_url) return;
+    fetch(state.prepared.status_url, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || j.ok === false) {
+          updateReplayStatusBadge("error", (j && j.error) || "status error", null);
+          return;
+        }
+        updateReplayStatusBadge(j.status, j.error_summary, j);
+        if (j.status === "pass" || j.status === "fail" || j.status === "timeout" || j.status === "error") {
+          stopReplayPoll();
+        }
+      })
+      .catch(function () {
+        updateReplayStatusBadge("error", "status poll failed", null);
+      });
+  }
+
+  function startReplayPoll() {
+    stopReplayPoll();
+    if (!state.prepared || !state.prepared.status_url) return;
+    var interval = Math.max(2000, Number(state.prepared.retry_after_ms) || 3000);
+    fetchReplayStatusOnce();
+    state.pollTimer = setInterval(fetchReplayStatusOnce, interval);
+  }
 
   function loadTcsMeta() {
     try {
@@ -78,6 +162,7 @@
     if ($("etf-or-host") && !$("etf-or-host").value) $("etf-or-host").value = "10.16.138.67";
     refreshHostDatalist();
     if ($("etf-or-tcs")) $("etf-or-tcs").textContent = "";
+    if ($("etf-or-replay-status")) $("etf-or-replay-status").textContent = "";
     state.selected = null;
     state.prepared = null;
     modal.setAttribute("aria-hidden", "false");
@@ -129,6 +214,8 @@
 
   function prepareReplay() {
     if (!state.selected) { $("etf-or-preview").textContent = "Select one run first."; return; }
+    stopReplayPoll();
+    if ($("etf-or-replay-status")) $("etf-or-replay-status").textContent = "";
     var overrides = {
       execution_host: (($("etf-or-host") && $("etf-or-host").value) || "").trim(),
       slot_number: (($("etf-or-slot") && $("etf-or-slot").value) || "").trim(),
@@ -159,10 +246,18 @@
       if (res.json.resolvedExecutionProfile && res.json.resolvedExecutionProfile.test_bay_location) {
         lines.push("test_bay_location: " + res.json.resolvedExecutionProfile.test_bay_location);
       }
-      if (res.json.commandPreview) lines.push("command: " + res.json.commandPreview);
+      if (res.json.commandPreview) lines.push("command (inner): " + res.json.commandPreview);
+      if (res.json.wrappedCommand) {
+        lines.push("wrapped command (send this — logs to remote console file for backend status):");
+        lines.push(res.json.wrappedCommand);
+      }
+      if (res.json.replay_run_id && res.json.status_url) {
+        lines.push("replay_run_id: " + res.json.replay_run_id);
+        lines.push("status_url: " + res.json.status_url);
+      }
       if (res.json.datafilePreview) lines.push("datafile:\n" + res.json.datafilePreview);
       $("etf-or-preview").textContent = lines.join("\n\n");
-      $("etf-or-run").disabled = !(res.json.runnable && res.json.commandPreview);
+      $("etf-or-run").disabled = !(res.json.runnable && (res.json.wrappedCommand || res.json.commandPreview));
       if (!res.json.runnable && /cannot be resolved to port/i.test((res.json.reasons || []).join(";"))) {
         $("etf-or-preview").textContent += "\n\nHint: Fill Slot (e.g. 08) to resolve PORT.";
       }
@@ -172,13 +267,14 @@
   }
 
   function runOnTerminal() {
-    if (!state.prepared || !state.prepared.commandPreview) return;
+    var cmd = (state.prepared && (state.prepared.wrappedCommand || state.prepared.commandPreview)) || "";
+    if (!state.prepared || !cmd) return;
     var rowKey = (window.termRowKey || (($("input-sn") && $("input-sn").value) || "").trim().toUpperCase());
     if (typeof window.etfSendSshText !== "function") {
       $("etf-or-preview").textContent += "\n\nCannot send command: etfSendSshText missing.";
       return;
     }
-    var send = window.etfSendSshText(rowKey, state.prepared.commandPreview + "\n");
+    var send = window.etfSendSshText(rowKey, cmd + "\n");
     if (!send || !send.ok) {
       $("etf-or-preview").textContent += "\n\nCannot send command to terminal.";
       return;
@@ -191,6 +287,11 @@
       }
     }
     $("etf-or-preview").textContent += "\n\nCommand sent to jump terminal.";
+    if (state.prepared.status_url) {
+      updateReplayStatusBadge("running", "Polling backend for PASS/FAIL…", null);
+      startReplayPoll();
+    }
+    closeModal();
   }
 
   function bind() {
@@ -219,6 +320,12 @@
     var runBtn = $("etf-or-run");
     if (runBtn) runBtn.addEventListener("click", runOnTerminal);
   }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && state.pollTimer && state.prepared && state.prepared.status_url) {
+      fetchReplayStatusOnce();
+    }
+  });
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);
   else bind();

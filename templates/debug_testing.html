@@ -247,6 +247,7 @@
         <button type="button" id="btn-search" class="px-4 py-2 rounded-lg font-medium bg-[var(--color-primary)] text-white hover:opacity-90">Search</button>
         <button type="button" id="btn-online-test" class="etf-online-test-btn self-center">Online test</button>
         <button type="button" id="btn-offline-replay" class="etf-online-test-btn self-center">Raw offline test</button>
+        <span id="etf-offline-replay-inline-status" class="self-center text-xs font-medium text-[var(--color-muted)] whitespace-nowrap" title="">Replay: —</span>
         <span id="auto-refresh-countdown" class="self-center text-xs text-[var(--color-muted)]">Auto refresh: —</span>
       </div>
       <p id="sn-error" class="mt-1 text-sm msg-error hidden"></p>
@@ -543,6 +544,7 @@
         <div id="etf-or-list" class="etf-ot-machine-list" style="max-height:260px;margin-top:0.6rem;"></div>
         <p id="etf-or-picked" class="etf-ot-muted"></p>
         <p id="etf-or-tcs" class="etf-ot-muted" style="margin-top:0.5rem;white-space:pre-wrap;"></p>
+        <p id="etf-or-replay-status" class="etf-ot-muted" style="margin-top:0.5rem;white-space:pre-wrap;font-weight:500;"></p>
         <div class="etf-ot-actions">
           <button type="button" class="etf-ot-btn" id="etf-or-prepare">Prepare replay</button>
           <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-or-run" disabled>Run on jump terminal</button>

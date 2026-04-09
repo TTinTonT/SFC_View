@@ -7,10 +7,11 @@ import os
 import shlex
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from datetime import datetime, timedelta
-from typing import List
+from typing import Any, Dict, List
 
 from flask import Blueprint, jsonify, redirect, render_template, request
 
@@ -161,6 +162,32 @@ _repair_sn_locks_guard = threading.Lock()
 _repair_sn_locks = {}
 _repair_request_cache = {}
 _REPAIR_REQ_TTL_SEC = 300
+
+# In-memory replay run manifest for /offline-replay/status (same-process only).
+_replay_manifest: Dict[str, Dict[str, Any]] = {}
+_replay_manifest_lock = threading.Lock()
+_REPLAY_MANIFEST_MAX = 500
+
+
+def _replay_manifest_put(replay_run_id: str, entry: Dict[str, Any]) -> None:
+    with _replay_manifest_lock:
+        if len(_replay_manifest) >= _REPLAY_MANIFEST_MAX:
+            oldest_id = None
+            oldest_ts = float("inf")
+            for rid, meta in _replay_manifest.items():
+                ts = float(meta.get("created_at") or 0)
+                if ts < oldest_ts:
+                    oldest_ts = ts
+                    oldest_id = rid
+            if oldest_id:
+                _replay_manifest.pop(oldest_id, None)
+        _replay_manifest[replay_run_id] = entry
+
+
+def _replay_manifest_get(replay_run_id: str) -> Dict[str, Any] | None:
+    with _replay_manifest_lock:
+        m = _replay_manifest.get(replay_run_id)
+        return dict(m) if m else None
 
 
 def _get_sn_lock(sn):
@@ -3037,10 +3064,25 @@ def api_etf_offline_replay_prepare():
     if not node_log_id:
         return jsonify({"ok": False, "error": "selectedRun.node_log_id required"}), 400
     try:
-        from config.debug_config import CRABBER_REPLAY_TIMEOUT_SEC, REPLAY_DATACENTER_CMD
+        from config.debug_config import (
+            CRABBER_REPLAY_TIMEOUT_SEC,
+            REPLAY_CONSOLE_LOGGING_ENABLED,
+            REPLAY_DATACENTER_CMD,
+            REPLAY_RUN_TIMEOUT_SEC,
+            REPLAY_STATUS_POLL_HINT_MS,
+        )
         from crabber.client import fetch_node_info
         from crabber.replay_map import prepare_replay
-        from fa_debug.replay_ssh import push_datafile_text, resolve_datacenter_script_path
+        from fa_debug.replay_ssh import (
+            build_remote_replay_log_paths,
+            build_wrapped_replay_command,
+            parse_replay_transcript,
+            push_datafile_text,
+            read_remote_exit_code,
+            read_remote_file_tail,
+            remote_file_exists,
+            resolve_datacenter_script_path,
+        )
 
         detail, err = fetch_node_info(
             node_log_id,
@@ -3081,15 +3123,194 @@ def api_etf_offline_replay_prepare():
                     result.setdefault("reasons", []).append(f"script resolve failed: {script_err}")
                     return jsonify({"ok": True, **result})
                 result["remote_datafile_path"] = remote_path
-                result["commandPreview"] = (
+                inner_cmd = (
                     f"{shlex.quote(script_path)} --process={shlex.quote(str(process))} "
                     f"--factory={shlex.quote(str(factory))} --datafile={shlex.quote(str(remote_path))}"
                 )
+                result["commandPreview"] = inner_cmd
+                if REPLAY_CONSOLE_LOGGING_ENABLED:
+                    replay_run_id = uuid.uuid4().hex
+                    host_ov = str(overrides.get("execution_host") or "").strip()
+                    sn_safe = (selected.get("sn") or "sn").strip()
+                    console_path, exit_path = build_remote_replay_log_paths(
+                        sn_safe,
+                        node_log_id,
+                        replay_run_id,
+                    )
+                    wrapped = build_wrapped_replay_command(inner_cmd, console_path, exit_path)
+                    if wrapped:
+                        result["replay_run_id"] = replay_run_id
+                        result["wrappedCommand"] = wrapped
+                        result["remote_console_log_path"] = console_path
+                        result["remote_exit_code_path"] = exit_path
+                        result["status_url"] = f"/api/etf/offline-replay/status/{replay_run_id}"
+                        result["retry_after_ms"] = REPLAY_STATUS_POLL_HINT_MS
+                        _replay_manifest_put(
+                            replay_run_id,
+                            {
+                                "execution_host": host_ov,
+                                "remote_console_log_path": console_path,
+                                "remote_exit_code_path": exit_path,
+                                "created_at": time.time(),
+                                "run_timeout_sec": REPLAY_RUN_TIMEOUT_SEC,
+                                "sn": sn_safe,
+                                "node_log_id": node_log_id,
+                            },
+                        )
             else:
                 result["runnable"] = False
                 result.setdefault("reasons", []).append(f"datafile push failed: {push_err}")
 
         return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/offline-replay/status/<replay_run_id>", methods=["GET"])
+def api_etf_offline_replay_status(replay_run_id: str):
+    """Poll replay verdict from remote console log + exit sidecar (same SSH profile as datafile push)."""
+    rid = (replay_run_id or "").strip()
+    if not rid:
+        return jsonify({"ok": False, "error": "replay_run_id required"}), 400
+    try:
+        from config.debug_config import REPLAY_STATUS_POLL_HINT_MS
+
+        from fa_debug.replay_ssh import parse_replay_transcript, read_remote_exit_code, read_remote_file_tail, remote_file_exists
+
+        meta = _replay_manifest_get(rid)
+        if not meta:
+            return jsonify({"ok": False, "error": "unknown or expired replay_run_id"}), 404
+
+        host_ov = str(meta.get("execution_host") or "").strip()
+        log_path = str(meta.get("remote_console_log_path") or "").strip()
+        exit_path = str(meta.get("remote_exit_code_path") or "").strip()
+        created = float(meta.get("created_at") or 0)
+        run_timeout = int(meta.get("run_timeout_sec") or 43200)
+        now = time.time()
+        elapsed = now - created if created else 0.0
+
+        def _payload(**kwargs: Any) -> Any:
+            base = {
+                "ok": True,
+                "replay_run_id": rid,
+                "remote_console_log_path": log_path,
+                "remote_exit_code_path": exit_path,
+                "retry_after_ms": REPLAY_STATUS_POLL_HINT_MS,
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+            }
+            base.update(kwargs)
+            return jsonify(base)
+
+        log_ok, log_err = remote_file_exists(host_ov, log_path)
+        exit_ok, exit_err = remote_file_exists(host_ov, exit_path)
+
+        if log_err or exit_err:
+            return _payload(
+                status="error",
+                status_source="ssh",
+                error_summary=(log_err or exit_err or "ssh error")[:500],
+                remote_console_log_exists=False,
+                remote_exit_code_exists=False,
+                remote_exit_code=None,
+            )
+
+        if not log_ok and not exit_ok:
+            if elapsed > run_timeout:
+                return _payload(
+                    status="timeout",
+                    status_source="timeout",
+                    error_summary="No console log or exit sidecar before timeout",
+                    remote_console_log_exists=False,
+                    remote_exit_code_exists=False,
+                    remote_exit_code=None,
+                )
+            return _payload(
+                status="prepared",
+                status_source="none",
+                error_summary="",
+                remote_console_log_exists=False,
+                remote_exit_code_exists=False,
+                remote_exit_code=None,
+            )
+
+        if log_ok and not exit_ok:
+            if elapsed > run_timeout:
+                return _payload(
+                    status="timeout",
+                    status_source="timeout",
+                    error_summary="Run did not write exit sidecar before timeout",
+                    remote_console_log_exists=True,
+                    remote_exit_code_exists=False,
+                    remote_exit_code=None,
+                )
+            return _payload(
+                status="running",
+                status_source="none",
+                error_summary="",
+                remote_console_log_exists=True,
+                remote_exit_code_exists=False,
+                remote_exit_code=None,
+            )
+
+        # Exit sidecar present => finished (or finishing)
+        rc, rc_err = read_remote_exit_code(host_ov, exit_path)
+        transcript = ""
+        tail_err = None
+        if log_ok:
+            transcript, tail_err = read_remote_file_tail(host_ov, log_path)
+            if tail_err:
+                return _payload(
+                    status="error",
+                    status_source="ssh",
+                    error_summary=tail_err[:500],
+                    remote_console_log_exists=log_ok,
+                    remote_exit_code_exists=True,
+                    remote_exit_code=rc,
+                )
+
+        parsed = parse_replay_transcript(transcript)
+        verdict = str(parsed.get("verdict") or "unknown")
+        src = str(parsed.get("status_source") or "none")
+        summary = str(parsed.get("error_summary") or "")
+
+        if verdict in ("pass", "fail"):
+            return _payload(
+                status=verdict,
+                status_source=src,
+                error_summary=summary,
+                remote_console_log_exists=log_ok,
+                remote_exit_code_exists=True,
+                remote_exit_code=rc,
+            )
+
+        if rc is not None and rc != 0:
+            return _payload(
+                status="fail",
+                status_source="exit_code",
+                error_summary=summary or f"exit_code={rc}",
+                remote_console_log_exists=log_ok,
+                remote_exit_code_exists=True,
+                remote_exit_code=rc,
+            )
+
+        if rc == 0:
+            return _payload(
+                status="unknown",
+                status_source="exit_code",
+                error_summary=summary or "exit 0 but no PASS/FAIL markers in parsed tail",
+                remote_console_log_exists=log_ok,
+                remote_exit_code_exists=True,
+                remote_exit_code=0,
+            )
+
+        return _payload(
+            status="unknown",
+            status_source="none",
+            error_summary=summary or rc_err or "",
+            remote_console_log_exists=log_ok,
+            remote_exit_code_exists=True,
+            remote_exit_code=rc,
+        )
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
