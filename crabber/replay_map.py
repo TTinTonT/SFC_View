@@ -195,6 +195,9 @@ def _derive_test_bay_location(
     ui_overrides: Dict[str, Any],
     selected_station: str,
 ) -> str:
+    override_loc = _as_str(ui_overrides.get("test_bay_location"))
+    if override_loc:
+        return override_loc
     proc = _norm_process(_as_str(selected_station).replace("SYSTEM_", "", 1))
     slot_override = _as_str(ui_overrides.get("slot_number"))
     if slot_override:
@@ -237,6 +240,7 @@ def _resolve_bundle_paths(uut_map: Dict[str, str]) -> Tuple[Dict[str, str], List
 
 def _collect_tcs_ips_tags(obj: Any, ips: List[str], tags: List[str]) -> None:
     if isinstance(obj, dict):
+        # Do not use "server_ip" — unreliable in Crabber payloads; only test_server_ip.
         raw_ip = obj.get("test_server_ip")
         if isinstance(raw_ip, list):
             for x in raw_ip:
@@ -251,6 +255,15 @@ def _collect_tcs_ips_tags(obj: Any, ips: List[str], tags: List[str]) -> None:
         if tag:
             tags.append(tag)
         for v in obj.values():
+            if isinstance(v, str):
+                sv = v.strip()
+                if sv and ((sv.startswith("{") and sv.endswith("}")) or (sv.startswith("[") and sv.endswith("]"))):
+                    try:
+                        parsed = json.loads(sv)
+                    except Exception:
+                        parsed = None
+                    if isinstance(parsed, (dict, list)):
+                        _collect_tcs_ips_tags(parsed, ips, tags)
             if isinstance(v, (dict, list)):
                 _collect_tcs_ips_tags(v, ips, tags)
     elif isinstance(obj, list):
@@ -275,7 +288,45 @@ def _extract_tcs_server_meta(detail: Dict[str, Any]) -> Tuple[List[str], List[st
                 out.append(x)
         return out
 
-    return _dedupe(ips), _dedupe(tags)
+    ips_dedup = _dedupe(ips)
+    tags_dedup = _dedupe(tags)
+    if ips_dedup:
+        return ips_dedup, tags_dedup
+
+    # Fallback: some Crabber payloads bury test_server_ip inside serialized JSON strings.
+    # Scan the full detail payload text and only accept IPv4s that appear near "test_server_ip".
+    try:
+        blob = json.dumps(detail, ensure_ascii=False)
+    except Exception:
+        blob = ""
+    if blob:
+        hits: List[str] = []
+        for m in re.finditer(r'test_server_ip[^0-9]*(\d{1,3}(?:\.\d{1,3}){3})', blob, re.IGNORECASE):
+            ip = _as_str(m.group(1))
+            if ip:
+                hits.append(ip)
+        if hits:
+            ips_dedup = _dedupe(hits)
+    return ips_dedup, tags_dedup
+
+
+def _extract_uut_machine_name(detail: Dict[str, Any], selected: Dict[str, Any]) -> str:
+    direct = _as_str(((detail.get("basic_info") or {}) if isinstance(detail.get("basic_info"), dict) else {}).get("uut_machine_name"))
+    if direct:
+        return direct
+    stack: List[Any] = [detail.get("test_case_command_list")]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, dict):
+            v = _as_str(cur.get("uut_machine_name"))
+            if v:
+                return v
+            for vv in cur.values():
+                if isinstance(vv, (dict, list)):
+                    stack.append(vv)
+        elif isinstance(cur, list):
+            stack.extend(cur)
+    return _as_str(selected.get("machine"))
 
 
 def _cross_check(selected: Dict[str, Any], detail: Dict[str, Any]) -> List[str]:
@@ -349,6 +400,7 @@ def prepare_replay(
     reasons.extend(bundle_reasons)
 
     test_server_ips, machine_tags = _extract_tcs_server_meta(detail_payload or {})
+    uut_machine_name = _extract_uut_machine_name(detail_payload or {}, selected)
     sku_val = _select_value("SKU", uut_map or {}, basic, "") or _as_str(REPLAY_DEFAULT_SKU)
 
     direct_map = {
@@ -435,6 +487,7 @@ def prepare_replay(
         "tcsMeta": {
             "test_server_ips": test_server_ips,
             "machine_tags": machine_tags,
+            "uut_machine_name": uut_machine_name,
         },
         "resolvedExecutionProfile": {
             "datacenter_cmd": REPLAY_DATACENTER_CMD,

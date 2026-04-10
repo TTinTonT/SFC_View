@@ -16,6 +16,97 @@
     replayConsoleReadError: "",
   };
   var LS_TCS = "etfOfflineReplayTcsMeta";
+  var STATION_CHOICES = ["FLA", "FLB", "AST", "FTS", "FCT", "NVL", "RIN"];
+  /** Default execution host (replay + ô IP); FA mặc định khi tray không có ssh_host. */
+  var DEFAULT_EXEC_HOST = "10.16.138.67";
+
+  /** ssh_host từ ETF row — IP/hostname jump mà WebSocket Terminal (jump host) dùng. */
+  function looksLikeTraySshHost(s) {
+    var t = String(s == null ? "" : s).trim();
+    if (!t || /^N\/A$/i.test(t) || /^NA$/i.test(t) || t === "-") return false;
+    return true;
+  }
+
+  function setTrayHostHint(mode, detail) {
+    var el = $("etf-or-tray-hint");
+    if (!el) return;
+    if (mode === "ok" && detail) {
+      el.textContent =
+        "Tray: dùng ssh_host (cùng đích với Terminal jump host trên trang Testing) — " + detail;
+    } else if (mode === "missing") {
+      el.textContent =
+        "Không tìm thấy ssh_host (jump) trong cache tray cho SN này — dùng mặc định " +
+        DEFAULT_EXEC_HOST +
+        " (FA). Sửa ô IP để đổi jump; terminal jump được tạo lại.";
+    } else {
+      el.textContent = "";
+    }
+  }
+
+  /** Điền ô IP = ssh_host từ overview (giống ?host= khi mở jump); không có thì default FA. */
+  function applyExecutionHostFromTrayOverview(sn, done) {
+    sn = String(sn || "").trim();
+    if (!sn) {
+      if ($("etf-or-host")) $("etf-or-host").value = DEFAULT_EXEC_HOST;
+      setTrayHostHint("missing");
+      if (done) done();
+      return;
+    }
+    fetch("/api/debug/testing/overview?sn=" + encodeURIComponent(sn), {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (ov) {
+        var row = ov && ov.tray && ov.tray.row;
+        var sshH = row && row.ssh_host;
+        if (ov && ov.tray && ov.tray.connected && looksLikeTraySshHost(sshH)) {
+          var v = String(sshH).trim();
+          if ($("etf-or-host")) $("etf-or-host").value = v;
+          setTrayHostHint("ok", v);
+          reconnectJumpTerminalForExecHost();
+        } else {
+          if ($("etf-or-host")) $("etf-or-host").value = DEFAULT_EXEC_HOST;
+          setTrayHostHint("missing");
+          reconnectJumpTerminalForExecHost();
+        }
+        if (done) done();
+      })
+      .catch(function () {
+        if ($("etf-or-host")) $("etf-or-host").value = DEFAULT_EXEC_HOST;
+        setTrayHostHint("missing");
+        reconnectJumpTerminalForExecHost();
+        if (done) done();
+      });
+  }
+
+  /** Tạo lại WebSocket Terminal (jump host) tới IP trong ô — thay session jump cũ. */
+  function reconnectJumpTerminalForExecHost() {
+    var host = ($("etf-or-host") && $("etf-or-host").value) || "";
+    host = String(host).trim();
+    if (!host) return;
+    var rowKey = window.termRowKey;
+    var sshEl = $("term-ssh");
+    var sn = (($("input-sn") && $("input-sn").value) || "").trim() || rowKey;
+    if (!rowKey || !sshEl) return;
+    if (typeof window.etfReconnectJumpSshOnly === "function") {
+      window.etfReconnectJumpSshOnly(rowKey, sn, host, sshEl);
+    } else if (typeof window.etfCreateSnTerminals === "function") {
+      window.etfCreateSnTerminals(sn || rowKey, rowKey, null, {
+        sshEl: sshEl,
+        row: { ssh_host: host },
+      });
+      if (typeof window.etfFitTerminals === "function") {
+        setTimeout(function () {
+          try {
+            window.etfFitTerminals(rowKey);
+          } catch (e) {}
+        }, 150);
+      }
+    }
+  }
 
   function stopReplayPoll() {
     if (state.pollTimer) {
@@ -140,17 +231,19 @@
     try {
       var raw = localStorage.getItem(LS_TCS);
       var o = raw ? JSON.parse(raw) : null;
-      if (!o || typeof o !== "object") return { hosts: [], tags: [] };
+      if (!o || typeof o !== "object") return { hosts: [], tags: [], bays: [], bayHostPairs: [] };
       return {
         hosts: Array.isArray(o.hosts) ? o.hosts : [],
         tags: Array.isArray(o.tags) ? o.tags : [],
+        bays: Array.isArray(o.bays) ? o.bays : [],
+        bayHostPairs: Array.isArray(o.bayHostPairs) ? o.bayHostPairs : [],
       };
     } catch (e) {
-      return { hosts: [], tags: [] };
+      return { hosts: [], tags: [], bays: [], bayHostPairs: [] };
     }
   }
 
-  function saveTcsMeta(ips, tags) {
+  function saveTcsMeta(ips, tags, bays) {
     function dedupe(arr) {
       var seen = {};
       var out = [];
@@ -165,6 +258,28 @@
     var m = loadTcsMeta();
     m.hosts = dedupe(m.hosts.concat(ips || []));
     m.tags = dedupe(m.tags.concat(tags || []));
+    m.bays = dedupe(m.bays.concat(bays || []));
+    try {
+      localStorage.setItem(LS_TCS, JSON.stringify(m));
+    } catch (e) {}
+  }
+
+  function saveBayHostPair(bay, host) {
+    var b = String(bay || "").trim().toUpperCase();
+    var h = String(host || "").trim();
+    if (!b || !h) return;
+    var m = loadTcsMeta();
+    var pairs = Array.isArray(m.bayHostPairs) ? m.bayHostPairs.slice() : [];
+    var found = false;
+    pairs = pairs.map(function (p) {
+      if (p && String(p.bay || "").toUpperCase() === b) {
+        found = true;
+        return { bay: b, host: h };
+      }
+      return p;
+    });
+    if (!found) pairs.push({ bay: b, host: h });
+    m.bayHostPairs = pairs.slice(-100);
     try {
       localStorage.setItem(LS_TCS, JSON.stringify(m));
     } catch (e) {}
@@ -180,6 +295,51 @@
       opt.value = h;
       dl.appendChild(opt);
     });
+  }
+
+  function refreshBayDatalist() {
+    var dl = $("etf-or-bay-list");
+    if (!dl) return;
+    var m = loadTcsMeta();
+    dl.innerHTML = "";
+    (m.bays || []).forEach(function (b) {
+      var opt = document.createElement("option");
+      opt.value = b;
+      dl.appendChild(opt);
+    });
+  }
+
+  function parseBayLocation(s) {
+    var t = String(s || "").trim().toUpperCase().replace(/-/g, "_");
+    var m = t.match(/(MTF|FA)_([A-Z]{3})_(\d{1,4})/);
+    if (!m) return null;
+    return { prefix: m[1], station: m[2], slot: m[3], full: m[0] };
+  }
+
+  function deriveBayFromMachineName(machineName) {
+    var s = String(machineName || "").trim().toUpperCase().replace(/-/g, "_");
+    var m = s.match(/(?:^|_)(MTF|FA)_([A-Z]{3})_(\d{1,4})(?:$|_)/);
+    if (!m) return null;
+    return { prefix: m[1], station: m[2], slot: m[3], full: m[1] + "_" + m[2] + "_" + m[3] };
+  }
+
+  function syncBayInputFromParts() {
+    var p = (($("etf-or-bay-prefix") && $("etf-or-bay-prefix").value) || "FA").toUpperCase();
+    var st = (($("etf-or-bay-station") && $("etf-or-bay-station").value) || "").toUpperCase();
+    var slot = (($("etf-or-bay-slot") && $("etf-or-bay-slot").value) || "").trim();
+    if (!slot || !st) return;
+    var t = p + "_" + st + "_" + slot;
+    if ($("etf-or-test-bay")) $("etf-or-test-bay").value = t;
+  }
+
+  function syncBayPartsFromInput() {
+    var p = parseBayLocation(($("etf-or-test-bay") && $("etf-or-test-bay").value) || "");
+    if (!p) return;
+    if ($("etf-or-bay-prefix")) $("etf-or-bay-prefix").value = p.prefix;
+    if ($("etf-or-bay-station")) {
+      if (STATION_CHOICES.indexOf(p.station) >= 0) $("etf-or-bay-station").value = p.station;
+    }
+    if ($("etf-or-bay-slot")) $("etf-or-bay-slot").value = p.slot;
   }
 
   function api(path, body) {
@@ -222,8 +382,9 @@
     state.prepared = null;
     if ($("etf-or-prepare-run")) $("etf-or-prepare-run").disabled = true;
     var overrides = {
-      execution_host: (($("etf-or-host") && $("etf-or-host").value) || "").trim(),
-      slot_number: (($("etf-or-slot") && $("etf-or-slot").value) || "").trim(),
+      execution_host: (($("etf-or-host") && $("etf-or-host").value) || "").trim() || DEFAULT_EXEC_HOST,
+      slot_number: (($("etf-or-bay-slot") && $("etf-or-bay-slot").value) || "").trim(),
+      test_bay_location: (($("etf-or-test-bay") && $("etf-or-test-bay").value) || "").trim(),
       allow_incomplete_or_special: true,
     };
     api("/api/etf/offline-replay/prepare", { selectedRun: state.selected, overrides: overrides }).then(function (res) {
@@ -233,12 +394,35 @@
       }
       var j = res.json;
       var meta = j.tcsMeta || {};
-      saveTcsMeta(meta.test_server_ips || [], meta.machine_tags || []);
+      var machineName = (meta.uut_machine_name || (state.selected && state.selected.machine) || "").trim();
+      var bayGuess = deriveBayFromMachineName(machineName);
+      if (!bayGuess && j.resolvedExecutionProfile && j.resolvedExecutionProfile.test_bay_location) {
+        bayGuess = parseBayLocation(j.resolvedExecutionProfile.test_bay_location);
+      }
+      if (bayGuess) {
+        if ($("etf-or-bay-prefix")) $("etf-or-bay-prefix").value = bayGuess.prefix;
+        if ($("etf-or-bay-station") && STATION_CHOICES.indexOf(bayGuess.station) >= 0) $("etf-or-bay-station").value = bayGuess.station;
+        if ($("etf-or-bay-slot")) $("etf-or-bay-slot").value = bayGuess.slot;
+        if ($("etf-or-test-bay")) $("etf-or-test-bay").value = bayGuess.full;
+      } else {
+        var stFromSelected = (((state.selected && state.selected.station) || "").toUpperCase().replace("SYSTEM_", ""));
+        if ($("etf-or-bay-station") && STATION_CHOICES.indexOf(stFromSelected) >= 0) $("etf-or-bay-station").value = stFromSelected;
+        syncBayInputFromParts();
+      }
+      var finalBay = (($("etf-or-test-bay") && $("etf-or-test-bay").value) || (bayGuess && bayGuess.full) || (overrides.test_bay_location || "")).trim();
+      var execHostUi = (($("etf-or-host") && $("etf-or-host").value) || "").trim() || DEFAULT_EXEC_HOST;
+      saveTcsMeta([execHostUi], meta.machine_tags || [], [finalBay]);
+      if (finalBay && execHostUi) saveBayHostPair(finalBay, execHostUi);
       refreshHostDatalist();
+      refreshBayDatalist();
       if ($("etf-or-tcs")) {
         var tlines = [];
-        if ((meta.test_server_ips || []).length) tlines.push("test_server_ip: " + (meta.test_server_ips || []).join(", "));
+        if ((meta.test_server_ips || []).length) {
+          tlines.push("log test_server_ip (reference only): " + (meta.test_server_ips || []).join(", "));
+        }
         if ((meta.machine_tags || []).length) tlines.push("machine_tag: " + (meta.machine_tags || []).join(", "));
+        if (machineName) tlines.push("uut_machine_name: " + machineName);
+        if (($("etf-or-test-bay") && $("etf-or-test-bay").value)) tlines.push("test_bay_location(ui): " + $("etf-or-test-bay").value);
         if (j.resolvedSku) tlines.push("resolved SKU: " + j.resolvedSku);
         $("etf-or-tcs").textContent = tlines.join("\n");
       }
@@ -247,7 +431,7 @@
       if ($("etf-or-preview")) $("etf-or-preview").textContent = formatPrepareMeta(j);
       if ($("etf-or-prepare-run")) $("etf-or-prepare-run").disabled = false;
       if (!j.runnable && /cannot be resolved to port/i.test((j.reasons || []).join(";"))) {
-        $("etf-or-preview").textContent += "\n\nHint: Fill Slot (e.g. 08) to resolve PORT.";
+        $("etf-or-preview").textContent += "\n\nHint: adjust TEST_BAY_LOCATION or slot to resolve PORT.";
       }
     }).catch(function (e) {
       if ($("etf-or-preview")) $("etf-or-preview").textContent = "Preview failed: " + (e && e.message ? e.message : e);
@@ -262,25 +446,60 @@
       if ($("etf-or-preview")) $("etf-or-preview").textContent += "\n\nCannot send command: etfSendSshText missing.";
       return;
     }
-    var send = window.etfSendSshText(rowKey, cmd + "\n");
-    if (!send || !send.ok) {
-      if ($("etf-or-preview")) $("etf-or-preview").textContent += "\n\nCannot send command to terminal.";
+
+    function onFullSuccess(previewNote, notifBody) {
+      if ("Notification" in window) {
+        if (Notification.permission === "granted") {
+          new Notification("Raw offline test started", { body: notifBody || "Command sent to terminal." });
+        } else if (Notification.permission === "default") {
+          Notification.requestPermission();
+        }
+      }
+      if ($("etf-or-preview")) $("etf-or-preview").textContent += "\n\n" + previewNote;
+      if (prepared.status_url) {
+        updateReplayStatusBadge("running", "Polling backend for PASS/FAIL…", null);
+        state.prepared = prepared;
+        startReplayPoll();
+      }
+      closeModal();
+    }
+
+    var host = (($("etf-or-host") && $("etf-or-host").value) || "").trim() || DEFAULT_EXEC_HOST;
+    /** Password for nested `ssh root@host` from jump (site default root/root). */
+    var SSH_NESTED_ROOT_PASSWORD = "root";
+    var passDelayMs = 800;
+    var replayAfterPassMs = 2200;
+
+    var sshOpts = "-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15";
+    var sshLine = "ssh " + sshOpts + " root@" + host + "\n";
+    var r1 = window.etfSendSshText(rowKey, sshLine);
+    if (!r1 || !r1.ok) {
+      if ($("etf-or-preview")) $("etf-or-preview").textContent += "\n\nCannot send SSH line to terminal.";
       return;
     }
-    if ("Notification" in window) {
-      if (Notification.permission === "granted") {
-        new Notification("Raw offline test started", { body: "Command sent to jump host terminal." });
-      } else if (Notification.permission === "default") {
-        Notification.requestPermission();
+    if ($("etf-or-preview")) {
+      $("etf-or-preview").textContent +=
+        "\n\nSSH to root@" + host + " sent; will send password then replay…";
+    }
+
+    setTimeout(function () {
+      var rp = window.etfSendSshText(rowKey, SSH_NESTED_ROOT_PASSWORD + "\n");
+      if (!rp || !rp.ok) {
+        if ($("etf-or-preview")) $("etf-or-preview").textContent += "\n\nFailed to send SSH password to terminal.";
+        return;
       }
-    }
-    if ($("etf-or-preview")) $("etf-or-preview").textContent += "\n\nCommand sent to jump terminal.";
-    if (prepared.status_url) {
-      updateReplayStatusBadge("running", "Polling backend for PASS/FAIL…", null);
-      state.prepared = prepared;
-      startReplayPoll();
-    }
-    closeModal();
+      setTimeout(function () {
+        var r2 = window.etfSendSshText(rowKey, cmd + "\n");
+        if (!r2 || !r2.ok) {
+          if ($("etf-or-preview")) $("etf-or-preview").textContent += "\n\nFailed to send replay command (SSH panel closed?).";
+          return;
+        }
+        onFullSuccess(
+          "SSH to " + host + " (password sent) then replay command sent.",
+          "Replay command sent on root@" + host + "."
+        );
+      }, replayAfterPassMs);
+    }, passDelayMs);
   }
 
   function prepareAndRun() {
@@ -295,8 +514,9 @@
     var ta = $("etf-or-datafile");
     var df = (ta && ta.value) ? ta.value.trim() : "";
     var overrides = {
-      execution_host: (($("etf-or-host") && $("etf-or-host").value) || "").trim(),
-      slot_number: (($("etf-or-slot") && $("etf-or-slot").value) || "").trim(),
+      execution_host: (($("etf-or-host") && $("etf-or-host").value) || "").trim() || DEFAULT_EXEC_HOST,
+      slot_number: (($("etf-or-bay-slot") && $("etf-or-bay-slot").value) || "").trim(),
+      test_bay_location: (($("etf-or-test-bay") && $("etf-or-test-bay").value) || "").trim(),
       allow_incomplete_or_special: true,
     };
     if (df) overrides.datafile_text = ta.value;
@@ -307,19 +527,26 @@
       }
       var j = res.json;
       var meta = j.tcsMeta || {};
-      saveTcsMeta(meta.test_server_ips || [], meta.machine_tags || []);
+      var execHostRun = (($("etf-or-host") && $("etf-or-host").value) || "").trim() || DEFAULT_EXEC_HOST;
+      saveTcsMeta([execHostRun], meta.machine_tags || [], [overrides.test_bay_location || ""]);
+      if (overrides.test_bay_location && execHostRun) saveBayHostPair(overrides.test_bay_location, execHostRun);
       refreshHostDatalist();
+      refreshBayDatalist();
       if ($("etf-or-tcs")) {
         var tlines = [];
-        if ((meta.test_server_ips || []).length) tlines.push("test_server_ip: " + (meta.test_server_ips || []).join(", "));
+        if ((meta.test_server_ips || []).length) {
+          tlines.push("log test_server_ip (reference only): " + (meta.test_server_ips || []).join(", "));
+        }
         if ((meta.machine_tags || []).length) tlines.push("machine_tag: " + (meta.machine_tags || []).join(", "));
+        if (meta.uut_machine_name) tlines.push("uut_machine_name: " + meta.uut_machine_name);
+        if (overrides.test_bay_location) tlines.push("test_bay_location(ui): " + overrides.test_bay_location);
         if (j.resolvedSku) tlines.push("resolved SKU: " + j.resolvedSku);
         $("etf-or-tcs").textContent = tlines.join("\n");
       }
       if ($("etf-or-preview")) $("etf-or-preview").textContent = formatPrepareMeta(j);
       if (!j.runnable) {
         if (/cannot be resolved to port/i.test((j.reasons || []).join(";"))) {
-          $("etf-or-preview").textContent += "\n\nHint: Fill Slot (e.g. 08) to resolve PORT.";
+          $("etf-or-preview").textContent += "\n\nHint: adjust TEST_BAY_LOCATION or slot to resolve PORT.";
         }
         return;
       }
@@ -345,14 +572,19 @@
     if ($("etf-or-datafile")) $("etf-or-datafile").value = "";
     if ($("etf-or-datafile-wrap")) $("etf-or-datafile-wrap").hidden = true;
     if ($("etf-or-prepare-run")) $("etf-or-prepare-run").disabled = true;
-    if ($("etf-or-host") && !$("etf-or-host").value) $("etf-or-host").value = "10.16.138.67";
+    if ($("etf-or-host")) $("etf-or-host").value = DEFAULT_EXEC_HOST;
+    if ($("etf-or-tray-hint")) $("etf-or-tray-hint").textContent = "";
+    if ($("etf-or-bay-prefix") && !$("etf-or-bay-prefix").value) $("etf-or-bay-prefix").value = "FA";
+    if ($("etf-or-bay-station") && !$("etf-or-bay-station").value) $("etf-or-bay-station").value = "FLA";
     refreshHostDatalist();
+    refreshBayDatalist();
     if ($("etf-or-tcs")) $("etf-or-tcs").textContent = "";
     if ($("etf-or-replay-status")) $("etf-or-replay-status").textContent = "";
     state.selected = null;
     state.prepared = null;
     state.cleanupCalled = false;
     resetReplayConsoleUi();
+    syncBayInputFromParts();
     modal.setAttribute("aria-hidden", "false");
     var snU = (($("etf-or-sn") && $("etf-or-sn").value) || "").trim().toUpperCase();
     if (snU) searchRuns();
@@ -397,7 +629,16 @@
           result: this.getAttribute("data-result") || "",
         };
         $("etf-or-picked").textContent = "Picked node_log_id=" + state.selected.node_log_id + " station=" + state.selected.station;
-        loadPreparePreview();
+        var bayFast = deriveBayFromMachineName(state.selected.machine || "");
+        if (bayFast) {
+          if ($("etf-or-bay-prefix")) $("etf-or-bay-prefix").value = bayFast.prefix;
+          if ($("etf-or-bay-station") && STATION_CHOICES.indexOf(bayFast.station) >= 0) $("etf-or-bay-station").value = bayFast.station;
+          if ($("etf-or-bay-slot")) $("etf-or-bay-slot").value = bayFast.slot;
+          if ($("etf-or-test-bay")) $("etf-or-test-bay").value = bayFast.full;
+        }
+        applyExecutionHostFromTrayOverview(state.selected.sn, function () {
+          loadPreparePreview();
+        });
       });
     });
   }
@@ -411,9 +652,29 @@
     if (searchBtn) searchBtn.addEventListener("click", searchRuns);
     var prBtn = $("etf-or-prepare-run");
     if (prBtn) prBtn.addEventListener("click", prepareAndRun);
-    var slotEl = $("etf-or-slot");
-    if (slotEl) {
-      slotEl.addEventListener("change", function () {
+    var hostInp = $("etf-or-host");
+    if (hostInp) {
+      hostInp.addEventListener("change", function () {
+        reconnectJumpTerminalForExecHost();
+      });
+    }
+    ["etf-or-bay-prefix", "etf-or-bay-station", "etf-or-bay-slot"].forEach(function (id) {
+      var el = $(id);
+      if (!el) return;
+      el.addEventListener("change", function () {
+        syncBayInputFromParts();
+        var modal = $("etf-offline-replay-modal");
+        if (!modal || modal.getAttribute("aria-hidden") === "true") return;
+        if (state.selected) loadPreparePreview();
+      });
+    });
+    var bayInput = $("etf-or-test-bay");
+    if (bayInput) {
+      bayInput.addEventListener("change", function () {
+        syncBayPartsFromInput();
+        var v = (bayInput.value || "").trim();
+        if (v) saveTcsMeta([], [], [v]);
+        refreshBayDatalist();
         var modal = $("etf-offline-replay-modal");
         if (!modal || modal.getAttribute("aria-hidden") === "true") return;
         if (state.selected) loadPreparePreview();

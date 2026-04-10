@@ -535,9 +535,27 @@
         </div>
         <datalist id="etf-or-host-list"></datalist>
         <div class="etf-ot-row">
-          <input type="text" id="etf-or-host" class="etf-ot-input etf-ot-flex" list="etf-or-host-list" placeholder="Execution host/IP (saved + TCS suggestions)" value="10.16.138.67">
-          <input type="text" id="etf-or-slot" class="etf-ot-input" style="max-width:180px" placeholder="Slot (e.g. 08)">
+          <input type="text" id="etf-or-host" class="etf-ot-input etf-ot-flex" list="etf-or-host-list" placeholder="Jump ssh_host / execution (default 10.16.138.67 FA; đổi = tạo lại terminal jump)" value="10.16.138.67">
         </div>
+        <p id="etf-or-tray-hint" class="etf-ot-muted" style="margin-top:0.25rem;font-size:12px"></p>
+        <div class="etf-ot-row">
+          <select id="etf-or-bay-prefix" class="etf-ot-input" style="max-width:120px">
+            <option value="FA">FA</option>
+            <option value="MTF">MTF</option>
+          </select>
+          <select id="etf-or-bay-station" class="etf-ot-input" style="max-width:140px">
+            <option value="FLA">FLA</option>
+            <option value="FLB">FLB</option>
+            <option value="AST">AST</option>
+            <option value="FTS">FTS</option>
+            <option value="FCT">FCT</option>
+            <option value="NVL">NVL</option>
+            <option value="RIN">RIN</option>
+          </select>
+          <input type="text" id="etf-or-bay-slot" class="etf-ot-input" style="max-width:180px" placeholder="Slot (e.g. 08 or 002)">
+          <input type="text" id="etf-or-test-bay" class="etf-ot-input etf-ot-flex" list="etf-or-bay-list" placeholder="Auto TEST_BAY_LOCATION (editable)">
+        </div>
+        <datalist id="etf-or-bay-list"></datalist>
         <div id="etf-or-list" class="etf-ot-machine-list" style="max-height:260px;margin-top:0.6rem;"></div>
         <p id="etf-or-picked" class="etf-ot-muted"></p>
         <div id="etf-or-datafile-wrap" class="etf-ot-field" hidden>
