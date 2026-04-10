@@ -1051,6 +1051,28 @@
     requestAnimationFrame(() => requestAnimationFrame(run));
   };
 
+  /**
+   * Recreate only the jump-host SSH panel with a new ssh_host (same as Testing page WebSocket ?host=…).
+   * Leaves AI/BMC/Host terminals unchanged. Caller supplies the #term-ssh (or equivalent) element.
+   */
+  window.etfReconnectJumpSshOnly = function (rowKey, sn, sshHost, sshEl) {
+    if (!rowKey || !sshEl || typeof window.etfCreateSnTerminals !== "function") return;
+    const h = (sshHost || "").trim();
+    window.etfCreateSnTerminals(sn || rowKey, rowKey, null, {
+      sshEl: sshEl,
+      row: { ssh_host: h },
+    });
+    if (typeof window.etfFitTerminals === "function") {
+      [0, 120, 400, 900].forEach(function (ms) {
+        setTimeout(function () {
+          try {
+            window.etfFitTerminals(rowKey);
+          } catch (_) {}
+        }, ms);
+      });
+    }
+  };
+
   window.etfAiStartSession = function(rowKey) {
     const panel = snDebugPanels.get(rowKey);
     if (!panel?.ai?.term) return;
