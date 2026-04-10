@@ -1,21 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-full fa-debug-shell">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trial Run – Debug</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <link rel="stylesheet" href="/static/css/fa_debug_shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
   <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); margin: 0; padding: 0; }
   .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 1.25rem 1.5rem 2rem; max-width: 100%; width: 100%; margin: 0 auto; }
-  .nav-links { margin-bottom: 1.25rem; font-size: 0.875rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-  .nav-btn { display: inline-block; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; text-decoration: none; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; }
-  .nav-btn:hover { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .nav-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-  .nav-btn.disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
-  .btn-logout { padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; font-size: 0.875rem; font-weight: 500; }
 
   /* MFG shelf canvas (Crabber-inspired) */
   .tr-shelf-wrap { margin-top: 0.5rem; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
@@ -53,23 +51,14 @@
   .tr-mock-note { font-size: 0.75rem; color: var(--color-muted); margin-top: 0.75rem; }
   </style>
 </head>
-<body>
-  <div class="panel">
-    <div class="nav-links">
-      {% set ap = allowed_pages or [] %}
-      <a href="/debug" class="nav-btn {{ 'disabled' if 'debug' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
-      {% if current_user and (current_user.get('role') or '')|lower == 'admin' %}<a href="/debug/setting" class="nav-btn">Setting</a>{% endif %}
-      <a href="/debug/repair" class="nav-btn {{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
-      <a href="/debug/testing" class="nav-btn {{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
-      <a href="/debug/trial-run" class="nav-btn active {{ 'disabled' if 'trial-run' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'trial-run' not in ap else '' }}>Trial Run</a>
-      <a href="/debug/jump-station" class="nav-btn {{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
-      <a href="/debug/kitting-sql" class="nav-btn {{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
-      <a href="/" class="nav-btn">Analytics</a>
-      <form method="post" action="/api/auth/logout" style="display: inline;">
-        <button type="submit" class="btn-logout">Logout</button>
-      </form>
-    </div>
+<body class="h-full">
+  <div id="app-wrapper" class="app-wrapper">
+    {% set fa_debug_active = 'trial-run' %}
+    {% set fa_debug_show_filters = false %}
+    {% include 'partials/fa_debug_header.html' %}
 
+    <main>
+  <div class="panel">
     <h1 class="text-2xl font-bold mb-1">Trial Run</h1>
     <p class="text-sm text-[var(--color-muted)] mb-3">Test-procedure shelf (mock data). Wire to Crabber/API next.</p>
 
@@ -108,6 +97,7 @@
     </div>
     <p class="tr-mock-note">Buttons are non-functional placeholders until workflows are connected.</p>
   </div>
+    </main>
 
   <script>
   (function() {
@@ -161,5 +151,7 @@
     });
   })();
   </script>
+  <script src="/static/js/fa_debug_theme.js" defer></script>
+  </div>
 </body>
 </html>
