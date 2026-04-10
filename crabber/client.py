@@ -73,6 +73,50 @@ def fetch_search_log_items_json(
         return None, str(e)
 
 
+def fetch_search_log_items_all_pages(
+    sn: str = "",
+    is_trial: bool = False,
+    timeout: int = 20,
+) -> Tuple[Optional[List[dict]], Optional[dict], Optional[str]]:
+    """
+    Fetch all pages from search_log_items.
+    Returns (merged_log_list_sorted_desc, first_page_response, error_str).
+    """
+    page = 1
+    total_pages = None
+    merged: List[dict] = []
+    first_resp: Optional[dict] = None
+    while True:
+        data, err = fetch_search_log_items_json(
+            sn=sn,
+            cur_page=page,
+            is_trial=is_trial,
+            timeout=timeout,
+        )
+        if err:
+            return None, first_resp, err
+        if not isinstance(data, dict):
+            return None, first_resp, "response is not a JSON object"
+        if first_resp is None:
+            first_resp = data
+        if total_pages is None:
+            try:
+                total_pages = int(data.get("total_pages") or 0)
+            except (TypeError, ValueError):
+                return None, first_resp, "total_pages is invalid"
+            if total_pages < 1:
+                return None, first_resp, "total_pages missing or < 1"
+        items = _extract_items_list(data) or []
+        for it in items:
+            if isinstance(it, dict):
+                merged.append(it)
+        if page >= total_pages:
+            break
+        page += 1
+    merged.sort(key=lambda x: str(x.get("log_time") or ""), reverse=True)
+    return merged, first_resp, None
+
+
 def tier_from_crabber_station(station: str) -> Optional[str]:
     """L10 if SYSTEM in station, L11 if FVT (FVT checked first). Else None."""
     s = (station or "").strip()
@@ -268,6 +312,40 @@ def _find_log_report_path(obj: Any) -> Optional[str]:
     return None
 
 
+def fetch_node_info(
+    node_log_id: Any,
+    *,
+    execute_log_id: str = "",
+    all_detail: bool = False,
+    load_tcs: bool = False,
+    timeout: int = 15,
+) -> Tuple[Optional[dict], Optional[str]]:
+    """GET /api/get_node_info with API-2 query keys from the capture."""
+    base, token = _get_config()
+    node = str(node_log_id or "").strip()
+    if not base:
+        return None, "CRABBER_BASE_URL empty"
+    if not node:
+        return None, "node_log_id empty"
+    url = (
+        f"{base}/api/get_node_info/"
+        f"?node_log_id={quote(node, safe='')}"
+        f"&execute_log_id={quote(str(execute_log_id or ''), safe='')}"
+        f"&all_detail={'true' if all_detail else 'false'}"
+        f"&load_tcs={'true' if load_tcs else 'false'}"
+    )
+    try:
+        r = requests.get(url, headers=_headers(token), timeout=timeout)
+        if not r.ok:
+            return None, f"HTTP {r.status_code}"
+        data = r.json()
+        if not isinstance(data, dict):
+            return None, "response is not a JSON object"
+        return data, None
+    except Exception as e:
+        return None, str(e)
+
+
 def _derive_crabber_display_result(raw_result: str, node_log_event: str) -> str:
     """Map node_log_event to UI result; empty event means finished test — use API result (Pass/Fail/…)."""
     ev = (node_log_event or "").strip().upper()
@@ -448,24 +526,13 @@ def fetch_log_report_path(sn: str, timeout: int = 15) -> Optional[str]:
     2. GET /api/get_node_info/?node_log_id=XXX -> Log Report File Path
     Returns path string or None if not found / API disabled.
     """
-    base, token = _get_config()
+    base, _ = _get_config()
     if not base or not (sn or "").strip():
         return None
     sn = sn.strip()
 
-    # Step 1: Search logs by SN
-    search_url = build_search_log_items_url(base, sn=sn, cur_page=1, is_trial=False)
-    try:
-        r = requests.get(search_url, headers=_headers(token), timeout=timeout)
-        if not r.ok:
-            return None
-        search_resp = r.json()
-    except Exception:
-        return None
-
-    # Extract node_log_id - try common keys and nested structures
-    items = _extract_items_list(search_resp)
-    if not items or not isinstance(items, list) or len(items) == 0:
+    items, _, err = fetch_search_log_items_all_pages(sn=sn, is_trial=False, timeout=timeout)
+    if err or not items:
         return None
 
     # Only Pass/Fail - skip Unfinished
@@ -491,17 +558,14 @@ def fetch_log_report_path(sn: str, timeout: int = 15) -> Optional[str]:
         return None
     node_log_id = str(node_log_id).strip()
 
-    # Step 2: Get log details
-    detail_url = (
-        f"{base}/api/get_node_info/"
-        f"?node_log_id={node_log_id}&execute_log_id=&all_detail=false&load_tcs=false"
+    detail, detail_err = fetch_node_info(
+        node_log_id,
+        execute_log_id="",
+        all_detail=False,
+        load_tcs=False,
+        timeout=timeout,
     )
-    try:
-        r = requests.get(detail_url, headers=_headers(token), timeout=timeout)
-        if not r.ok:
-            return None
-        detail = r.json()
-    except Exception:
+    if detail_err or not detail:
         return None
 
     return _find_log_report_path(detail)

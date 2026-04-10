@@ -1,0 +1,13 @@
+<header>
+  <div class="header-content">
+    <div class="header-row">
+      <h1>FA Debug Place</h1>
+      <div class="header-actions">
+        {% include 'partials/fa_debug_nav_links.html' %}
+      </div>
+    </div>
+    {% if fa_debug_show_filters %}
+      {% include 'partials/fa_debug_header_filters.html' %}
+    {% endif %}
+  </div>
+</header>

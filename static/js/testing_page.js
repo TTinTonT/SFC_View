@@ -270,6 +270,31 @@
         container.appendChild(n);
       }
     }
+    function trayLinkLedSet(state, message) {
+      var led = document.getElementById('sum-tray-led');
+      var elMsg = document.getElementById('sum-tray-msg');
+      if (led) {
+        led.classList.remove('tray-link-led--ok', 'tray-link-led--fail', 'tray-link-led--idle');
+        if (state === 'ok') {
+          led.classList.add('tray-link-led--ok');
+          led.setAttribute('aria-label', 'Tray BMC: OK — BMC IP in cache');
+        } else if (state === 'fail') {
+          led.classList.add('tray-link-led--fail');
+          led.setAttribute('aria-label', 'Tray BMC: not linked — missing tray row or BMC IP');
+        } else {
+          led.classList.add('tray-link-led--idle');
+          led.setAttribute('aria-label', 'Tray BMC: not loaded');
+        }
+      }
+      if (elMsg) elMsg.textContent = message == null ? '—' : String(message);
+    }
+    function trayLinkHasValidBmcIp(ip) {
+      var s = (ip && String(ip).trim()) || '';
+      if (!s) return false;
+      var u = s.toUpperCase();
+      if (u === '—' || u === '-' || u === 'N/A' || u === 'NA' || u === 'NONE') return false;
+      return true;
+    }
     function resetView() {
       stopCrabberPoll();
       stopAutoRefresh();
@@ -291,10 +316,11 @@
       if (crabberTbody) {
         crabberTbody.innerHTML = '<tr><td colspan="7" style="color:var(--color-muted)">—</td></tr>';
       }
-      ['sum-room', 'sum-pn-tray', 'sum-wip', 'sum-bmc', 'sum-sys', 'sum-tray-msg'].forEach(function (id) {
+      ['sum-room', 'sum-pn-tray', 'sum-wip', 'sum-bmc', 'sum-sys'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.textContent = '—';
       });
+      trayLinkLedSet('idle', '—');
     }
     function refreshCurrentSnData(sn, allowTerminalReconnect) {
       var ovUrl = '/api/debug/testing/overview?sn=' + encodeURIComponent(sn);
@@ -323,6 +349,8 @@
           } else {
             stopCrabberPoll();
             renderCrabberTable({ ok: false, tests: [], error: 'Overview failed' });
+            var ovErr = (ovRes.json && ovRes.json.error) ? ovRes.json.error : 'Could not load overview.';
+            trayLinkLedSet('fail', ovErr);
           }
           flowState = fsRes.json;
           if (!fsRes.json.ok) {
@@ -348,7 +376,6 @@
       var elWip = document.getElementById('sum-wip');
       var elBmc = document.getElementById('sum-bmc');
       var elSys = document.getElementById('sum-sys');
-      var elMsg = document.getElementById('sum-tray-msg');
       if (elRoom) {
         var rm = tray.connected ? (row.room || '') : '';
         elRoom.textContent = rm ? String(rm).toUpperCase() : '—';
@@ -372,8 +399,13 @@
         var sysParts = [row.sys_mac, row.sys_ip].filter(function (x) { return x && String(x).trim(); });
         elSys.textContent = sysParts.length ? sysParts.join(' / ') : '—';
       }
-      if (elMsg) {
-        elMsg.textContent = tray.connected ? '' : (tray.message || 'Không tìm được kết nối đến SN này');
+      var bmcOk = tray.connected && trayLinkHasValidBmcIp(row.bmc_ip);
+      if (bmcOk) {
+        trayLinkLedSet('ok', '');
+      } else if (tray.connected) {
+        trayLinkLedSet('fail', 'Tray row found but no BMC IP yet (DHCP).');
+      } else {
+        trayLinkLedSet('fail', tray.message || 'No tray/BMC link in cache for this SN.');
       }
     }
     function formatCrabberCali(iso) {
@@ -817,6 +849,7 @@
       stopTermWatch();
       var prevKey = termRowKey;
       termRowKey = sn.toUpperCase();
+      window.termRowKey = termRowKey;
       if (prevKey && prevKey !== termRowKey && typeof window.etfCloseSnPanel === 'function') {
         try { window.etfCloseSnPanel(prevKey); } catch (e1) {}
       }
@@ -1289,4 +1322,8 @@
     }
 
     loadOptions();
+
+    if (typeof window.initFaDebugNotepad === 'function') {
+      window.initFaDebugNotepad({ mode: 'corner', storagePrefix: 'fa-testing-notepad' });
+    }
 })();

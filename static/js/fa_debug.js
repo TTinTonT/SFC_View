@@ -506,67 +506,30 @@
     renderPinPanel();
   }
 
-  const NOTEPAD_KEY = 'fa-debug-notepad-content';
-  const NOTEPAD_EXPANDED_KEY = 'fa-debug-notepad-expanded';
-  let notepadExpanded = true;
-  try { notepadExpanded = localStorage.getItem(NOTEPAD_EXPANDED_KEY) !== 'false'; } catch (_) {}
-  let notepadSaveTimer = null;
+  const NOTEPAD_WIDTH_EXPANDED = 260;
+  const NOTEPAD_WIDTH_COLLAPSED = 40;
 
   function updateLeftSidebars() {
     const notepadEl = $('notepad-sidebar');
-    const pinEl = $('pin-sidebar');
     const app = document.getElementById('app-wrapper') || document.querySelector('.app-wrapper');
+    if (app) {
+      let leftPad = '';
+      if (notepadEl) {
+        leftPad = notepadEl.classList.contains('expanded') ? NOTEPAD_WIDTH_EXPANDED : NOTEPAD_WIDTH_COLLAPSED;
+      }
+      app.style.paddingLeft = leftPad ? leftPad + 'px' : '';
+    }
     const pinW = 0;
     if (app) app.style.marginRight = pinW ? pinW + 'px' : '';
   }
 
   function renderNotepadSidebar() {
-    let np = $('notepad-sidebar');
-    if (!np) {
-      np = el('div', { id: 'notepad-sidebar', className: 'notepad-sidebar' });
-      np.classList.toggle('expanded', notepadExpanded);
-      np.classList.toggle('collapsed', !notepadExpanded);
-      document.body.insertBefore(np, document.body.firstChild);
-      const toggle = el('button', { type: 'button', className: 'notepad-sidebar-toggle' });
-      const toggleSpan = document.createElement('span');
-      toggleSpan.textContent = 'Notepad';
-      toggle.appendChild(toggleSpan);
-      const toggleIcon = document.createElement('span');
-      toggleIcon.textContent = notepadExpanded ? '−' : '+';
-      toggle.appendChild(toggleIcon);
-      toggle.addEventListener('click', () => {
-        notepadExpanded = !notepadExpanded;
-        np.classList.toggle('expanded', notepadExpanded);
-        np.classList.toggle('collapsed', !notepadExpanded);
-        toggleIcon.textContent = notepadExpanded ? '−' : '+';
-        const body = np.querySelector('.notepad-sidebar-body');
-        if (body) body.style.display = notepadExpanded ? 'flex' : 'none';
-        try { localStorage.setItem(NOTEPAD_EXPANDED_KEY, notepadExpanded ? 'true' : 'false'); } catch (_) {}
-        updateLeftSidebars();
+    if (typeof window.initFaDebugNotepad === 'function') {
+      window.initFaDebugNotepad({
+        mode: 'sidebar',
+        storagePrefix: 'fa-debug-notepad',
+        onLayoutChange: updateLeftSidebars,
       });
-      np.appendChild(toggle);
-      const body = el('div', { className: 'notepad-sidebar-body' });
-      body.style.display = notepadExpanded ? 'flex' : 'none';
-      const toolbar = el('div', { className: 'notepad-toolbar' });
-      const copyBtn = el('button', { type: 'button' });
-      copyBtn.textContent = 'Copy';
-      copyBtn.addEventListener('click', () => {
-        const ta = np.querySelector('.notepad-textarea');
-        if (ta) navigator.clipboard?.writeText(ta.value || '').then(() => {}).catch(() => {});
-      });
-      toolbar.appendChild(copyBtn);
-      body.appendChild(toolbar);
-      const ta = el('textarea', { className: 'notepad-textarea' });
-      ta.placeholder = 'Note, paste text...';
-      try { ta.value = localStorage.getItem(NOTEPAD_KEY) || ''; } catch (_) {}
-      const saveNotepad = () => { try { localStorage.setItem(NOTEPAD_KEY, ta.value); } catch (_) {} };
-      ta.addEventListener('input', () => {
-        if (notepadSaveTimer) clearTimeout(notepadSaveTimer);
-        notepadSaveTimer = setTimeout(() => { saveNotepad(); notepadSaveTimer = null; }, 300);
-      });
-      ta.addEventListener('blur', saveNotepad);
-      body.appendChild(ta);
-      np.appendChild(body);
     }
     updateLeftSidebars();
   }
@@ -707,38 +670,17 @@
     });
   }
 
-  function initTheme() {
-    const dark = localStorage.getItem('fa-debug-theme') === 'dark';
-    document.documentElement.classList.toggle('dark', dark);
-    const sunEl = $('sun-icon');
-    const moonEl = $('moon-icon');
-    if (sunEl) sunEl.classList.toggle('hidden', !dark);
-    if (moonEl) moonEl.classList.toggle('hidden', dark);
-  }
-
-  function toggleTheme() {
-    const dark = !document.documentElement.classList.contains('dark');
-    document.documentElement.classList.toggle('dark', dark);
-    localStorage.setItem('fa-debug-theme', dark ? 'dark' : 'light');
-    const sunEl = $('sun-icon');
-    const moonEl = $('moon-icon');
-    if (sunEl) sunEl.classList.toggle('hidden', !dark);
-    if (moonEl) moonEl.classList.toggle('hidden', dark);
-  }
-
   function init() {
     if (!document.getElementById('kpi-total-val')) {
       return;
     }
     setDefaultDates();
-    initTheme();
     renderNotepadSidebar();
-    fetchData(false);
+    applyFilter();
 
     const applyBtn = $('apply-filter');
     if (applyBtn) applyBtn.addEventListener('click', applyFilter);
 
-    $('theme-toggle')?.addEventListener('click', toggleTheme);
     $('modal-close')?.addEventListener('click', closeDrillDown);
     $('modal-drill')?.addEventListener('click', (e) => {
       const logBtn = e.target.closest('.log-path-btn');
@@ -1308,6 +1250,19 @@
 
   window.etfGetSnPanel = function(rowKey) {
     return snDebugPanels.get(rowKey) || null;
+  };
+
+  window.etfSendSshText = function(rowKey, text) {
+    const panel = snDebugPanels.get(rowKey);
+    if (!panel || !panel.ssh || !panel.ssh.ws) return { ok: false, error: "ssh panel not ready" };
+    const ws = panel.ssh.ws;
+    if (ws.readyState !== WebSocket.OPEN) return { ok: false, error: "ssh websocket not open" };
+    try {
+      ws.send(String(text == null ? "" : text));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) };
+    }
   };
 
   function onReady() {

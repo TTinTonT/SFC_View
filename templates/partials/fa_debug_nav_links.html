@@ -1,0 +1,20 @@
+{% set ap = allowed_pages or [] %}
+{% set a = fa_debug_active|default('') %}
+<a href="/debug" class="btn-ghost btn-mini {{ 'fa-nav-active' if a == 'debug' else '' }} {{ 'disabled' if 'debug' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
+{% if current_user and (current_user.get('role') or '')|lower == 'admin' %}
+<a href="/debug/setting" class="btn-ghost btn-mini {{ 'fa-nav-active' if a == 'setting' else '' }}" style="text-decoration: none; color: inherit;">Setting</a>
+{% endif %}
+<a href="/debug/repair" class="btn-ghost btn-mini {{ 'fa-nav-active' if a == 'repair' else '' }} {{ 'disabled' if 'repair' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
+<a href="/debug/testing" class="btn-ghost btn-mini {{ 'fa-nav-active' if a == 'testing' else '' }} {{ 'disabled' if 'testing' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
+<a href="/debug/jump-station" class="btn-ghost btn-mini {{ 'fa-nav-active' if a == 'jump-station' else '' }} {{ 'disabled' if 'jump-station' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
+<a href="/debug/kitting-sql" class="btn-ghost btn-mini {{ 'fa-nav-active' if a == 'kitting-sql' else '' }} {{ 'disabled' if 'kitting-sql' not in ap else '' }}" style="text-decoration: none; color: inherit;" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
+<a href="/" class="btn-ghost btn-mini {{ 'fa-nav-active' if a == 'analytics' else '' }}" style="text-decoration: none; color: inherit;">Analytics</a>
+<a href="/debug/my-settings" class="btn-ghost btn-mini {{ 'fa-nav-active' if a == 'my-settings' else '' }}" style="text-decoration: none; color: inherit;">My settings</a>
+<form method="post" action="/api/auth/logout" style="display: inline;" onsubmit="return confirm('Log out?');">
+  <input type="hidden" name="csrf" value="">
+  <button type="submit" class="btn-ghost btn-mini">Logout</button>
+</form>
+<button type="button" class="icon-btn" id="theme-toggle" title="Toggle theme">
+  <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+  <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+</button>

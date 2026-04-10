@@ -1,19 +1,18 @@
 <!doctype html>
-<html lang="en" class="h-full">
+<html lang="en" class="h-full fa-debug-shell">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My settings – Debug</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <link rel="stylesheet" href="/static/css/fa_debug_shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
   <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); padding: 2rem; }
-  .nav-links { margin-bottom: 1rem; }
-  .nav-links a { color: var(--color-primary); text-decoration: none; margin-right: 1rem; }
-  .nav-links a.disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
-  .nav-links .btn-logout { background: none; border: none; padding: 0; font-size: inherit; color: var(--color-primary); cursor: pointer; }
-  .nav-links .btn-logout:hover { text-decoration: underline; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); margin: 0; padding: 0; }
   .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; max-width: 420px; }
   .panel h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.75rem; }
   .form-group { margin-bottom: 0.75rem; }
@@ -26,21 +25,11 @@
   .alert.ok { background: rgba(16,185,129,0.12); color: var(--color-success); }
   </style>
 </head>
-<body>
-  <div class="nav-links">
-    {% set ap = allowed_pages or [] %}
-    <a href="/debug" class="{{ 'disabled' if 'debug' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'debug' not in ap else '' }}>Debug</a>
-    <a href="/debug/repair" class="{{ 'disabled' if 'repair' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'repair' not in ap else '' }}>Repair</a>
-    <a href="/debug/testing" class="{{ 'disabled' if 'testing' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'testing' not in ap else '' }}>Testing</a>
-    <a href="/debug/trial-run" class="{{ 'disabled' if 'trial-run' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'trial-run' not in ap else '' }}>Trial Run</a>
-    <a href="/debug/jump-station" class="{{ 'disabled' if 'jump-station' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'jump-station' not in ap else '' }}>IT Jump</a>
-    <a href="/debug/kitting-sql" class="{{ 'disabled' if 'kitting-sql' not in ap else '' }}" {{ 'tabindex="-1" aria-disabled="true"' if 'kitting-sql' not in ap else '' }}>IT Kitting SQL</a>
-    <a href="/">Analytics</a>
-    <form method="post" action="/api/auth/logout" style="display: inline;">
-      <button type="submit" class="btn-logout">Logout</button>
-    </form>
-  </div>
-
+<body class="h-full">
+  <div id="app-wrapper" class="app-wrapper">
+    {% set fa_debug_active = 'my-settings' %}
+    {% include 'partials/fa_debug_header.html' %}
+    <main>
   <div class="panel">
     <h2>Change password</h2>
     <div id="pw-alert" class="alert"></div>
@@ -69,6 +58,7 @@
     </div>
     <button type="button" class="btn" id="btn-change-username">Change username</button>
   </div>
+    </main>
 
   <script>
   (function() {
@@ -122,5 +112,7 @@
     };
   })();
   </script>
+  <script src="/static/js/fa_debug_theme.js" defer></script>
+  </div>
 </body>
 </html>

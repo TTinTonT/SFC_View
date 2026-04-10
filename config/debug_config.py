@@ -46,3 +46,53 @@ CRABBER_USER_ID = str(os.environ.get("CRABBER_USER_ID", get_default("CRABBER_USE
 CRABBER_SITENAME = (os.environ.get("CRABBER_SITENAME", get_default("CRABBER_SITENAME") or "SanJose")).strip()
 # Oberon L10 log share UNC prefix (see crabber.log_unc_path); override with CRABBER_LOG_UNC_ROOT
 CRABBER_LOG_UNC_ROOT = os.environ.get("CRABBER_LOG_UNC_ROOT", get_default("CRABBER_LOG_UNC_ROOT") or "").strip()
+CRABBER_REPLAY_TIMEOUT_SEC = int(
+    os.environ.get("CRABBER_REPLAY_TIMEOUT_SEC", get_default("CRABBER_REPLAY_TIMEOUT_SEC") or 25)
+)
+
+# Offline replay execution profile (no hardcoded host/path in business logic)
+REPLAY_EXECUTION_HOST = (os.environ.get("REPLAY_EXECUTION_HOST", get_default("REPLAY_EXECUTION_HOST") or "")).strip()
+REPLAY_SSH_USER = (os.environ.get("REPLAY_SSH_USER", get_default("REPLAY_SSH_USER") or "")).strip()
+REPLAY_SSH_PASSWORD = (os.environ.get("REPLAY_SSH_PASSWORD", get_default("REPLAY_SSH_PASSWORD") or "")).strip()
+REPLAY_DATAFILE_DIR = (os.environ.get("REPLAY_DATAFILE_DIR", get_default("REPLAY_DATAFILE_DIR") or "/tmp/replay_datafiles")).strip()
+REPLAY_DATACENTER_CMD = (os.environ.get("REPLAY_DATACENTER_CMD", get_default("REPLAY_DATACENTER_CMD") or "run_datacenter.sh")).strip()
+
+# Offline replay site infra profile
+REPLAY_MAIN_BUNDLE_ROOT = (os.environ.get("REPLAY_MAIN_BUNDLE_ROOT", get_default("REPLAY_MAIN_BUNDLE_ROOT") or "")).strip()
+REPLAY_AUX_BUNDLE_ROOT = (os.environ.get("REPLAY_AUX_BUNDLE_ROOT", get_default("REPLAY_AUX_BUNDLE_ROOT") or "")).strip()
+REPLAY_TEST_BAY_PORT_MAP = (os.environ.get("REPLAY_TEST_BAY_PORT_MAP", get_default("REPLAY_TEST_BAY_PORT_MAP") or "{}")).strip()
+REPLAY_FACTORY_CODE_DEFAULT = (os.environ.get("REPLAY_FACTORY_CODE_DEFAULT", get_default("REPLAY_FACTORY_CODE_DEFAULT") or "")).strip()
+REPLAY_DEFAULT_SKU = (os.environ.get("REPLAY_DEFAULT_SKU", get_default("REPLAY_DEFAULT_SKU") or "l10_prod_ts2") or "l10_prod_ts2").strip()
+
+# Replay console transcript + backend verdict polling
+REPLAY_CONSOLE_LOGGING_ENABLED = (
+    os.environ.get("REPLAY_CONSOLE_LOGGING_ENABLED", get_default("REPLAY_CONSOLE_LOGGING_ENABLED") or "1") or "1"
+).strip().lower() in ("1", "true", "yes", "on")
+REPLAY_CONSOLE_LOG_DIR = (
+    os.environ.get("REPLAY_CONSOLE_LOG_DIR", get_default("REPLAY_CONSOLE_LOG_DIR") or "/tmp/replay_console_logs") or "/tmp/replay_console_logs"
+).strip()
+REPLAY_EXIT_SIDECAR_DIR = (
+    os.environ.get("REPLAY_EXIT_SIDECAR_DIR", get_default("REPLAY_EXIT_SIDECAR_DIR") or REPLAY_CONSOLE_LOG_DIR) or REPLAY_CONSOLE_LOG_DIR
+).strip()
+REPLAY_STATUS_POLL_HINT_MS = int(
+    os.environ.get("REPLAY_STATUS_POLL_HINT_MS", get_default("REPLAY_STATUS_POLL_HINT_MS") or 3000) or 3000
+)
+REPLAY_STATUS_SSH_TIMEOUT_SEC = int(
+    os.environ.get("REPLAY_STATUS_SSH_TIMEOUT_SEC", get_default("REPLAY_STATUS_SSH_TIMEOUT_SEC") or 15) or 15
+)
+REPLAY_LOG_TAIL_MAX_LINES = int(
+    os.environ.get("REPLAY_LOG_TAIL_MAX_LINES", get_default("REPLAY_LOG_TAIL_MAX_LINES") or 400) or 400
+)
+REPLAY_LOG_PARSE_MAX_BYTES = int(
+    os.environ.get("REPLAY_LOG_PARSE_MAX_BYTES", get_default("REPLAY_LOG_PARSE_MAX_BYTES") or 1048576) or 1048576
+)
+REPLAY_RUN_TIMEOUT_SEC = int(
+    os.environ.get("REPLAY_RUN_TIMEOUT_SEC", get_default("REPLAY_RUN_TIMEOUT_SEC") or 43200) or 43200
+)
+REPLAY_BACKEND_COPY_MODE = (
+    os.environ.get("REPLAY_BACKEND_COPY_MODE", get_default("REPLAY_BACKEND_COPY_MODE") or "disabled") or "disabled"
+).strip().lower()
+REPLAY_BACKEND_LOG_DIR = (os.environ.get("REPLAY_BACKEND_LOG_DIR", get_default("REPLAY_BACKEND_LOG_DIR") or "")).strip()
+REPLAY_CLEANUP_CONSOLE_MAX_BYTES = int(
+    os.environ.get("REPLAY_CLEANUP_CONSOLE_MAX_BYTES", get_default("REPLAY_CLEANUP_CONSOLE_MAX_BYTES") or 2097152) or 2097152
+)

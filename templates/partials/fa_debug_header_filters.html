@@ -1,0 +1,18 @@
+<div class="header-filters">
+  <div class="flex items-center gap-2 flex-wrap">
+    <label for="date-start" class="text-xs font-semibold" style="color: var(--color-muted);">Start</label>
+    <input type="datetime-local" id="date-start" class="input-field">
+  </div>
+  <div class="flex items-center gap-2 flex-wrap">
+    <div id="end-date-wrap" class="flex items-center gap-2 flex-wrap">
+      <label for="date-end" class="text-xs font-semibold" style="color: var(--color-muted);">End</label>
+      <input type="datetime-local" id="date-end" class="input-field">
+    </div>
+    <label class="flex items-center gap-1.5 cursor-pointer" style="font-size: 1rem; font-weight: 500;">
+      <input type="checkbox" id="end-now" class="rounded" checked>
+      <span style="color: var(--color-text);">Now</span>
+    </label>
+  </div>
+  <button class="btn-primary btn-mini" id="apply-filter" type="button"><span class="btn-text">Apply Filter</span><span class="btn-spinner hidden" aria-hidden="true">⟳</span></button>
+  <span class="text-muted text-xs">Next update: <span id="timeline-next-update">60s</span></span>
+</div>

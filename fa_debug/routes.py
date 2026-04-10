@@ -4,12 +4,15 @@
 import json
 import logging
 import os
+import posixpath
+import shlex
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from datetime import datetime, timedelta
-from typing import List
+from typing import Any, Dict, List
 
 from flask import Blueprint, jsonify, redirect, render_template, request
 
@@ -56,6 +59,7 @@ _URL_ACCESS_RULES = [
     ("/api/debug-data", frozenset({"debug"})),
     ("/api/fa-debug/", frozenset({"debug", "testing"})),
     ("/api/etf/online-test/", frozenset({"debug", "testing"})),
+    ("/api/etf/offline-replay/", frozenset({"debug", "testing"})),
     ("/api/debug/log-path-debug", frozenset({"debug"})),
     ("/api/debug/log-path", frozenset({"debug", "testing"})),
     ("/debug", frozenset({"debug"})),
@@ -161,6 +165,38 @@ _repair_sn_locks_guard = threading.Lock()
 _repair_sn_locks = {}
 _repair_request_cache = {}
 _REPAIR_REQ_TTL_SEC = 300
+
+# In-memory replay run manifest for /offline-replay/status (same-process only).
+_replay_manifest: Dict[str, Dict[str, Any]] = {}
+_replay_manifest_lock = threading.Lock()
+_REPLAY_MANIFEST_MAX = 500
+
+
+def _replay_manifest_put(replay_run_id: str, entry: Dict[str, Any]) -> None:
+    with _replay_manifest_lock:
+        if len(_replay_manifest) >= _REPLAY_MANIFEST_MAX:
+            oldest_id = None
+            oldest_ts = float("inf")
+            for rid, meta in _replay_manifest.items():
+                ts = float(meta.get("created_at") or 0)
+                if ts < oldest_ts:
+                    oldest_ts = ts
+                    oldest_id = rid
+            if oldest_id:
+                _replay_manifest.pop(oldest_id, None)
+        _replay_manifest[replay_run_id] = entry
+
+
+def _replay_manifest_get(replay_run_id: str) -> Dict[str, Any] | None:
+    with _replay_manifest_lock:
+        m = _replay_manifest.get(replay_run_id)
+        return dict(m) if m else None
+
+
+def _replay_manifest_update(replay_run_id: str, updates: Dict[str, Any]) -> None:
+    with _replay_manifest_lock:
+        if replay_run_id in _replay_manifest:
+            _replay_manifest[replay_run_id].update(updates)
 
 
 def _get_sn_lock(sn):
@@ -856,10 +892,10 @@ def api_testing_overview():
             out["tray"] = {
                 "connected": False,
                 "row": None,
-                "message": "Không tìm được kết nối đến SN này (tray cache).",
+                "message": "No tray DHCP cache row found for this SN.",
             }
     except Exception as e:
-        out["tray"] = {"connected": False, "row": None, "message": str(e)}
+        out["tray"] = {"connected": False, "row": None, "message": f"Tray cache lookup failed: {e}"}
 
     try:
         from sfis_tool.db import get_conn
@@ -3006,6 +3042,396 @@ def api_etf_online_test_start():
             sn_lock.release()
         except Exception:
             pass
+
+
+@bp.route("/api/etf/offline-replay/search", methods=["POST"])
+def api_etf_offline_replay_search():
+    data = request.get_json(silent=True) or {}
+    sn = (data.get("sn") or "").strip().upper()
+    if not sn:
+        return jsonify({"ok": False, "error": "sn required"}), 400
+    try:
+        from config.debug_config import CRABBER_REPLAY_TIMEOUT_SEC
+        from crabber.client import fetch_search_log_items_all_pages
+        from crabber.replay_map import group_runs_by_station, normalize_run_row
+
+        items, first_page, err = fetch_search_log_items_all_pages(
+            sn=sn,
+            is_trial=False,
+            timeout=CRABBER_REPLAY_TIMEOUT_SEC,
+        )
+        if err:
+            return jsonify({"ok": False, "error": err}), 502
+        normalized = [normalize_run_row(it) for it in (items or [])]
+        grouped = group_runs_by_station(normalized)
+        return jsonify({
+            "ok": True,
+            "sn": sn,
+            "total_pages": (first_page or {}).get("total_pages"),
+            "total_logs": (first_page or {}).get("total_logs"),
+            "runs": normalized,
+            "runs_by_station": grouped,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/offline-replay/prepare", methods=["POST"])
+def api_etf_offline_replay_prepare():
+    data = request.get_json(silent=True) or {}
+    selected = data.get("selectedRun") if isinstance(data.get("selectedRun"), dict) else data
+    overrides = data.get("overrides") if isinstance(data.get("overrides"), dict) else {}
+    node_log_id = (selected.get("node_log_id") or "").strip() if isinstance(selected, dict) else ""
+    if not node_log_id:
+        return jsonify({"ok": False, "error": "selectedRun.node_log_id required"}), 400
+    try:
+        from config.debug_config import (
+            CRABBER_REPLAY_TIMEOUT_SEC,
+            REPLAY_CONSOLE_LOGGING_ENABLED,
+            REPLAY_DATACENTER_CMD,
+            REPLAY_RUN_TIMEOUT_SEC,
+            REPLAY_STATUS_POLL_HINT_MS,
+        )
+        from crabber.client import fetch_node_info
+        from crabber.replay_map import prepare_replay, validate_replay_datafile_override
+        from fa_debug.replay_ssh import (
+            build_remote_replay_log_paths,
+            build_wrapped_replay_command,
+            parse_replay_transcript,
+            push_datafile_text,
+            read_remote_exit_code,
+            read_remote_file_tail,
+            remote_file_exists,
+            resolve_datacenter_script_path,
+        )
+
+        detail, err = fetch_node_info(
+            node_log_id,
+            execute_log_id="",
+            all_detail=False,
+            load_tcs=True,
+            timeout=CRABBER_REPLAY_TIMEOUT_SEC,
+        )
+        if err or not detail:
+            return jsonify({"ok": False, "error": err or "failed to fetch node detail"}), 502
+        result = prepare_replay(selected, detail, overrides)
+
+        if result.get("runnable"):
+            override_df = overrides.get("datafile_text")
+            if isinstance(override_df, str) and override_df.strip():
+                v_err = validate_replay_datafile_override(override_df)
+                if v_err:
+                    result["runnable"] = False
+                    result.setdefault("reasons", []).append(f"datafile override invalid: {v_err}")
+                    return jsonify({"ok": True, **result})
+                datafile_text = override_df
+            else:
+                datafile_text = result.get("datafilePreview") or ""
+            filename = f"datafile_{(selected.get('sn') or 'sn').strip()}_{node_log_id}.txt"
+            remote_path, push_err = push_datafile_text(
+                filename,
+                datafile_text,
+                host_override=str(overrides.get("execution_host") or "").strip(),
+            )
+            if remote_path:
+                process = result.get("resolvedProcess") or ""
+                factory = result.get("resolvedFactoryCode") or ""
+                bundle_main = str(
+                    (((result.get("resolvedExecutionProfile") or {}).get("bundle_paths") or {}).get("MAIN_BUNDLE") or "")
+                ).strip()
+                bundle_aux = str(
+                    (((result.get("resolvedExecutionProfile") or {}).get("bundle_paths") or {}).get("AUX_BUNDLE") or "")
+                ).strip()
+                script_path, script_err = resolve_datacenter_script_path(
+                    host_override=str(overrides.get("execution_host") or "").strip(),
+                    bundle_main=bundle_main,
+                    bundle_aux=bundle_aux,
+                    cmd_name=REPLAY_DATACENTER_CMD or "run_datacenter.sh",
+                )
+                if not script_path:
+                    result["runnable"] = False
+                    result.setdefault("reasons", []).append(f"script resolve failed: {script_err}")
+                    return jsonify({"ok": True, **result})
+                result["remote_datafile_path"] = remote_path
+                inner_cmd = (
+                    f"{shlex.quote(script_path)} --process={shlex.quote(str(process))} "
+                    f"--factory={shlex.quote(str(factory))} --datafile={shlex.quote(str(remote_path))}"
+                )
+                result["commandPreview"] = inner_cmd
+                if REPLAY_CONSOLE_LOGGING_ENABLED:
+                    replay_run_id = uuid.uuid4().hex
+                    host_ov = str(overrides.get("execution_host") or "").strip()
+                    sn_safe = (selected.get("sn") or "sn").strip()
+                    console_path, exit_path = build_remote_replay_log_paths(
+                        sn_safe,
+                        node_log_id,
+                        replay_run_id,
+                    )
+                    wrapped = build_wrapped_replay_command(inner_cmd, console_path, exit_path)
+                    if wrapped:
+                        result["replay_run_id"] = replay_run_id
+                        result["wrappedCommand"] = wrapped
+                        result["remote_console_log_path"] = console_path
+                        result["remote_exit_code_path"] = exit_path
+                        result["status_url"] = f"/api/etf/offline-replay/status/{replay_run_id}"
+                        result["retry_after_ms"] = REPLAY_STATUS_POLL_HINT_MS
+                        _replay_manifest_put(
+                            replay_run_id,
+                            {
+                                "execution_host": host_ov,
+                                "remote_console_log_path": console_path,
+                                "remote_exit_code_path": exit_path,
+                                "remote_datafile_path": remote_path,
+                                "resolved_script_path": script_path,
+                                "bundle_root": posixpath.dirname(script_path),
+                                "created_at": time.time(),
+                                "run_timeout_sec": REPLAY_RUN_TIMEOUT_SEC,
+                                "sn": sn_safe,
+                                "node_log_id": node_log_id,
+                                "already_cleaned": False,
+                                "console_text_snapshot": "",
+                            },
+                        )
+            else:
+                result["runnable"] = False
+                result.setdefault("reasons", []).append(f"datafile push failed: {push_err}")
+
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/offline-replay/status/<replay_run_id>", methods=["GET"])
+def api_etf_offline_replay_status(replay_run_id: str):
+    """Poll replay verdict from remote console log + exit sidecar (same SSH profile as datafile push)."""
+    rid = (replay_run_id or "").strip()
+    if not rid:
+        return jsonify({"ok": False, "error": "replay_run_id required"}), 400
+    try:
+        from config.debug_config import REPLAY_STATUS_POLL_HINT_MS
+
+        from fa_debug.replay_ssh import parse_replay_transcript, read_remote_exit_code, read_remote_file_tail, remote_file_exists
+
+        meta = _replay_manifest_get(rid)
+        if not meta:
+            return jsonify({"ok": False, "error": "unknown or expired replay_run_id"}), 404
+
+        host_ov = str(meta.get("execution_host") or "").strip()
+        log_path = str(meta.get("remote_console_log_path") or "").strip()
+        exit_path = str(meta.get("remote_exit_code_path") or "").strip()
+        created = float(meta.get("created_at") or 0)
+        run_timeout = int(meta.get("run_timeout_sec") or 43200)
+        now = time.time()
+        elapsed = now - created if created else 0.0
+
+        def _payload(**kwargs: Any) -> Any:
+            base = {
+                "ok": True,
+                "replay_run_id": rid,
+                "remote_console_log_path": log_path,
+                "remote_exit_code_path": exit_path,
+                "retry_after_ms": REPLAY_STATUS_POLL_HINT_MS,
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+            }
+            base.update(kwargs)
+            return jsonify(base)
+
+        log_ok, log_err = remote_file_exists(host_ov, log_path)
+        exit_ok, exit_err = remote_file_exists(host_ov, exit_path)
+
+        if log_err or exit_err:
+            return _payload(
+                status="error",
+                status_source="ssh",
+                error_summary=(log_err or exit_err or "ssh error")[:500],
+                remote_console_log_exists=False,
+                remote_exit_code_exists=False,
+                remote_exit_code=None,
+            )
+
+        if not log_ok and not exit_ok:
+            if elapsed > run_timeout:
+                return _payload(
+                    status="timeout",
+                    status_source="timeout",
+                    error_summary="No console log or exit sidecar before timeout",
+                    remote_console_log_exists=False,
+                    remote_exit_code_exists=False,
+                    remote_exit_code=None,
+                )
+            return _payload(
+                status="prepared",
+                status_source="none",
+                error_summary="",
+                remote_console_log_exists=False,
+                remote_exit_code_exists=False,
+                remote_exit_code=None,
+            )
+
+        if log_ok and not exit_ok:
+            if elapsed > run_timeout:
+                return _payload(
+                    status="timeout",
+                    status_source="timeout",
+                    error_summary="Run did not write exit sidecar before timeout",
+                    remote_console_log_exists=True,
+                    remote_exit_code_exists=False,
+                    remote_exit_code=None,
+                )
+            return _payload(
+                status="running",
+                status_source="none",
+                error_summary="",
+                remote_console_log_exists=True,
+                remote_exit_code_exists=False,
+                remote_exit_code=None,
+            )
+
+        # Exit sidecar present => finished (or finishing)
+        rc, rc_err = read_remote_exit_code(host_ov, exit_path)
+        transcript = ""
+        tail_err = None
+        if log_ok:
+            transcript, tail_err = read_remote_file_tail(host_ov, log_path)
+            if tail_err:
+                return _payload(
+                    status="error",
+                    status_source="ssh",
+                    error_summary=tail_err[:500],
+                    remote_console_log_exists=log_ok,
+                    remote_exit_code_exists=True,
+                    remote_exit_code=rc,
+                )
+
+        parsed = parse_replay_transcript(transcript)
+        verdict = str(parsed.get("verdict") or "unknown")
+        src = str(parsed.get("status_source") or "none")
+        summary = str(parsed.get("error_summary") or "")
+
+        if verdict in ("pass", "fail"):
+            return _payload(
+                status=verdict,
+                status_source=src,
+                error_summary=summary,
+                remote_console_log_exists=log_ok,
+                remote_exit_code_exists=True,
+                remote_exit_code=rc,
+            )
+
+        if rc is not None and rc != 0:
+            return _payload(
+                status="fail",
+                status_source="exit_code",
+                error_summary=summary or f"exit_code={rc}",
+                remote_console_log_exists=log_ok,
+                remote_exit_code_exists=True,
+                remote_exit_code=rc,
+            )
+
+        if rc == 0:
+            return _payload(
+                status="unknown",
+                status_source="exit_code",
+                error_summary=summary or "exit 0 but no PASS/FAIL markers in parsed tail",
+                remote_console_log_exists=log_ok,
+                remote_exit_code_exists=True,
+                remote_exit_code=0,
+            )
+
+        return _payload(
+            status="unknown",
+            status_source="none",
+            error_summary=summary or rc_err or "",
+            remote_console_log_exists=log_ok,
+            remote_exit_code_exists=True,
+            remote_exit_code=rc,
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/etf/offline-replay/cleanup/<replay_run_id>", methods=["POST"])
+def api_etf_offline_replay_cleanup(replay_run_id: str):
+    """Read bounded console snapshot, remove Nautilus run artifacts + replay files on execution host (idempotent)."""
+    rid = (replay_run_id or "").strip()
+    if not rid:
+        return jsonify({"ok": False, "error": "replay_run_id required"}), 400
+    try:
+        from config.debug_config import REPLAY_CLEANUP_CONSOLE_MAX_BYTES
+
+        from fa_debug.replay_ssh import (
+            cleanup_nautilus_run_artifacts,
+            read_console_snapshot_and_parse_text,
+            remove_replay_three_files,
+        )
+
+        meta = _replay_manifest_get(rid)
+        if not meta:
+            return jsonify({"ok": False, "error": "unknown or expired replay_run_id"}), 404
+
+        snap_existing = str(meta.get("console_text_snapshot") or "")
+        if meta.get("already_cleaned"):
+            return jsonify(
+                {
+                    "ok": True,
+                    "replay_run_id": rid,
+                    "already_cleaned": True,
+                    "nautilus_deleted": [],
+                    "nautilus_note": "already cleaned",
+                    "replay_deleted": [],
+                    "console_text": snap_existing,
+                    "console_truncated": False,
+                }
+            )
+
+        host_ov = str(meta.get("execution_host") or "").strip()
+        bundle_root = str(meta.get("bundle_root") or "").strip()
+        log_path = str(meta.get("remote_console_log_path") or "").strip()
+        exit_path = str(meta.get("remote_exit_code_path") or "").strip()
+        data_path = str(meta.get("remote_datafile_path") or "").strip()
+
+        console_text = ""
+        parse_text = ""
+        truncated = False
+        read_err: str | None = None
+        if log_path:
+            console_text, parse_text, truncated, read_err = read_console_snapshot_and_parse_text(
+                host_ov,
+                log_path,
+                max_bytes=REPLAY_CLEANUP_CONSOLE_MAX_BYTES,
+            )
+        if read_err:
+            console_text = ""
+            parse_text = ""
+            truncated = False
+
+        nautilus_deleted, nautilus_note = cleanup_nautilus_run_artifacts(host_ov, bundle_root, parse_text)
+        replay_deleted, replay_errors = remove_replay_three_files(host_ov, data_path, log_path, exit_path)
+
+        _replay_manifest_update(
+            rid,
+            {
+                "already_cleaned": True,
+                "console_text_snapshot": console_text,
+            },
+        )
+
+        return jsonify(
+            {
+                "ok": True,
+                "replay_run_id": rid,
+                "already_cleaned": False,
+                "nautilus_deleted": nautilus_deleted,
+                "nautilus_note": nautilus_note,
+                "replay_deleted": replay_deleted,
+                "replay_delete_errors": replay_errors,
+                "console_text": console_text,
+                "console_truncated": truncated,
+                "console_read_error": (read_err or "")[:500],
+            }
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/debug-data", methods=["GET"])
