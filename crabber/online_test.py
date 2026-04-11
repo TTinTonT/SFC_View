@@ -7,6 +7,7 @@ import json
 from typing import Any, Optional
 
 import requests
+from requests import HTTPError
 
 
 def _cfg():
@@ -97,6 +98,61 @@ def get_shelf_scan_item_list(
             "units": units,
         },
     )
+
+
+def get_station_list(*, is_mfg: bool = True, timeout: int = 60) -> Any:
+    """Crabber MFG station dropdown (same as shelf UI)."""
+    return _get("/api/getStationList/", {"is_mfg": "true" if is_mfg else "false"}, timeout=timeout)
+
+
+def get_shelf_procedure_released(
+    *,
+    project_id: int,
+    station_id: str | None,
+    page: int = 1,
+    page_size: int = 240,
+    timeout: int = 120,
+) -> Any:
+    """
+    Crabber released shelf procedures for MFG shelf grid.
+    station_id: use None or '' to pass literal 'null' (all stations), matching Crabber query.
+    """
+    params: dict[str, Any] = {
+        "project_id": project_id,
+        "page": max(1, int(page)),
+        "page_size": max(1, min(500, int(page_size))),
+    }
+    if station_id is None or str(station_id).strip() == "":
+        params["station_id"] = "null"
+    else:
+        params["station_id"] = str(station_id).strip()
+    return _get("/api/get_shelf_procedure_released/", params, timeout=timeout)
+
+
+def get_rd_shelf_scan_item_list(
+    *,
+    sp_id: int,
+    user_id: str,
+    trial_run: bool = True,
+    source: str = "",
+    timeout: int = 120,
+) -> Any:
+    """
+    Crabber operator-console shelf payload for a specific released shelf procedure (sp_id).
+    Matches browser: /api/get_rd_shelf_scan_item_list/?sp_id=&user_id=&trial_run=&source=
+    """
+    params = {
+        "sp_id": int(sp_id),
+        "user_id": str(user_id),
+        "trial_run": "true" if trial_run else "false",
+        "source": source or "",
+    }
+    try:
+        return _get("/api/get_rd_shelf_scan_item_list/", params, timeout=timeout)
+    except HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            return _get("/api/get_rel_shelf_scan_item_list/", params, timeout=timeout)
+        raise
 
 
 def get_machine_config(machine_id: int, spid: int) -> Any:

@@ -49,6 +49,35 @@
   .tr-page-btn { padding: 0.35rem 0.65rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.12); color: #fff; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
   .tr-page-btn.active { background: rgba(255,255,255,0.35); }
   .tr-mock-note { font-size: 0.75rem; color: var(--color-muted); margin-top: 0.75rem; }
+  .tr-shelf-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.35rem; }
+  .tr-btn-refresh { padding: 0.35rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.2); color: #fff; font-weight: 600; cursor: pointer; font-size: 0.8rem; }
+  .tr-btn-refresh:hover { background: rgba(255,255,255,0.35); }
+  .tr-btn-sfc:disabled, .tr-btn-post:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.3); }
+  /* Trial modal */
+  .tr-modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); display: none; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+  .tr-modal-overlay[aria-hidden="false"] { display: flex; }
+  .tr-modal-overlay .tr-modal-backdrop { position: absolute; inset: 0; z-index: 0; }
+  .tr-modal { position: relative; z-index: 1; background: var(--color-surface); border-radius: 16px; max-width: 520px; width: 100%; max-height: 90vh; overflow: auto; border: 1.5px solid var(--color-border); box-shadow: 0 20px 50px rgba(0,0,0,0.25); }
+  .tr-modal-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border); }
+  .tr-modal-hd h2 { font-size: 1.1rem; font-weight: 700; margin: 0; }
+  .tr-modal-close { border: none; background: transparent; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--color-muted); }
+  .tr-modal-body { padding: 1rem 1.25rem 1.25rem; }
+  .tr-field { margin-bottom: 0.85rem; }
+  .tr-field label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem; color: var(--color-muted); }
+  .tr-field input { width: 100%; max-width: 100%; padding: 0.5rem 0.65rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 0.9rem; box-sizing: border-box; }
+  .tr-modal-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .tr-btn-secondary { padding: 0.45rem 0.9rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+  .tr-btn-primary { padding: 0.45rem 0.9rem; border-radius: 8px; border: none; background: var(--color-primary); color: #fff; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+  .tr-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  #tr-machine-filter { width: 100%; margin-bottom: 0.5rem; }
+  .tr-machine-list { max-height: 220px; overflow: auto; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); }
+  .tr-machine-item { padding: 0.45rem 0.65rem; border-bottom: 1px solid var(--color-border); cursor: pointer; font-size: 0.82rem; }
+  .tr-machine-item:last-child { border-bottom: none; }
+  .tr-machine-item:hover { background: var(--color-hover); }
+  .tr-machine-item.selected { background: rgba(99,102,241,0.15); outline: 2px solid var(--color-primary); }
+  .tr-occ { display: block; font-size: 0.72rem; color: var(--color-muted); margin-top: 0.15rem; }
+  #tr-machine-picked { font-size: 0.8rem; margin: 0.35rem 0; color: var(--color-muted); }
+  #tr-result-detail { white-space: pre-wrap; font-size: 0.72rem; max-height: 200px; overflow: auto; margin-top: 0.5rem; padding: 0.5rem; background: var(--color-bg); border-radius: 8px; border: 1px solid var(--color-border); }
   </style>
 </head>
 <body class="h-full">
@@ -60,97 +89,77 @@
     <main>
   <div class="panel">
     <h1 class="text-2xl font-bold mb-1">Trial Run</h1>
-    <p class="text-sm text-[var(--color-muted)] mb-3">Test-procedure shelf (mock data). Wire to Crabber/API next.</p>
+    <p class="text-sm text-[var(--color-muted)] mb-3">MFG shelf from Crabber; trial runs start in-app (no Crabber UI). SFC Settings / Post-action are not wired.</p>
 
     <div class="tr-shelf-wrap">
       <div class="tr-shelf-topbar">
         <button type="button" class="tr-shelf-back" onclick="history.back()" title="Back">BACK</button>
         <span class="tr-shelf-title">MFG SHELF</span>
       </div>
-      <div class="tr-shelf-subbar">Test-Procedure list</div>
+      <div class="tr-shelf-subbar">Test-Procedure list — project NVIDIA_NVL144 (id 48)</div>
       <div class="tr-shelf-filters">
-        <label>Project
-          <select id="tr-filter-project" aria-label="Project">
-            <option>NVIDIA_NVL144</option>
-            <option>Sample_Project_B</option>
-          </select>
-        </label>
         <label>Station
           <select id="tr-filter-station" aria-label="Station">
-            <option value="">Please select a station</option>
-            <option>RIN</option>
-            <option>RST</option>
-            <option>FCT</option>
+            <option value="">Loading…</option>
           </select>
         </label>
+        <div class="tr-shelf-toolbar">
+          <button type="button" class="tr-btn-refresh" id="tr-btn-refresh-shelf">Refresh list</button>
+        </div>
       </div>
       <div class="tr-shelf-canvas">
+        <p id="tr-shelf-status" class="tr-mock-note" style="color: rgba(255,255,255,0.9); margin-bottom: 0.75rem;"></p>
         <div id="tr-card-grid" class="tr-card-grid"></div>
       </div>
-      <div class="tr-shelf-foot">
-        <button type="button" class="tr-page-btn">First</button>
-        <button type="button" class="tr-page-btn">&lt;</button>
-        <button type="button" class="tr-page-btn active">1</button>
-        <button type="button" class="tr-page-btn">&gt;</button>
-        <button type="button" class="tr-page-btn">Last</button>
-      </div>
     </div>
-    <p class="tr-mock-note">Buttons are non-functional placeholders until workflows are connected.</p>
   </div>
     </main>
 
-  <script>
-  (function() {
-    /* NVIDIA_NVL144 shelf rows that show Trial Run in Crabber (mock until API is wired). */
-    var MOCK = [
-      { tpId: 'TP001994', rev: 4, code: 'VR200_L11_RIN', project: 'NVIDIA_NVL144', testName: 'FVT_RACK_RIN', when: '2026/03/31 02:09:23', releasedBy: 'LukeCai' },
-      { tpId: 'TP001913', rev: 17, code: 'VR200_L11_PRET', project: 'NVIDIA_NVL144', testName: 'FVT_RACK_PRET', when: '2026/03/31 01:58:02', releasedBy: 'LukeCai' },
-      { tpId: 'TP001990', rev: 4, code: 'VR200_L11_FLA', project: 'NVIDIA_NVL144', testName: 'FVT_RACK_FLA', when: '2026/03/31 04:01:09', releasedBy: 'LukeCai' },
-      { tpId: 'TP001991', rev: 4, code: 'VR200_L11_FLB', project: 'NVIDIA_NVL144', testName: 'FVT_RACK_FLB', when: '2026/03/31 04:05:33', releasedBy: 'LukeCai' },
-      { tpId: 'TP001992', rev: 4, code: 'VR200_L11_FLC', project: 'NVIDIA_NVL144', testName: 'FVT_RACK_FLC', when: '2026/03/31 04:12:00', releasedBy: 'LukeCai' },
-      { tpId: 'TP001993', rev: 4, code: 'VR200_L11_FCT', project: 'NVIDIA_NVL144', testName: 'FVT_RACK_FCT', when: '2026/03/31 05:40:18', releasedBy: 'LukeCai' },
-      { tpId: 'TP001995', rev: 4, code: 'VR200_L11_NVL', project: 'NVIDIA_NVL144', testName: 'FVT_RACK_NVL', when: '2026/03/31 06:02:55', releasedBy: 'LukeCai' },
-      { tpId: 'TP001914', rev: 4, code: 'VR_L11_CLN', project: 'NVIDIA_NVL144', testName: 'FVT_RACK_CLN', when: '2026/02/11 16:18:10', releasedBy: 'LukeCai' },
-      { tpId: 'TP001860', rev: 12, code: 'VR200_L10_FLA', project: 'NVIDIA_NVL144', testName: 'SYSTEM_FLA', when: '2026/03/30 18:00:00', releasedBy: 'LukeCai' },
-      { tpId: 'TP001861', rev: 12, code: 'VR200_L10_FLB', project: 'NVIDIA_NVL144', testName: 'SYSTEM_FLB', when: '2026/03/30 20:09:57', releasedBy: 'LukeCai' },
-      { tpId: 'TP001929', rev: 9, code: 'VR200_L10_AST', project: 'NVIDIA_NVL144', testName: 'SYSTEM_AST', when: '2026/03/30 20:08:31', releasedBy: 'LukeCai' },
-      { tpId: 'TP001930', rev: 8, code: 'VR200_L10_FCT', project: 'NVIDIA_NVL144', testName: 'SYSTEM_FCT', when: '2026/03/30 20:06:57', releasedBy: 'LukeCai' },
-      { tpId: 'TP001931', rev: 8, code: 'VR200_L10_FTS', project: 'NVIDIA_NVL144', testName: 'SYSTEM_FTS', when: '2026/03/30 20:02:44', releasedBy: 'LukeCai' },
-      { tpId: 'TP001932', rev: 8, code: 'VR_L10_IOT,VR200_L10_IOT', project: 'NVIDIA_NVL144', testName: 'SYSTEM_IOT', when: '2026/03/30 19:50:43', releasedBy: 'LukeCai' },
-      { tpId: 'TP001933', rev: 8, code: 'VR200_L10_RIN', project: 'NVIDIA_NVL144', testName: 'SYSTEM_RIN', when: '2026/03/30 19:30:39', releasedBy: 'LukeCai' },
-      { tpId: 'TP001971', rev: 7, code: 'VR200_L10_NVL', project: 'NVIDIA_NVL144', testName: 'SYSTEM_NVL', when: '2026/03/30 19:28:42', releasedBy: 'LukeCai' }
-    ];
-    var linkIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
-    var docIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>';
-    var grid = document.getElementById('tr-card-grid');
-    grid.innerHTML = MOCK.map(function(p) {
-      return '<article class="tr-card" data-tp="' + escapeHtml(p.tpId) + '">' +
-        '<div class="tr-card-head"><span class="tr-card-doc" aria-hidden="true">' + docIcon + '</span>' +
-        '<span class="tr-card-tp">' + escapeHtml(p.tpId) + ' #' + p.rev + '</span></div>' +
-        '<div class="tr-card-badge">' + linkIcon + ' <span>' + escapeHtml(p.code) + '</span></div>' +
-        '<div class="tr-card-project">' + escapeHtml(p.project) + '</div>' +
-        '<div class="tr-card-testname">' + escapeHtml(p.testName) + '</div>' +
-        '<div class="tr-card-meta">' + escapeHtml(p.when) + '<br>released by ' + escapeHtml(p.releasedBy) + '</div>' +
-        '<div class="tr-card-actions">' +
-        '<button type="button" class="tr-btn tr-btn-trial" data-action="trial">Trial run</button>' +
-        '<button type="button" class="tr-btn tr-btn-sfc" data-action="sfc">SFC Settings</button>' +
-        '<button type="button" class="tr-btn tr-btn-post" data-action="post">Post-action</button>' +
-        '</div></article>';
-    }).join('');
-    function escapeHtml(s) {
-      var d = document.createElement('div');
-      d.textContent = s;
-      return d.innerHTML;
-    }
-    grid.addEventListener('click', function(e) {
-      var btn = e.target.closest('.tr-btn');
-      if (!btn) return;
-      var card = btn.closest('.tr-card');
-      var tp = card && card.getAttribute('data-tp');
-      console.log('[trial-run]', btn.getAttribute('data-action'), tp);
-    });
-  })();
-  </script>
+  <div id="tr-modal" class="tr-modal-overlay" aria-hidden="true">
+    <div class="tr-modal-backdrop" aria-hidden="true"></div>
+    <div class="tr-modal" role="dialog" aria-labelledby="tr-modal-title">
+      <div class="tr-modal-hd">
+        <h2 id="tr-modal-title">Trial run</h2>
+        <button type="button" class="tr-modal-close" id="tr-modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="tr-modal-body">
+        <div id="tr-step-config" class="tr-step">
+          <p class="text-sm text-[var(--color-muted)] mb-2">Enter tray SN and operator ID, then load machines for this shelf procedure.</p>
+          <div class="tr-field">
+            <label for="tr-input-sn">Serial number (SCAN_SYSTEM_SN)</label>
+            <input type="text" id="tr-input-sn" autocomplete="off" data-tr-busy-disable />
+          </div>
+          <div class="tr-field">
+            <label for="tr-input-emp">Operator ID (OP_ID)</label>
+            <input type="text" id="tr-input-emp" autocomplete="off" data-tr-busy-disable />
+          </div>
+          <div class="tr-modal-actions">
+            <button type="button" class="tr-btn-primary" id="tr-btn-prepare" data-tr-busy-disable>Next: select machine</button>
+          </div>
+        </div>
+        <div id="tr-step-machines" class="tr-step" style="display: none;">
+          <p class="text-sm text-[var(--color-muted)] mb-2">Filter and click a machine (same list as Crabber; use the filter box to narrow).</p>
+          <input type="search" id="tr-machine-filter" placeholder="Filter machines…" autocomplete="off" data-tr-busy-disable />
+          <div id="tr-machine-list" class="tr-machine-list"></div>
+          <p id="tr-machine-picked"></p>
+          <div class="tr-modal-actions">
+            <button type="button" class="tr-btn-secondary" id="tr-btn-back-machines" data-tr-busy-disable>Back</button>
+            <button type="button" class="tr-btn-primary" id="tr-btn-start" disabled data-tr-busy-disable>Start trial run</button>
+          </div>
+        </div>
+        <div id="tr-step-result" class="tr-step" style="display: none;">
+          <p id="tr-result-msg" class="text-sm font-semibold"></p>
+          <pre id="tr-result-detail"></pre>
+          <div class="tr-modal-actions">
+            <button type="button" class="tr-btn-primary" id="tr-result-done">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }}; window.__TRIAL_RUN_PROJECT_ID__ = 48;</script>
+  <script src="/static/js/trial_run_page.js" defer></script>
   <script src="/static/js/fa_debug_theme.js" defer></script>
   </div>
 </body>

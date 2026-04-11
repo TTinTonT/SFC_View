@@ -55,10 +55,11 @@ _URL_ACCESS_RULES = [
     ("/debug/testing", frozenset({"testing"})),
     ("/api/debug/testing/", frozenset({"testing"})),
     ("/debug/trial-run", frozenset({"trial-run"})),
+    ("/api/debug/trial-run/", frozenset({"trial-run"})),
     ("/api/debug-query", frozenset({"debug"})),
     ("/api/debug-data", frozenset({"debug"})),
     ("/api/fa-debug/", frozenset({"debug", "testing"})),
-    ("/api/etf/online-test/", frozenset({"debug", "testing"})),
+    ("/api/etf/online-test/", frozenset({"debug", "testing", "trial-run"})),
     ("/api/etf/offline-replay/", frozenset({"debug", "testing"})),
     ("/api/debug/log-path-debug", frozenset({"debug"})),
     ("/api/debug/log-path", frozenset({"debug", "testing"})),
@@ -597,7 +598,7 @@ def debug_testing():
 
 @bp.route("/debug/trial-run")
 def debug_trial_run():
-    """MFG shelf-style test procedure cards (mock data until Crabber/API is wired)."""
+    """MFG shelf-style test procedure cards; data from Crabber via /api/debug/trial-run/*."""
     u = getattr(request, "current_user", None)
     return render_template(
         "debug_trial_run.html",
@@ -605,6 +606,150 @@ def debug_trial_run():
         allowed_pages=getattr(request, "allowed_pages", set()),
         default_employee_id=default_emp_for_ui(u),
     )
+
+
+@bp.route("/api/debug/trial-run/stations", methods=["GET"])
+def api_debug_trial_run_stations():
+    """Crabber getStationList for MFG station filter (same as Crabber shelf)."""
+    try:
+        from crabber.online_test import get_station_list
+        from crabber.trial_run_shelf import normalize_station_list
+
+        raw = get_station_list(is_mfg=True)
+        stations = normalize_station_list(raw)
+        return jsonify({"ok": True, "stations": stations})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+
+
+@bp.route("/api/debug/trial-run/shelf", methods=["GET"])
+def api_debug_trial_run_shelf():
+    """Crabber released procedures for project/station (result_list -> cards)."""
+    project_id = request.args.get("project_id", type=int) or 48
+    station_raw = (request.args.get("station_id") or "").strip()
+    page = request.args.get("page", default=1, type=int) or 1
+    page_size = request.args.get("page_size", default=240, type=int) or 240
+    station_id = station_raw if station_raw else None
+    try:
+        from crabber.online_test import get_shelf_procedure_released
+        from crabber.trial_run_shelf import normalize_result_list, shelf_row_to_card
+
+        raw = get_shelf_procedure_released(
+            project_id=project_id,
+            station_id=station_id,
+            page=page,
+            page_size=page_size,
+        )
+        rows = normalize_result_list(raw)
+        cards = []
+        missing_pn = 0
+        for row in rows:
+            c = shelf_row_to_card(row if isinstance(row, dict) else {})
+            if c:
+                if not (c.get("pn_name") or "").strip():
+                    missing_pn += 1
+                cards.append(c)
+        return jsonify({
+            "ok": True,
+            "items": cards,
+            "raw_ok": isinstance(raw, dict),
+            "missing_pn_name_count": missing_pn,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+
+
+@bp.route("/api/debug/trial-run/prepare", methods=["POST"])
+def api_debug_trial_run_prepare():
+    """
+    Load machines + scan_items for a specific released shelf procedure (sp_id).
+    Uses Crabber get_rd_shelf_scan_item_list with trial_run=true.
+    """
+    data = request.get_json(silent=True) or {}
+    sp_id = data.get("sp_id")
+    pn_name_in = (data.get("pn_name") or data.get("pn") or "").strip()
+    sn_norm = (data.get("sn") or "").strip().upper()
+    sn_lk = None
+    if sn_norm:
+        sn_lk = _get_sn_lock(sn_norm)
+        if not sn_lk.acquire(blocking=False):
+            return jsonify({
+                "ok": False,
+                "error": "Another operation is in progress for this SN. Please wait.",
+            }), 409
+    try:
+        if sp_id is None:
+            return jsonify({"ok": False, "error": "sp_id required"}), 400
+        try:
+            sp_id = int(sp_id)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "sp_id must be an integer"}), 400
+        if sn_norm:
+            from crabber.client import sn_has_active_crabber_test
+
+            active, _ = sn_has_active_crabber_test(sn_norm)
+            if active:
+                return jsonify({
+                    "ok": False,
+                    "error": (
+                        "A test is already running on Crabber for this SN (PROC/Testing). "
+                        "Finish or cancel before starting another."
+                    ),
+                }), 409
+        from config.debug_config import CRABBER_USER_ID
+        from crabber.online_test import (
+            check_pn_mapping,
+            check_sp_units,
+            get_rd_shelf_scan_item_list,
+            parse_first_pn_mapping,
+            pick_default_units,
+        )
+        from crabber.trial_run_shelf import normalize_rd_shelf_for_prepare
+
+        user_id = str(CRABBER_USER_ID or "41").strip()
+        raw = get_rd_shelf_scan_item_list(sp_id=sp_id, user_id=user_id, trial_run=True)
+        norm = normalize_rd_shelf_for_prepare(raw, pn_name_in)
+        pn_name = norm["pn_name"]
+        if not pn_name:
+            return jsonify({
+                "ok": False,
+                "error": "pn_name required (missing on shelf row; pass pn_name from card)",
+            }), 400
+        raw_map = check_pn_mapping(pn_name, user_id, is_rd=False)
+        mfg_id, opt_pn = parse_first_pn_mapping(raw_map)
+        if mfg_id is None:
+            return jsonify({"ok": False, "error": "check_pn_mapping: could not resolve mfg_id", "raw": raw_map}), 400
+        try:
+            mfg_id = int(mfg_id)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid opt_mfg_id from mapping"}), 400
+        sp_units = check_sp_units(pn_name, user_id, mfg_id, is_rd=False)
+        units = pick_default_units(sp_units)
+        try:
+            units = int(data.get("units") or units)
+        except (TypeError, ValueError):
+            units = int(units)
+        return jsonify({
+            "ok": True,
+            "pn_name": pn_name,
+            "opt_pn_name": opt_pn,
+            "mfg_id": mfg_id,
+            "units": units,
+            "sp_units": sp_units,
+            "machines": norm["machines"],
+            "scan_items": norm["scan_items"],
+            "env_items": norm["env_items"],
+            "shelf_proc_data": norm["shelf_proc_data"],
+            "sfc_ext": norm["sfc_ext"],
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        if sn_lk is not None:
+            try:
+                sn_lk.release()
+            except Exception:
+                pass
 
 
 # --- IT Kitting SQL: column whitelist for selectData (update/insert) ---
