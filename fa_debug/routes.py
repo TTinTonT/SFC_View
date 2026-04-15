@@ -3254,6 +3254,13 @@ def api_etf_online_test_start():
             sfc_ext=sfc_ext,
             trial_run=trial_run,
         )
+        if not result.get("ok", True):
+            return jsonify({
+                "ok": False,
+                "error": result.get("error") or "Crabber start sequence failed at process_sfc",
+                "steps": result.get("steps"),
+                "log_id": result.get("log_id"),
+            }), 400 if trial_run else 500
         return jsonify({"ok": True, **result})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

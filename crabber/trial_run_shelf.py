@@ -3,7 +3,38 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict
+
+
+def _plain_process_sfc_message(message: Any) -> str:
+    if message is None:
+        return ""
+    s = str(message)
+    s = re.sub(r"<[^>]+>", " ", s, flags=re.IGNORECASE)
+    return " ".join(s.split()).strip()
+
+
+def process_sfc_payload_indicates_failure(psfc: Any) -> tuple[bool, str]:
+    """
+    Trial run only: Crabber may return HTTP 200 with failure in process_sfc JSON
+    (e.g. message HTML with failed=NG, INPUT DATA ERROR). When True, do not send_list.
+    """
+    if not isinstance(psfc, dict):
+        return False, ""
+    if psfc.get("ok") is False:
+        err = psfc.get("error") or psfc.get("message") or "process_sfc failed"
+        return True, _plain_process_sfc_message(err) or "process_sfc failed"
+    msg = psfc.get("message")
+    if not msg:
+        return False, ""
+    raw = str(msg)
+    lower = raw.lower()
+    collapsed = re.sub(r"\s+", "", lower)
+    if "failed=ng" in collapsed or "input data error" in lower:
+        plain = _plain_process_sfc_message(raw)
+        return True, plain or "process_sfc reported failure"
+    return False, ""
 
 
 def is_pn_mapping_true_for_trial_run(row: dict) -> bool:

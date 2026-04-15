@@ -9,6 +9,8 @@ from typing import Any, Optional
 import requests
 from requests import HTTPError
 
+from crabber.trial_run_shelf import process_sfc_payload_indicates_failure
+
 
 def _cfg():
     try:
@@ -337,6 +339,8 @@ def run_start_test_sequence(
     """
     Run Crabber start chain after user picked machine.
     Returns dict with step results or raises on HTTP/required field errors.
+    When trial_run is True only: if process_sfc payload indicates NG / input error,
+    returns {"ok": False, "error", "steps", "log_id"} and does not call send_list.
     """
     spd = shelf_proc_data or {}
     list_id = int(spd.get("id") or 0)
@@ -376,6 +380,18 @@ def run_start_test_sequence(
     }
 
     psfc = process_sfc(proc_payload)
+    if trial_run:
+        sfc_failed, sfc_reason = process_sfc_payload_indicates_failure(psfc)
+        if sfc_failed:
+            steps.append({"step": "process_sfc", "ok": False, "data": psfc, "error": sfc_reason})
+            log_early = psfc.get("log_id") if isinstance(psfc, dict) else None
+            return {
+                "ok": False,
+                "error": sfc_reason,
+                "steps": steps,
+                "log_id": log_early,
+                "send_list": None,
+            }
     steps.append({"step": "process_sfc", "ok": True, "data": psfc})
 
     acc = check_set_shelf_procedure_accessibility(shelf_proc_id)
