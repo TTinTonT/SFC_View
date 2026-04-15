@@ -180,12 +180,20 @@
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg>';
         grid.innerHTML = items
           .map((p) => {
+            const trialRunOffered = p.is_pn_mapping === true;
             const rev = p.rev ? "#" + escapeHtml(p.rev) : "";
             const pn = (p.pn_name || "").trim();
             const badge = pn || "—";
             const meta =
               escapeHtml(p.modified_date || "") +
               (p.releaser ? "<br>released by " + escapeHtml(p.releaser) : "");
+            const badgeClass = trialRunOffered ? "tr-card-badge" : "tr-card-badge tr-card-badge-unmapped";
+            const badgeInner = trialRunOffered
+              ? linkIcon + " <span>" + escapeHtml(badge) + "</span>"
+              : "<span>" + escapeHtml(badge) + "</span>";
+            const trialBtn = trialRunOffered
+              ? '<button type="button" class="tr-btn tr-btn-trial" data-action="trial">Trial run</button>'
+              : "";
             return (
               '<article class="tr-card" data-sp-id="' +
               escapeHtml(String(p.id)) +
@@ -195,6 +203,8 @@
               escapeHtml(p.station || "") +
               '" data-tp-label="' +
               escapeHtml(p.tp_label || "") +
+              '" data-trial-run-offered="' +
+              (trialRunOffered ? "1" : "0") +
               '">' +
               '<div class="tr-card-head"><span class="tr-card-doc" aria-hidden="true">' +
               docIcon +
@@ -203,11 +213,11 @@
               " " +
               rev +
               "</span></div>" +
-              '<div class="tr-card-badge">' +
-              linkIcon +
-              " <span>" +
-              escapeHtml(badge) +
-              "</span></div>" +
+              '<div class="' +
+              badgeClass +
+              '">' +
+              badgeInner +
+              "</div>" +
               '<div class="tr-card-project">' +
               escapeHtml(p.project || "") +
               "</div>" +
@@ -218,7 +228,7 @@
               meta +
               "</div>" +
               '<div class="tr-card-actions">' +
-              '<button type="button" class="tr-btn tr-btn-trial" data-action="trial">Trial run</button>' +
+              trialBtn +
               '<button type="button" class="tr-btn tr-btn-sfc" data-action="sfc" disabled title="Not wired">SFC Settings</button>' +
               '<button type="button" class="tr-btn tr-btn-post" data-action="post" disabled title="Not wired">Post-action</button>' +
               "</div></article>"
@@ -234,6 +244,10 @@
   }
 
   function openTrialModal(card) {
+    if (!card || card.dataset.trialRunOffered !== "1") {
+      window.alert("Trial run is not available for this row (PN mapping required), matching Crabber.");
+      return;
+    }
     trCtx = {
       card,
       prepare: null,

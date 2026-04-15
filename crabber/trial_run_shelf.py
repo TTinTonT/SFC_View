@@ -6,6 +6,25 @@ from __future__ import annotations
 from typing import Any, Dict
 
 
+def is_pn_mapping_true_for_trial_run(row: dict) -> bool:
+    """
+    Crabber MFG shelf rows include is_pn_mapping; Trial run is only offered when true.
+    If the field is absent or null, default True (older API payloads).
+    """
+    if "is_pn_mapping" not in row:
+        return True
+    v = row.get("is_pn_mapping")
+    if v is None:
+        return True
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    if isinstance(v, str):
+        return v.strip().lower() in ("true", "1", "yes")
+    return bool(v)
+
+
 def pn_name_from_shelf_procedure_row(row: dict) -> str:
     """Derive pn_name for /api/etf/online-test/prepare from a get_shelf_procedure_released row."""
     if not isinstance(row, dict):
@@ -59,6 +78,7 @@ def shelf_row_to_card(row: dict) -> dict | None:
     return {
         "id": rid,
         "pn_name": pn_name,
+        "is_pn_mapping": is_pn_mapping_true_for_trial_run(row),
         "tp_label": tp_label,
         "rev": str(rev) if rev is not None else "",
         "project": row.get("project") or "",

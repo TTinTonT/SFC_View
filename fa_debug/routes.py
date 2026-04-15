@@ -658,16 +658,16 @@ def api_debug_trial_run_shelf():
         )
         rows = normalize_result_list(raw)
         cards = []
-        missing_pn = 0
         for row in rows:
             c = shelf_row_to_card(row if isinstance(row, dict) else {})
             if c:
-                if not (c.get("pn_name") or "").strip():
-                    missing_pn += 1
                 cards.append(c)
+        # Only list rows Crabber would offer trial run on (is_pn_mapping true).
+        trial_cards = [c for c in cards if c.get("is_pn_mapping") is True]
+        missing_pn = sum(1 for c in trial_cards if not (c.get("pn_name") or "").strip())
         return jsonify({
             "ok": True,
-            "items": cards,
+            "items": trial_cards,
             "raw_ok": isinstance(raw, dict),
             "missing_pn_name_count": missing_pn,
         })

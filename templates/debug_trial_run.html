@@ -34,6 +34,7 @@
   .tr-card-badge { display: inline-flex; align-items: center; gap: 0.35rem; background: #0ea5e9; color: #fff; font-size: 0.75rem; font-weight: 700; padding: 0.35rem 0.55rem; border-radius: 999px; width: fit-content; max-width: 100%; }
   .tr-card-badge span { word-break: break-word; }
   .tr-card-badge svg { flex-shrink: 0; opacity: 0.95; }
+  .tr-card-badge-unmapped { background: #94a3b8; color: #f8fafc; }
   .tr-card-project { font-size: 0.95rem; font-weight: 800; color: #0d9488; letter-spacing: 0.02em; }
   .tr-card-testname { font-size: 1rem; font-weight: 800; font-style: italic; color: #0f172a; line-height: 1.25; }
   .tr-card-meta { font-size: 0.78rem; color: #64748b; line-height: 1.4; }
@@ -89,7 +90,7 @@
     <main>
   <div class="panel">
     <h1 class="text-2xl font-bold mb-1">Trial Run</h1>
-    <p class="text-sm text-[var(--color-muted)] mb-3">MFG shelf from Crabber; trial runs start in-app (no Crabber UI). SFC Settings / Post-action are not wired.</p>
+    <p class="text-sm text-[var(--color-muted)] mb-3">Lists only Crabber shelf rows that allow trial run (<code class="text-xs">is_pn_mapping</code> true). Trial starts in-app (no Crabber UI). SFC Settings / Post-action are not wired.</p>
 
     <div class="tr-shelf-wrap">
       <div class="tr-shelf-topbar">
