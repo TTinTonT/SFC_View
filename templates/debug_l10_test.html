@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" class="h-full fa-debug-shell">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L10 test – Debug</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <link rel="stylesheet" href="/static/css/fa_debug_shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { height: auto; min-height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    margin: 0;
+    padding: 0;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding-bottom: max(4rem, 2rem + env(safe-area-inset-bottom, 0px));
+  }
+  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 2rem; max-width: 100%; margin: 0 auto; }
+  .msg-error { color: #dc2626; }
+  .hidden { display: none !important; }
+  .l10-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-bottom: 1rem; font-size: 0.75rem; align-items: center; }
+  .l10-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .l10-swatch { width: 1rem; height: 1rem; border-radius: 4px; border: 1px solid rgba(0,0,0,0.12); flex-shrink: 0; }
+  .l10-meta { font-size: 0.8rem; color: var(--color-muted); margin-bottom: 1rem; line-height: 1.45; }
+  .l10-meta .l10-meta-countdown { font-weight: 600; color: var(--color-text); }
+  .l10-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.5rem; }
+  .l10-card { border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; background: var(--color-bg); }
+  .l10-card-h {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+    padding: 0.6rem 0.75rem; cursor: pointer; user-select: none;
+    background: var(--color-surface); font-weight: 700; font-size: 0.9rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .l10-card-h:hover { background: var(--color-hover, rgba(99,102,241,0.08)); }
+  .l10-card-h small { font-weight: 500; color: var(--color-muted); font-size: 0.72rem; }
+  .l10-card-body { padding: 0.3rem 0.4rem 0.45rem; max-height: 70vh; overflow-y: auto; }
+  .l10-tray-wrap { position: relative; margin-bottom: 0.3rem; display: flex; align-items: flex-start; gap: 0; }
+  .l10-tray-wrap:last-child { margin-bottom: 0; }
+  .l10-tray-btn {
+    flex: 1; min-width: 0; text-align: left; cursor: pointer; font: inherit;
+    border-radius: 6px; padding: 0.28rem 0.4rem; font-size: 0.7rem;
+    border: 1px solid rgba(0,0,0,0.08); width: 100%;
+    transition: box-shadow 0.15s, transform 0.1s;
+  }
+  .l10-tray-btn:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+  .l10-tray-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+  .l10-tray-btn[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--color-primary); }
+  .l10-tray--idle { background: #ffffff; color: #111827; }
+  .dark .l10-tray--idle { background: var(--color-bg); color: var(--color-text); border-color: var(--color-border); }
+  .l10-tray--testing { background: #fef9c3; color: #713f12; border-color: #fde047; }
+  .dark .l10-tray--testing { background: rgba(234, 179, 8, 0.2); color: #fde047; border-color: rgba(234, 179, 8, 0.45); }
+  .l10-tray--on_hold { background: #ca8a04; color: #fffbeb; border-color: #a16207; }
+  .dark .l10-tray--on_hold { background: #a16207; color: #fffbeb; }
+  .l10-tray--testing_pass { background: #22c55e; color: #052e16; border-color: #15803d; font-weight: 600; }
+  .dark .l10-tray--testing_pass { background: #15803d; color: #dcfce7; }
+  .l10-tray--testing_fail { background: #ef4444; color: #fff1f2; border-color: #b91c1c; font-weight: 600; }
+  .dark .l10-tray--testing_fail { background: #b91c1c; color: #fecaca; }
+  .l10-tray--unknown { background: #e5e7eb; color: #374151; border-style: dashed; }
+  .dark .l10-tray--unknown { background: #374151; color: #e5e7eb; border-color: #6b7280; }
+  .l10-tray-row1 { display: flex; justify-content: space-between; gap: 0.25rem; font-weight: 600; line-height: 1.2; }
+  .l10-tray-row2 {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 0.35rem;
+    margin-top: 0.12rem; line-height: 1.2; font-size: 0.65rem;
+  }
+  .l10-tray-sn-part { font-family: ui-monospace, monospace; word-break: break-all; min-width: 0; flex: 1; }
+  .l10-tray-gb { flex-shrink: 0; max-width: 48%; text-align: right; opacity: 0.92; font-size: 0.62rem; line-height: 1.25; }
+  .l10-tray-menu {
+    position: fixed; z-index: 200; min-width: 9.5rem;
+    background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15); padding: 0.25rem; font-size: 0.75rem;
+  }
+  .dark .l10-tray-menu { box-shadow: 0 6px 24px rgba(0,0,0,0.45); }
+  .l10-tray-menu.hidden { display: none !important; }
+  .l10-tray-menu button {
+    display: block; width: 100%; text-align: left; padding: 0.4rem 0.55rem; border: none; border-radius: 6px;
+    background: transparent; color: var(--color-text); cursor: pointer; font-weight: 500;
+  }
+  .l10-tray-menu button:hover { background: var(--color-hover, rgba(99,102,241,0.12)); }
+  </style>
+</head>
+<body>
+  <div id="app-wrapper" class="app-wrapper">
+    {% set fa_debug_active = 'l10-test' %}
+    {% include 'partials/fa_debug_header.html' %}
+    <main>
+      <div class="panel">
+        <h1 class="text-2xl font-bold mb-2">L10 test</h1>
+        <p class="text-sm mb-3" style="color: var(--color-muted);">Test bases (fixtures) and trays (slots) from SFC. Collapsed cards hide idle trays only.</p>
+
+        <div class="l10-legend" id="l10-legend" aria-label="Status colors">
+          <span><span class="l10-swatch l10-tray--idle"></span> Idle</span>
+          <span><span class="l10-swatch l10-tray--testing"></span> Testing</span>
+          <span><span class="l10-swatch l10-tray--on_hold"></span> On hold</span>
+          <span><span class="l10-swatch l10-tray--testing_pass"></span> Pass</span>
+          <span><span class="l10-swatch l10-tray--testing_fail"></span> Fail</span>
+          <span><span class="l10-swatch l10-tray--unknown"></span> Other</span>
+        </div>
+
+        <div class="l10-meta" id="l10-meta" aria-live="polite">
+          <span id="l10-meta-main">Loading…</span>
+          <span id="l10-meta-countdown" class="l10-meta-countdown"></span>
+        </div>
+        <div id="l10-error" class="msg-error mb-3 hidden" role="alert"></div>
+        <div id="l10-grid" class="l10-grid"></div>
+      </div>
+    </main>
+  </div>
+  <script src="/static/js/l10_test_page.js"></script>
+</body>
+</html>
