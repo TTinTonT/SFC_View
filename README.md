@@ -1,65 +1,81 @@
-# SFC View
+# SFC_View
 
-Flask app for SFC Fail Result analytics, bonepile upload/disposition, ETF status, and debug tools. Port and paths are configurable.
+Internal Flask platform that consolidated **20+ fragmented web/desktop tools** into **one application** for **24 users** across L10/L11 Testing and FA teams.
 
-## Structure
+## Why This Project Matters
 
+- Single toolchain for daily test/debug operations (instead of scattered apps)
+- Standardized terminology and UX for faster onboarding
+- Faster triage and less manual coordination between teams
+- Optimized flows for high-frequency debug and automated test execution
+
+## Impact Snapshot
+
+- **Users:** 24 (L10/L11 Testing + FA)
+- **Tool consolidation:** 20+ legacy tools -> 1 platform
+- **Outcome:** faster, clearer, and more repeatable daily test/debug workflows
+
+## Key Pages and Functions
+
+- **Analytics Dashboard**: Query SFC fail data by time range, view tray/SKU/test-flow summaries, drill into SN details, and export reports.
+- **Bonepile**: Upload and parse NV workbooks, then generate disposition statistics and SN lists.
+- **ETF Status**: Live room/tray monitoring backed by SFC tray/fixture data.
+- **FA Debug Home**: Authenticated entry point with page-level permissions for engineering tools.
+- **Repair**: SFIS/Oracle-backed repair checks and actions.
+- **Testing**: Online/offline test flows with Crabber integration.
+- **L10 Test**: Fixture/slot status dashboard with per-fixture online-test queue, cooldown control, and force-run actions.
+- **IT Kitting SQL**: Controlled kitting/debug SQL operations.
+
+## Architecture (High-Level)
+
+```mermaid
+flowchart LR
+  browser[Web UI]
+  flask[Flask App]
+  sfc[SFC APIs]
+  sfis[Oracle SFIS]
+  crabber[Crabber Test APIs]
+  ssh[SSH Hosts and Terminals]
+
+  browser --> flask
+  flask --> sfc
+  flask --> sfis
+  flask --> crabber
+  flask --> ssh
 ```
-SFC_View/
-├── app.py                 # Flask entrypoint; thin routes delegate to services
-├── config/                 # Central configuration
-│   ├── app_config.py       # Paths, Flask, SFC, export formatting
-│   ├── analytics_config.py # Pass rules, stations_order, timezone, error-stats defaults
-│   ├── analytics_config.json
-│   ├── pass_rules.py       # Part number → pass station (uses analytics_config)
-│   ├── bonepile_config.py  # BONEPILE_IGNORED_SHEETS, BP_SN_CACHE_PATH
-│   ├── debug_config.py     # FA Debug: poll interval, WS terminal, SSH, Crabber
-│   └── etf_config.py       # ETF: ROOMS (SSH, script_path, state_dir), poll interval
-├── sfc/                    # SFC API client and HTML parser
-│   ├── client.py           # request_fail_result (login, session, fetch)
-│   └── parser.py           # parse_fail_result_html, rows_to_csv
-├── analytics/               # Analytics computation and service layer
-│   ├── compute.py          # compute_all (summary, tray_summary, sku_rows, test_flow)
-│   ├── sn_list.py          # compute_sn_list (drill-down)
-│   ├── error_stats.py      # compute_error_stats, compute_error_stats_sn_list
-│   ├── pass_fail.py        # is_sn_passed
-│   ├── bp_check.py         # add_bp_to_rows
-│   └── service.py          # run_analytics_query, get_sn_list, run_error_stats, run_fail_result_rows
-├── bonepile_disposition.py # Upload/parse NV workbook, BP cache, disposition stats/SN list, clear_disposition_cache
-├── etf/                     # ETF Status blueprint
-├── fa_debug/                # FA Debug Place blueprint
-└── templates/               # analytics_dashboard, etf_status, fa_debug
-```
 
-## Install and run
+## Tech Stack
+
+- **Backend:** Flask, Blueprint architecture, REST-style JSON APIs
+- **Frontend:** Jinja templates, JavaScript, xterm/WebSocket terminal integration
+- **Data/Systems:** SFC APIs, Oracle/SFIS queries, SQLite auth/session store
+- **Testing/Automation:** Crabber online/offline test orchestration, queue control for L10 fixtures
+
+## Recruiter Notes
+
+SFC_View demonstrates end-to-end server engineering for manufacturing test operations: service integration, workflow automation, role-based access control, realtime operational UIs, and developer-friendly diagnostics in one maintainable platform.
+
+## Local Run
 
 ```bash
 pip install -r requirements.txt
 python app.py
 ```
 
-Open http://localhost:5556 (or the port set by `FLASK_PORT`).
+Open `http://localhost:5556` (or port from `FLASK_PORT`).
 
 ## Configuration
 
-- **config/app_config.py** – Central: `APP_DIR`, `ANALYTICS_CACHE_DIR`, template paths, `FLASK_HOST`/`FLASK_PORT`/`FLASK_DEBUG`, SFC URL/user/password, disposition XLSX fill colors.
-- **config/analytics_config.json** – Pass rules, `stations_order`, `timezone`, `extend_hours`, `top_k_errors_default`, etc. Edited via UI (Pass Rules) or file.
-- **config/bonepile_config.py** – `BONEPILE_IGNORED_SHEETS`, `BP_SN_CACHE_PATH`.
-- **config/debug_config.py** – `POLL_INTERVAL_SEC`, `LOOKBACK_HOURS`, `WS_TERMINAL_URL`, `UPLOAD_URL`, SSH and Crabber URLs (env overrides).
-- **config/etf_config.py** – `ROOMS` (per-room SSH, script_path, state_dir), `ETF_POLL_INTERVAL_SEC`, `SFC_TRAY_STATUS_URL`, `SFC_LEVEL_GRADE` (env overrides).
+- `config/app_config.py` for Flask and app-level paths/settings
+- `config/analytics_config.json` for pass rules and analytics behavior
+- `config/debug_config.py` for FA debug, SSH, and Crabber settings
+- `config/etf_config.py` for ETF polling and tray status settings
 
-Environment variables (examples): `SFC_BASE_URL`, `SFC_USER`, `SFC_PWD`, `FLASK_PORT`, `FLASK_DEBUG`, `ETF_POLL_INTERVAL_SEC`, `SFC_TRAY_STATUS_URL`, `SFC_LEVEL_GRADE`, and per-room ETF/SSH vars (see etf_config.py, debug_config.py).
+## Selected APIs
 
-## Main APIs
-
-- **POST /api/query** – Apply filter; body `{ start_datetime, end_datetime, aggregation? }` → summary, tray_summary, sku_rows, test_flow, unassigned_part_numbers.
-- **GET/POST /api/analytics/pass-rules** – Get or save pass rules.
-- **POST /api/sn-list** – SN drill-down; uses last query result.
-- **POST /api/error-stats** – Error stats (top K, fail by station, TTC).
-- **POST /api/error-stats-sn-list** – Error-stats drill-down SN list.
-- **POST /api/export** – Export CSV or XLSX (summary, sku, disposition_summary, disposition_by_sku, error_stats, or default fail_result CSV).
-- **POST /api/clear-cache** – Clear disposition cache and in-memory query result.
-- **GET /api/bonepile/status**, **POST /api/bonepile/upload**, **POST /api/bonepile/parse**, **GET /api/bonepile/disposition**, **POST /api/bonepile/disposition/sn-list** – Bonepile upload and disposition.
-- **GET /api/sfc/tray-status** – Proxy SFC Test_Fixture_Status (POST JSON `{"Level_Grade":"L10"}`); returns `{ ok, sn_map }` for ETF Tray Status (Slot, Last End Time as live duration, SFC Remark).
-
-Legacy: **POST /api/fail_result** returns rows + CSV (dashboard uses /api/query).
+- `POST /api/query` - Analytics query by date/time range
+- `POST /api/error-stats` - Error analysis
+- `POST /api/export` - CSV/XLSX exports
+- `GET /api/sfc/tray-status` - SFC tray status proxy for ETF
+- `GET /api/debug/l10-test/status` - L10 fixture/slot status
+- `POST /api/debug/l10-test/online-queue/*` - L10 online-test queue controls
