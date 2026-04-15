@@ -15,6 +15,24 @@ Internal Flask platform that consolidated **20+ fragmented web/desktop tools** i
 - **Tool consolidation:** 20+ legacy tools -> 1 platform
 - **Outcome:** faster, clearer, and more repeatable daily test/debug workflows
 
+## Portfolio Visual Walkthrough
+
+Add screenshots to `docs/showcase/` and keep these references so recruiters can scan the product quickly.
+
+| Area | What it shows | Image |
+|---|---|---|
+| Analytics | Time-window query, summaries, drill-down, export | `docs/showcase/01-analytics-dashboard.png` |
+| Bonepile | Upload + disposition workflow | `docs/showcase/02-bonepile-disposition.png` |
+| ETF Status | Live room/tray visibility | `docs/showcase/03-etf-status.png` |
+| Testing / FA Debug | Online/Offline test operations | `docs/showcase/04-testing-online-modal.png` |
+| L10 Queue | Per-fixture queue, cooldown, force controls | `docs/showcase/05-l10-queue.png` |
+| Debug Terminal | In-browser SSH terminal (xterm/WebSocket) | `docs/showcase/06-fa-debug-terminal.png` |
+
+Recommended screenshot style:
+- Use dark/light theme consistently across all shots
+- Crop to highlight key workflow elements
+- Keep sensitive data anonymized (SNs, IPs, credentials, user names)
+
 ## Key Pages and Functions
 
 - **Analytics Dashboard**: Query SFC fail data by time range, view tray/SKU/test-flow summaries, drill into SN details, and export reports.
