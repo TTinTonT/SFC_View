@@ -14,6 +14,7 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
+import requests
 from flask import Blueprint, jsonify, redirect, render_template, request
 
 from analytics.service import run_analytics_query
@@ -39,6 +40,7 @@ from fa_debug.logic import (
     prepare_debug_rows,
     timeline_rows_from_crabber_proc_items,
 )
+from fa_debug.l10_test_status import group_fixtures_from_sfc_payload
 
 bp = Blueprint("fa_debug", __name__, url_prefix="", template_folder="../templates")
 _logger = logging.getLogger(__name__)
@@ -53,6 +55,8 @@ _URL_ACCESS_RULES = [
     ("/debug/kitting-sql", frozenset({"kitting-sql"})),
     ("/api/debug/kitting-sql/", frozenset({"kitting-sql"})),
     ("/debug/testing", frozenset({"testing"})),
+    ("/debug/l10-test", frozenset({"testing"})),
+    ("/api/debug/l10-test/", frozenset({"testing"})),
     ("/api/debug/testing/", frozenset({"testing"})),
     ("/api/debug-query", frozenset({"debug"})),
     ("/api/debug-data", frozenset({"debug"})),
@@ -591,6 +595,77 @@ def debug_testing():
         allowed_pages=getattr(request, "allowed_pages", set()),
         default_employee_id=default_emp_for_ui(u),
     )
+
+
+@bp.route("/debug/l10-test")
+def debug_l10_test():
+    """L10 tray dashboard: test bases (Fixture_No) and trays (slots) from SFC Test_Fixture_Status."""
+    u = getattr(request, "current_user", None)
+    return render_template(
+        "debug_l10_test.html",
+        current_user=u,
+        allowed_pages=getattr(request, "allowed_pages", set()),
+        default_employee_id=default_emp_for_ui(u),
+    )
+
+
+@bp.route("/api/debug/l10-test/status")
+def api_debug_l10_test_status():
+    """Proxy SFC Test_Fixture_Status; return fixtures with ui_bucket per tray (for L10 test page)."""
+    from config.etf_config import SFC_LEVEL_GRADE, SFC_TRAY_STATUS_URL
+
+    fetched_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        r = requests.post(
+            SFC_TRAY_STATUS_URL,
+            json={"Level_Grade": SFC_LEVEL_GRADE},
+            timeout=20,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "fetched_at": fetched_at,
+            "sfc_result": None,
+            "local_time": None,
+            "slots_per_mtf": None,
+            "fixtures": [],
+        })
+    except (ValueError, TypeError) as e:
+        return jsonify({
+            "ok": False,
+            "error": f"Invalid SFC JSON: {e}",
+            "fetched_at": fetched_at,
+            "sfc_result": None,
+            "local_time": None,
+            "slots_per_mtf": None,
+            "fixtures": [],
+        })
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "ok": False,
+            "error": "SFC response is not an object",
+            "fetched_at": fetched_at,
+            "sfc_result": None,
+            "local_time": None,
+            "slots_per_mtf": None,
+            "fixtures": [],
+        })
+
+    fixtures = group_fixtures_from_sfc_payload(data)
+    return jsonify({
+        "ok": True,
+        "error": None,
+        "fetched_at": fetched_at,
+        "sfc_result": data.get("RESULT"),
+        "local_time": data.get("Local_Time"),
+        "slots_per_mtf": data.get("Slots_Per_MTF"),
+        "level_grade": SFC_LEVEL_GRADE,
+        "fixtures": fixtures,
+    })
 
 
 # --- IT Kitting SQL: column whitelist for selectData (update/insert) ---

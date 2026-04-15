@@ -1,0 +1,68 @@
+---
+description: L10 test page — test base / test tray dashboard, SFC fixture API, classify rules, extension points
+globs: fa_debug/l10_test_status.py,fa_debug/routes.py,templates/debug_l10_test.html,static/js/l10_test_page.js,tests/test_l10_test_status.py
+alwaysApply: false
+---
+
+# L10 test page (`/debug/l10-test`)
+
+## Thuật ngữ chuẩn + alias → field SFC → cách lấy value
+
+Map lời user (chat) sang **field API SFC** (`DATA[]`) và **JSON app** (`GET /api/debug/l10-test/status`). Giữ bảng này đồng bộ với code.
+
+| User / alias có thể gặp trong chat | Ý nghĩa | Field SFC (`DATA[]`) | Lấy giá trị như thế nào |
+|---|---|---|---|
+| **test base**, MTF, fixture, cột MTF, **máy MTF** | Một fixture / cột dashboard | `Fixture_No` | App: `fixtures[i].fixture_no`. Raw: lọc các phần tử cùng `Fixture_No`. |
+| **test tray**, tray, slot, ô slot, **vị trí slot** | Một slot trong một test base | `Slot_No` (+ cả object hàng) | App: `fixtures[i].slots[j].slot_no` và các field cùng phần tử. Raw: một object trong `DATA[]`. |
+| **SN**, serial, **tray SN**, Serial_Number | Serial trong slot | `Serial_Number` | App: `slots[j].serial_number` (có thể `null`). Raw: `Serial_Number`. |
+| **group**, nhóm, Group, **station**, **test station** | Nhóm test (ngữ cảnh L10 tray API = `Group_Name`; **không** tự hiểu là station SFIS/Crabber khác hệ) | `Group_Name` | App: `group_name`. |
+| **build phase**, **tray model**, **SKU** | Nhãn build / model từ SFC | `Build_Phase` | App: `build_phase`. |
+| **status** (SFC raw), trạng thái SFC | Chuỗi status từ SFC | `Status` | App: `status`. **Không** nhầm với `ui_bucket` / **status color**. |
+| **ui_bucket**, bucket, trạng thái UI, màu tray, **status color** | Kết quả `classify_tray` (màu + collapse) | *(app thêm)* | App: `ui_bucket` only. Đổi màu/collapse → UI đọc `ui_bucket`; đổi logic → `classify_tray` trong `fa_debug/l10_test_status.py` + tests. |
+| **remark**, ghi chú, **hold** (ngữ cảnh remark) | Remark / hold từ SFC | `Remark` | App: `remark`. |
+| **last end**, Last_End_Time, mốc thời gian | Timestamp từ SFC | `Last_End_Time` | App: `last_end_time` (duration UI sau này nếu cần). |
+| **error**, Error_Desc | Mô tả lỗi | `Error_Desc` | App: `error_desc`. |
+| **L10**, Level_Grade | Tham số POST SFC | *(body)* `Level_Grade` | Config: `SFC_LEVEL_GRADE` trong `config/etf_config.py` (env override). |
+
+**Phân biệt khi user nói “status”:** nếu ngữ cảnh là **màu / status color / idle / collapse** → **`ui_bucket`**. Nếu là **Verify / Empty / Pass / Fail** từ API → **`Status`** raw. Nếu user nói **station / test station** khi bàn về **L10 tray dashboard** → mặc định **`Group_Name`** (ghi chú tránh lẫn station SFIS).
+
+## Ba nguồn đọc giá trị (A / B / C)
+
+- **A — JSON nội bộ (UI/FE):** `GET /api/debug/l10-test/status` → `fixtures[]`, `slots[]`, mỗi slot có `ui_bucket` (snake_case, ổn định). Trang poll **60s** (`static/js/l10_test_page.js`).
+- **B — Raw SFC (debug / đối chiếu):** POST `Test_Fixture_Status` với `{"Level_Grade": "<SFC_LEVEL_GRADE>"}` → `RESULT`, `Local_Time`, `Slots_Per_MTF`, `DATA[]` (PascalCase).
+- **C — Config URL:** `SFC_TRAY_STATUS_URL` + `SFC_LEVEL_GRADE` trong `config/etf_config.py` / env — **không** hard-code URL trong template.
+
+**Luồng:** Browser chỉ gọi **A**; server gọi **B** dùng **C**. Không gọi SFC trực tiếp từ browser.
+
+## Classification (`classify_tray`)
+
+File: `fa_debug/l10_test_status.py`. Áp dụng **theo thứ tự**; nhánh đầu khớp thì dừng.
+
+1. **on_hold** — `Remark` trim khác rỗng.
+2. **testing_pass** — `Status` thuộc nhóm pass (sau normalize: `PASS`, `ALL_PASS`, `PASSED`, `PASS_ALL`, …) **và** `Group_Name` không phải N/A.
+3. **testing_fail** — `Status` `FAIL` / `FAILED` **và** `Group_Name` không phải N/A.
+4. **testing** — `VERIFY`, **hoặc** (`EMPTY` **và** `Group_Name` không N/A).
+5. **idle** — `EMPTY` **và** group N/A **và** `Remark` rỗng.
+6. **unknown** — còn lại. Vẫn hiện khi card **collapsed** (cùng nhóm non-idle) để không mất tray.
+
+Chuẩn hóa: `trim`, so sánh không phân biệt hoa thường; group N/A: xem `is_na_group`.
+
+Khi đổi rule: sửa **`classify_tray`** và **`tests/test_l10_test_status.py`** (chạy `python -m unittest tests.test_l10_test_status -v`).
+
+## UI / collapse
+
+- **Collapsed** (mặc định): `sessionStorage` key `l10TestExpanded:<fixture_no>` — giá trị `1` = expanded, khác/`0` = collapsed.
+- Collapsed: chỉ render slot có `ui_bucket !== "idle"`.
+- Expanded: tất cả slot; **idle xếp cuối**, non-idle sort theo số slot.
+
+**Tray = nút:** mỗi tray là `<button class="l10-tray-btn">` với `data-fixture-no`, `data-slot-no`, `data-sn`. Bấm mở **menu nhỏ bên phải** (`.l10-tray-menu`) với Online / Offline / Trial (wire API sau). Click ra ngoài đóng menu.
+
+**Meta bar:** chỉ **Last fetch (CA)** từ `fetched_at` (format **America/Los_Angeles**). Response API vẫn có thể gồm `local_time`, `sfc_result`, `level_grade` nhưng **UI không hiển thị** các field đó. **Next refresh** đếm ngược mỗi giây tới lần poll kế (60s).
+
+**Hàng tray:** hàng 1 = Slot + `status`; hàng 2 = **SN** (trái) và **`group_name` · `build_phase`** (phải, cùng dòng). **Không** render `remark` trong nút tray (logic `on_hold` vẫn dùng remark ở backend).
+
+API mới: prefix **`/api/debug/l10-test/`** + thêm vào `_URL_ACCESS_RULES` với page key **`testing`** (trừ khi sau này tách page key trong `fa_debug/auth.py`).
+
+## Do not change
+
+- Không sửa `GET /api/sfc/tray-status` hay mapping ETF trong `etf/routes.py` cho trang này.
