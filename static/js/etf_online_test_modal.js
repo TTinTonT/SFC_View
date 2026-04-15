@@ -1,6 +1,6 @@
 /**
  * Online Test modal (shared by FA Debug / ETF Status / Testing page).
- * Depends on DOM ids from templates/fa_debug.html (etf-online-test-modal, etf-ot-*).
+ * Depends on DOM ids: etf-online-test-modal, etf-ot-* (markup: templates/partials/etf_online_test_modal.html on Testing + L10).
  */
 (function () {
   function escapeHtml(s) {
@@ -17,7 +17,20 @@
     return d || "SJOP";
   }
 
-  let otCtx = { sn: "", wip: null, prepare: null, emp: "", selectedMachineId: null };
+  let otCtx = {
+    sn: "",
+    wip: null,
+    prepare: null,
+    emp: "",
+    selectedMachineId: null,
+    queueJobId: null,
+    fixtureNo: null,
+    slotNo: null,
+    onStartSuccess: null,
+    onStartFailure: null,
+    onModalClosed: null,
+    _otStartedSuccess: false,
+  };
   let otApiBusy = 0;
 
   function otIsBusy() {
@@ -54,7 +67,18 @@
 
   function closeOnlineTestModal() {
     const modal = document.getElementById("etf-online-test-modal");
-    if (modal) modal.setAttribute("aria-hidden", "true");
+    if (!modal) return;
+    const cb = otCtx && otCtx.onModalClosed;
+    const started = !!(otCtx && otCtx._otStartedSuccess);
+    modal.setAttribute("aria-hidden", "true");
+    if (typeof cb === "function") {
+      try {
+        cb({ started: started });
+      } catch (e) {
+        /* ignore */
+      }
+      otCtx.onModalClosed = null;
+    }
   }
 
   function otShowResult(ok, msg, detail) {
@@ -166,11 +190,25 @@
     });
   }
 
-  function openOnlineTest(sn) {
+  function openOnlineTest(sn, options) {
+    options = options || {};
     const modal = document.getElementById("etf-online-test-modal");
     if (!modal || !sn) return;
     if (otIsBusy()) return;
-    otCtx = { sn: sn.trim().toUpperCase(), wip: null, prepare: null, emp: otProfileEmpFallback(), selectedMachineId: null };
+    otCtx = {
+      sn: sn.trim().toUpperCase(),
+      wip: null,
+      prepare: null,
+      emp: (options.emp && String(options.emp).trim()) || otProfileEmpFallback(),
+      selectedMachineId: null,
+      queueJobId: options.queueJobId != null ? String(options.queueJobId) : null,
+      fixtureNo: options.fixtureNo != null ? String(options.fixtureNo) : null,
+      slotNo: options.slotNo != null ? String(options.slotNo) : null,
+      onStartSuccess: typeof options.onStartSuccess === "function" ? options.onStartSuccess : null,
+      onStartFailure: typeof options.onStartFailure === "function" ? options.onStartFailure : null,
+      onModalClosed: typeof options.onModalClosed === "function" ? options.onModalClosed : null,
+      _otStartedSuccess: false,
+    };
     modal.setAttribute("aria-hidden", "false");
     otShowStep("loading");
     otPushBusy();
@@ -373,8 +411,23 @@
         .then((r) => r.json())
         .then((data) => {
           if (!data.ok) {
+            if (typeof otCtx.onStartFailure === "function") {
+              try {
+                otCtx.onStartFailure(data);
+              } catch (e3) {
+                /* ignore */
+              }
+            }
             otShowResult(false, data.error || "Start failed", "");
             return;
+          }
+          otCtx._otStartedSuccess = true;
+          if (typeof otCtx.onStartSuccess === "function") {
+            try {
+              otCtx.onStartSuccess(data);
+            } catch (e3) {
+              /* ignore */
+            }
           }
           let detail = "";
           try {
@@ -385,7 +438,16 @@
           }
           otShowResult(true, "Started. Log ID: " + (data.log_id != null ? data.log_id : "(see detail)"), detail);
         })
-        .catch((e) => otShowResult(false, String(e.message || e), ""))
+        .catch((e) => {
+          if (typeof otCtx.onStartFailure === "function") {
+            try {
+              otCtx.onStartFailure({ error: String(e.message || e) });
+            } catch (e3) {
+              /* ignore */
+            }
+          }
+          otShowResult(false, String(e.message || e), "");
+        })
         .finally(() => otPopBusy());
     });
 

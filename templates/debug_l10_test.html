@@ -33,7 +33,9 @@
   .l10-meta { font-size: 0.8rem; color: var(--color-muted); margin-bottom: 1rem; line-height: 1.45; }
   .l10-meta .l10-meta-countdown { font-weight: 600; color: var(--color-text); }
   .l10-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.5rem; }
-  .l10-card { border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; background: var(--color-bg); }
+  /* overflow:visible so fixed tray menus (ported to body) are not clipped; inner keeps radius */
+  .l10-card { border: 1px solid var(--color-border); border-radius: 12px; overflow: visible; background: var(--color-bg); }
+  .l10-card-inner { position: relative; border-radius: 12px; overflow: hidden; }
   .l10-card-h {
     display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
     padding: 0.6rem 0.75rem; cursor: pointer; user-select: none;
@@ -42,7 +44,7 @@
   }
   .l10-card-h:hover { background: var(--color-hover, rgba(99,102,241,0.08)); }
   .l10-card-h small { font-weight: 500; color: var(--color-muted); font-size: 0.72rem; }
-  .l10-card-body { padding: 0.3rem 0.4rem 0.45rem; max-height: 70vh; overflow-y: auto; }
+  .l10-card-body { position: relative; z-index: 3; padding: 0.3rem 0.4rem 0.45rem; max-height: 70vh; overflow-y: auto; }
   .l10-tray-wrap { position: relative; margin-bottom: 0.3rem; display: flex; align-items: flex-start; gap: 0; }
   .l10-tray-wrap:last-child { margin-bottom: 0; }
   .l10-tray-btn {
@@ -74,7 +76,7 @@
   .l10-tray-sn-part { font-family: ui-monospace, monospace; word-break: break-all; min-width: 0; flex: 1; }
   .l10-tray-gb { flex-shrink: 0; max-width: 48%; text-align: right; opacity: 0.92; font-size: 0.62rem; line-height: 1.25; }
   .l10-tray-menu {
-    position: fixed; z-index: 200; min-width: 9.5rem;
+    position: fixed; z-index: 50000; min-width: 9.5rem;
     background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.15); padding: 0.25rem; font-size: 0.75rem;
   }
@@ -85,6 +87,53 @@
     background: transparent; color: var(--color-text); cursor: pointer; font-weight: 500;
   }
   .l10-tray-menu button:hover { background: var(--color-hover, rgba(99,102,241,0.12)); }
+  /* ETF Online Test modal (subset of Testing page) */
+  /* Above tray pop-ups (z-index 50000) on this page */
+  .etf-ot-modal { position: fixed; inset: 0; z-index: 60000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .etf-ot-modal[aria-hidden="true"] { display: none !important; }
+  .etf-ot-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+  .etf-ot-dialog { position: relative; z-index: 1; width: 100%; max-width: 520px; max-height: 90vh; overflow: auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+  .etf-ot-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--color-border); }
+  .etf-ot-title { font-size: 1.1rem; font-weight: 700; margin: 0; color: var(--color-text); }
+  .etf-ot-close { background: none; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--color-muted); }
+  .etf-ot-body { padding: 1rem; }
+  .etf-ot-step label { display: block; margin-top: 0.65rem; }
+  .etf-ot-label { font-size: 0.78rem; font-weight: 600; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .etf-ot-input, .etf-ot-textarea { width: 100%; margin-top: 0.25rem; padding: 0.45rem 0.55rem; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font-size: 0.875rem; }
+  .etf-ot-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; align-items: center; }
+  .etf-ot-row .etf-ot-flex { flex: 1; min-width: 140px; margin-top: 0; }
+  .etf-ot-muted { color: var(--color-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+  .etf-ot-badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 6px; background: rgba(99, 102, 241, 0.15); color: var(--color-primary); font-weight: 600; font-size: 0.8rem; margin-bottom: 0.5rem; }
+  .etf-ot-actions { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+  .etf-ot-btn { padding: 0.45rem 0.85rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+  .etf-ot-btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+  .etf-ot-btn-danger { background: #dc2626; border-color: #dc2626; color: #fff; min-width: 28px; padding: 0 6px; font-size: 1rem; }
+  .etf-ot-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .etf-ot-machine-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; margin-top: 0.35rem; background: var(--color-bg); }
+  .etf-ot-machine-item { padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--color-border); cursor: pointer; font-size: 0.82rem; }
+  .etf-ot-machine-item:last-child { border-bottom: none; }
+  .etf-ot-machine-item:hover { background: var(--color-hover); }
+  .etf-ot-machine-item.selected { background: rgba(99, 102, 241, 0.12); outline: 2px solid var(--color-primary); }
+  .etf-ot-machine-item .occ { color: #c2410c; font-size: 0.75rem; }
+  .etf-ot-pre { font-size: 0.7rem; max-height: 160px; overflow: auto; background: var(--color-bg); padding: 0.5rem; border-radius: 6px; white-space: pre-wrap; word-break: break-all; }
+  .l10-cd-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-bottom: 0.75rem;
+    font-size: 0.78rem; color: var(--color-muted); padding: 0.45rem 0.55rem; border: 1px dashed var(--color-border); border-radius: 8px; background: var(--color-bg);
+  }
+  .l10-cd-row input[type="number"] { width: 4rem; padding: 0.2rem 0.35rem; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); }
+  .l10-card--fixture { position: relative; }
+  .l10-queuebar {
+    font-size: 0.68rem; color: var(--color-muted); padding: 0.25rem 0.45rem; border-bottom: 1px solid var(--color-border);
+    background: rgba(99, 102, 241, 0.06); display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; justify-content: space-between;
+  }
+  .l10-queuebar strong { color: var(--color-text); }
+  .l10-force-btn {
+    font-size: 0.65rem; padding: 0.15rem 0.45rem; border-radius: 6px; border: 1px solid var(--color-border);
+    background: var(--color-surface); color: var(--color-text); cursor: pointer; font-weight: 600;
+  }
+  .l10-force-btn:hover { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+  .l10-queue-svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
+  .l10-tray-wrap { z-index: 3; position: relative; }
   </style>
 </head>
 <body>
@@ -110,10 +159,18 @@
           <span id="l10-meta-countdown" class="l10-meta-countdown"></span>
         </div>
         <div id="l10-error" class="msg-error mb-3 hidden" role="alert"></div>
+        <div class="l10-cd-row" title="Applied after a successful Online test start on this page; controls wait before the next test on the same test base.">
+          <span><strong>Cooldown</strong> after each successful start (same test base):</span>
+          <label>Min <input type="number" id="l10-cd-min" min="0" max="180" value="2" step="1"></label>
+          <label>Sec <input type="number" id="l10-cd-sec" min="0" max="59" value="0" step="1"></label>
+        </div>
         <div id="l10-grid" class="l10-grid"></div>
       </div>
     </main>
+    {% include 'partials/etf_online_test_modal.html' %}
   </div>
-  <script src="/static/js/l10_test_page.js"></script>
+  <script>window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }};</script>
+  <script src="/static/js/etf_online_test_modal.js" defer></script>
+  <script src="/static/js/l10_test_page.js" defer></script>
 </body>
 </html>

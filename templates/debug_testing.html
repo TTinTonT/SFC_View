@@ -455,71 +455,7 @@
     </div>
   </div>
 
-  <div id="etf-online-test-modal" class="etf-ot-modal" aria-hidden="true">
-    <div class="etf-ot-backdrop"></div>
-    <div class="etf-ot-dialog" role="dialog" aria-labelledby="etf-ot-title">
-      <div class="etf-ot-header">
-        <h3 id="etf-ot-title" class="etf-ot-title">Online Test</h3>
-        <button type="button" class="etf-ot-close" id="etf-ot-close" title="Close">&times;</button>
-      </div>
-      <div class="etf-ot-body">
-        <div id="etf-ot-step-loading" class="etf-ot-step">
-          <p class="etf-ot-muted">Loading WIP…</p>
-        </div>
-        <div id="etf-ot-step-repair" class="etf-ot-step" style="display:none;">
-          <p class="etf-ot-badge" id="etf-ot-repair-badge">Retest</p>
-          <label class="etf-ot-label">Employee ID</label>
-          <input type="text" id="etf-ot-repair-emp" class="etf-ot-input" placeholder="Employee ID" value="{{ default_employee_id|default('SJOP') }}">
-          <label class="etf-ot-label">Reason Code</label>
-          <select id="etf-ot-reason" class="etf-ot-input"></select>
-          <label class="etf-ot-label">Remark</label>
-          <textarea id="etf-ot-remark" class="etf-ot-textarea" rows="2">Retest</textarea>
-          <div class="etf-ot-actions">
-            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-repair-run">Execute repair &amp; jump</button>
-          </div>
-        </div>
-        <div id="etf-ot-step-config" class="etf-ot-step" style="display:none;">
-          <p id="etf-ot-config-hint" class="etf-ot-muted"></p>
-          <label class="etf-ot-label">Station</label>
-          <select id="etf-ot-station" class="etf-ot-input"></select>
-          <label class="etf-ot-label">PN base</label>
-          <div class="etf-ot-row">
-            <select id="etf-ot-pn" class="etf-ot-input etf-ot-flex"></select>
-            <button type="button" class="etf-ot-btn etf-ot-btn-danger" id="etf-ot-pn-del" title="Remove selected custom base" style="display:none">&times;</button>
-          </div>
-          <div class="etf-ot-row" style="gap:4px">
-            <input type="text" id="etf-ot-pn-new" class="etf-ot-input etf-ot-flex" placeholder="Add new base, e.g. VR200_L10">
-            <button type="button" class="etf-ot-btn" id="etf-ot-pn-add">Add</button>
-          </div>
-          <p id="etf-ot-pn-preview" class="etf-ot-muted" style="margin:2px 0 0;font-weight:600"></p>
-          <label class="etf-ot-label">Employee ID</label>
-          <input type="text" id="etf-ot-emp" class="etf-ot-input" placeholder="Employee ID" value="{{ default_employee_id|default('SJOP') }}">
-          <label class="etf-ot-label">Tray SN</label>
-          <input type="text" id="etf-ot-sn-ro" class="etf-ot-input" readonly>
-          <div class="etf-ot-actions">
-            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-prepare">Continue</button>
-          </div>
-        </div>
-        <div id="etf-ot-step-machines" class="etf-ot-step" style="display:none;">
-          <label class="etf-ot-label">Filter machines</label>
-          <input type="text" id="etf-ot-machine-filter" class="etf-ot-input" placeholder="Filter by name, user, id…">
-          <div id="etf-ot-machine-list" class="etf-ot-machine-list"></div>
-          <p id="etf-ot-machine-picked" class="etf-ot-muted"></p>
-          <div class="etf-ot-actions">
-            <button type="button" class="etf-ot-btn" id="etf-ot-back-config">&larr; Back</button>
-            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-start" disabled>Start test</button>
-          </div>
-        </div>
-        <div id="etf-ot-step-result" class="etf-ot-step" style="display:none;">
-          <p id="etf-ot-result-msg"></p>
-          <pre id="etf-ot-result-detail" class="etf-ot-pre"></pre>
-          <div class="etf-ot-actions">
-            <button type="button" class="etf-ot-btn etf-ot-btn-primary" id="etf-ot-done">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  {% include 'partials/etf_online_test_modal.html' %}
   <div id="etf-offline-replay-modal" class="etf-ot-modal" aria-hidden="true">
     <div class="etf-ot-backdrop"></div>
     <div class="etf-ot-dialog etf-or-dialog" role="dialog" aria-labelledby="etf-or-title">

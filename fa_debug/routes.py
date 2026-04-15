@@ -40,6 +40,13 @@ from fa_debug.logic import (
     prepare_debug_rows,
     timeline_rows_from_crabber_proc_items,
 )
+from fa_debug.l10_online_test_queue import (
+    abandon as l10_online_queue_abandon,
+    complete as l10_online_queue_complete,
+    enqueue as l10_online_queue_enqueue,
+    force_next as l10_online_queue_force_next,
+    snapshot_all as l10_online_queue_snapshot_all,
+)
 from fa_debug.l10_test_status import group_fixtures_from_sfc_payload
 
 bp = Blueprint("fa_debug", __name__, url_prefix="", template_folder="../templates")
@@ -632,6 +639,7 @@ def api_debug_l10_test_status():
             "local_time": None,
             "slots_per_mtf": None,
             "fixtures": [],
+            "online_queue": l10_online_queue_snapshot_all(),
         })
     except (ValueError, TypeError) as e:
         return jsonify({
@@ -642,6 +650,7 @@ def api_debug_l10_test_status():
             "local_time": None,
             "slots_per_mtf": None,
             "fixtures": [],
+            "online_queue": l10_online_queue_snapshot_all(),
         })
 
     if not isinstance(data, dict):
@@ -653,6 +662,7 @@ def api_debug_l10_test_status():
             "local_time": None,
             "slots_per_mtf": None,
             "fixtures": [],
+            "online_queue": l10_online_queue_snapshot_all(),
         })
 
     fixtures = group_fixtures_from_sfc_payload(data)
@@ -665,7 +675,57 @@ def api_debug_l10_test_status():
         "slots_per_mtf": data.get("Slots_Per_MTF"),
         "level_grade": SFC_LEVEL_GRADE,
         "fixtures": fixtures,
+        "online_queue": l10_online_queue_snapshot_all(),
     })
+
+
+@bp.route("/api/debug/l10-test/online-queue", methods=["GET"])
+def api_debug_l10_test_online_queue_get():
+    """Lightweight snapshot of per-fixture online test queues (in-memory)."""
+    return jsonify({"ok": True, "fixtures": l10_online_queue_snapshot_all()})
+
+
+@bp.route("/api/debug/l10-test/online-queue/enqueue", methods=["POST"])
+def api_debug_l10_test_online_queue_enqueue():
+    data = request.get_json(silent=True) or {}
+    fixture_no = data.get("fixture_no") or data.get("fixture") or ""
+    slot_no = data.get("slot_no") or data.get("slot") or ""
+    sn = data.get("sn") or ""
+    out = l10_online_queue_enqueue(str(fixture_no), str(slot_no), str(sn))
+    status = 200 if out.get("ok") else 400
+    return jsonify(out), status
+
+
+@bp.route("/api/debug/l10-test/online-queue/complete", methods=["POST"])
+def api_debug_l10_test_online_queue_complete():
+    data = request.get_json(silent=True) or {}
+    fixture_no = data.get("fixture_no") or ""
+    job_id = data.get("job_id") or ""
+    delay_min = data.get("delay_min", 0)
+    delay_sec = data.get("delay_sec", 0)
+    out = l10_online_queue_complete(str(fixture_no), str(job_id), delay_min, delay_sec)
+    status = 200 if out.get("ok") else 400
+    return jsonify(out), status
+
+
+@bp.route("/api/debug/l10-test/online-queue/abandon", methods=["POST"])
+def api_debug_l10_test_online_queue_abandon():
+    data = request.get_json(silent=True) or {}
+    fixture_no = data.get("fixture_no") or ""
+    job_id = data.get("job_id") or ""
+    out = l10_online_queue_abandon(str(fixture_no), str(job_id))
+    status = 200 if out.get("ok") else 400
+    return jsonify(out), status
+
+
+@bp.route("/api/debug/l10-test/online-queue/force-next", methods=["POST"])
+def api_debug_l10_test_online_queue_force_next():
+    data = request.get_json(silent=True) or {}
+    fixture_no = data.get("fixture_no") or ""
+    job_id = data.get("job_id") or None
+    out = l10_online_queue_force_next(str(fixture_no), str(job_id) if job_id else None)
+    status = 200 if out.get("ok") else 400
+    return jsonify(out), status
 
 
 # --- IT Kitting SQL: column whitelist for selectData (update/insert) ---

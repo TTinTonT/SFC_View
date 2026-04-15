@@ -1,6 +1,6 @@
 ---
 description: L10 test page — test base / test tray dashboard, SFC fixture API, classify rules, extension points
-globs: fa_debug/l10_test_status.py,fa_debug/routes.py,templates/debug_l10_test.html,static/js/l10_test_page.js,tests/test_l10_test_status.py
+globs: fa_debug/l10_test_status.py,fa_debug/l10_online_test_queue.py,fa_debug/routes.py,templates/debug_l10_test.html,templates/partials/etf_online_test_modal.html,static/js/l10_test_page.js,static/js/etf_online_test_modal.js,tests/test_l10_test_status.py,tests/test_l10_online_test_queue.py
 alwaysApply: false
 ---
 
@@ -28,7 +28,7 @@ Map lời user (chat) sang **field API SFC** (`DATA[]`) và **JSON app** (`GET /
 
 ## Ba nguồn đọc giá trị (A / B / C)
 
-- **A — JSON nội bộ (UI/FE):** `GET /api/debug/l10-test/status` → `fixtures[]`, `slots[]`, mỗi slot có `ui_bucket` (snake_case, ổn định). Trang poll **60s** (`static/js/l10_test_page.js`).
+- **A — JSON nội bộ (UI/FE):** `GET /api/debug/l10-test/status` → `fixtures[]`, `slots[]`, mỗi slot có `ui_bucket` (snake_case, ổn định), thêm **`online_queue`** (map `fixture_no` → snapshot hàng đợi). Trang poll SFC **60s**; poll queue nhẹ **`GET /api/debug/l10-test/online-queue`** mỗi ~2.5s (`static/js/l10_test_page.js`).
 - **B — Raw SFC (debug / đối chiếu):** POST `Test_Fixture_Status` với `{"Level_Grade": "<SFC_LEVEL_GRADE>"}` → `RESULT`, `Local_Time`, `Slots_Per_MTF`, `DATA[]` (PascalCase).
 - **C — Config URL:** `SFC_TRAY_STATUS_URL` + `SFC_LEVEL_GRADE` trong `config/etf_config.py` / env — **không** hard-code URL trong template.
 
@@ -51,11 +51,23 @@ Khi đổi rule: sửa **`classify_tray`** và **`tests/test_l10_test_status.py`
 
 ## UI / collapse
 
-- **Collapsed** (mặc định): `sessionStorage` key `l10TestExpanded:<fixture_no>` — giá trị `1` = expanded, khác/`0` = collapsed.
+- **Collapsed** (mặc định): `sessionStorage` key `l10TestExpanded:<fixture_no>` — giá trị `1` = expanded, khác/`0` = collapsed. **Mỗi lần load lại trang** `/debug/l10-test`, script xóa các key này để mọi test base bắt đầu **thu gọn** (tránh state cũ từ phiên trước).
 - Collapsed: chỉ render slot có `ui_bucket !== "idle"`.
 - Expanded: tất cả slot; **idle xếp cuối**, non-idle sort theo số slot.
 
-**Tray = nút:** mỗi tray là `<button class="l10-tray-btn">` với `data-fixture-no`, `data-slot-no`, `data-sn`. Bấm mở **menu nhỏ bên phải** (`.l10-tray-menu`) với Online / Offline / Trial (wire API sau). Click ra ngoài đóng menu.
+**Tray = nút:** mỗi tray là `<button class="l10-tray-btn">` với `data-fixture-no`, `data-slot-no`, `data-sn`. Bấm mở **menu nhỏ** (`.l10-tray-menu`): khi mở, menu được **append lên `document.body`** + `z-index` cao để không bị cột MTF kế bên che; đóng thì trả về `.l10-tray-wrap`. Modal Online Test trên trang L10 dùng `z-index` cao hơn menu. **Online test:** luồng giống Testing — `GET /api/etf/online-test/wip` → `etfOpenOnlineTestModal(sn, options)` (`static/js/etf_online_test_modal.js`); markup modal dùng chung [`templates/partials/etf_online_test_modal.html`](templates/partials/etf_online_test_modal.html). `options`: `queueJobId`, `fixtureNo`, `slotNo`, `onStartSuccess` / `onStartFailure`, `onModalClosed` (dùng cho queue L10). Nếu slot có `ui_bucket = idle` và chưa có SN, UI phải yêu cầu user nhập SN trước khi enqueue/start online test. **Offline / Trial:** vẫn placeholder.
+
+## Online test queue (cùng test base / `Fixture_No`)
+
+- **Server:** [`fa_debug/l10_online_test_queue.py`](fa_debug/l10_online_test_queue.py) — **in-memory**, một job **active** / fixture, FIFO `queued`, `cooldown_until` sau mỗi lần `POST /api/etf/online-test/start` **thành công** (client gọi complete với delay lấy từ ô **Cooldown** Min/Sec trên UI **tại lúc complete**).
+- **API** (cùng prefix `/api/debug/l10-test/`, quyền `testing`):
+  - `POST .../online-queue/enqueue` — `{ fixture_no, slot_no, sn }` → `{ ok, job, immediate, position, already_queued? }`
+  - `POST .../online-queue/complete` — `{ fixture_no, job_id, delay_min, delay_sec }` (sau start OK)
+  - `POST .../online-queue/abandon` — `{ fixture_no, job_id }` (đóng modal mà chưa start OK; job về đầu queue, **không** auto-promote cho tới lần enqueue lại / force / complete)
+  - `POST .../online-queue/force-next` — `{ fixture_no, job_id? }` — xóa cooldown, tuỳ chọn đưa job lên đầu queue
+  - `GET .../online-queue` — `{ ok, fixtures }` snapshot
+- **UI:** mỗi card fixture có thanh **queue** + nút **Force / clear wait**; SVG mũi tên từ slot **active** → slot **queued** đầu tiên (`queue_arrow`) khi có cả hai.
+- **Giới hạn:** queue in-memory chỉ đúng khi chạy **một worker** Flask; multi-process cần store chung (Redis/DB).
 
 **Meta bar:** chỉ **Last fetch (CA)** từ `fetched_at` (format **America/Los_Angeles**). Response API vẫn có thể gồm `local_time`, `sfc_result`, `level_grade` nhưng **UI không hiển thị** các field đó. **Next refresh** đếm ngược mỗi giây tới lần poll kế (60s).
 

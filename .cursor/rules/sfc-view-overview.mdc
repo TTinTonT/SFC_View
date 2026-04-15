@@ -11,7 +11,7 @@ alwaysApply: true
 - **Page permissions:** Keys are `debug`, `repair`, `testing`, `jump-station`, `kitting-sql` (there is no separate `kitting` page). Admin grants via Setting → Pages.
 - **IT Kitting:** Only **IT Kitting SQL** (`/debug/kitting-sql`, `/api/debug/kitting-sql/*`). Old `/debug/kitting` redirects to kitting-sql.
 - **SFIS / Oracle:** DB connection and queries under `sfis_tool/` (`db.py`, `sql_queries.py`, `repair_ok.py`, `repair_flow.py`, `jump_route.py`, etc.). Keep FA routes thin: validate input, call `sfis_tool`, return JSON.
-- **Front-end:** Repair/Testing share patterns — `templates/debug_repair.html`, `debug_testing.html`, `static/js/testing_page.js`; ETF online test modal `static/js/etf_online_test_modal.js` + modal markup on Testing page. **L10 tray dashboard:** `/debug/l10-test` (page key `testing`) — see `.cursor/rules/l10-test-page.mdc` for glossary, API, and how to extend per-tray actions.
+- **Front-end:** Repair/Testing share patterns — `templates/debug_repair.html`, `debug_testing.html`, `static/js/testing_page.js`; ETF online test modal `static/js/etf_online_test_modal.js` + shared markup `templates/partials/etf_online_test_modal.html` (included from Testing and L10). **L10 tray dashboard:** `/debug/l10-test` (page key `testing`) — see `.cursor/rules/l10-test-page.mdc` for glossary, SFC + online-queue APIs, and per-tray actions.
 - **Repair detail:** For UI modes, fail input, and RC rules, follow `.cursor/rules/repair-debug-ui.mdc` when editing those files.
 
 ## Cursor rules — ask before adding, keep in sync
