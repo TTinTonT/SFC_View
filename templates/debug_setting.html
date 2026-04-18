@@ -191,13 +191,13 @@
   </div>
 
   <div class="panel">
-    <h2>Recent logins from unknown IPs</h2>
-    <p class="text-sm mb-2" style="color: var(--color-muted);">IP not in user’s allowed list. Approve = set that IP as user’s only allowed IP.</p>
+    <h2>Recent login attempts (audit)</h2>
+    <p class="text-sm mb-2" style="color: var(--color-muted);">Every attempt is listed (newest first, last 200). “New IP” = not on the user’s allowed list and not a familiar IP. Approve (only on those rows) sets that IP as the user’s only allowed IP.</p>
     <table>
       <thead>
-        <tr><th>Time</th><th>IP</th><th>Username</th><th>Success</th><th>Actions</th></tr>
+        <tr><th>Time</th><th>IP</th><th>Username</th><th>Success</th><th>New IP</th><th>Actions</th></tr>
       </thead>
-      <tbody id="unknown-ip-tbody"></tbody>
+      <tbody id="recent-login-audit-tbody"></tbody>
     </table>
   </div>
     </main>
@@ -430,16 +430,19 @@
       });
     }
 
-    function loadUnknownIpLog() {
+    function loadRecentLoginAudit() {
       api('/api/debug/setting/unknown-ip-log').then(function(data) {
         if (!data.ok) return;
         var rows = data.entries || [];
-        var tbody = document.getElementById('unknown-ip-tbody');
+        var tbody = document.getElementById('recent-login-audit-tbody');
         tbody.innerHTML = rows.map(function(e) {
           var time = e.created_at_ts ? new Date(e.created_at_ts * 1000).toLocaleString() : '';
           var ipVal = (e.ip || '').replace(/"/g, '&quot;');
-          var act = e.user_id ? '<button type="button" class="btn-sm btn-approve-ip" data-user-id="' + e.user_id + '" data-ip="' + ipVal + '">Approve</button>' : '-';
-          return '<tr><td>' + time + '</td><td>' + (e.ip || '') + '</td><td>' + (e.username || '') + '</td><td>' + (e.success ? 'Yes' : 'No') + '</td><td>' + act + '</td></tr>';
+          var newIp = e.needs_ip_approval ? 'Yes' : '—';
+          var act = (e.user_id && e.needs_ip_approval)
+            ? '<button type="button" class="btn-sm btn-approve-ip" data-user-id="' + e.user_id + '" data-ip="' + ipVal + '">Approve</button>'
+            : '—';
+          return '<tr><td>' + time + '</td><td>' + (e.ip || '') + '</td><td>' + (e.username || '') + '</td><td>' + (e.success ? 'Yes' : 'No') + '</td><td>' + newIp + '</td><td>' + act + '</td></tr>';
         }).join('');
         tbody.querySelectorAll('.btn-approve-ip').forEach(function(btn) {
           btn.onclick = function() {
@@ -447,7 +450,7 @@
             var ip = (btn.dataset.ip || '').trim();
             if (!ip) return;
             api('/api/debug/setting/user/add-ip', { method: 'POST', body: { user_id: uid, ip: ip } }).then(function(d) {
-              if (d.ok) { loadUnknownIpLog(); loadUsers(); loadLoginHistory(); }
+              if (d.ok) { loadRecentLoginAudit(); loadUsers(); loadLoginHistory(); }
               else alert(d.error || 'Failed');
             });
           };
@@ -549,7 +552,7 @@
     loadRegistrations();
     loadFamiliarIps();
     loadLoginHistory();
-    loadUnknownIpLog();
+    loadRecentLoginAudit();
   })();
   </script>
   <script src="/static/js/fa_debug_theme.js" defer></script>

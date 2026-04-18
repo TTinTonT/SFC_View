@@ -2491,23 +2491,34 @@ def api_setting_familiar_ips_remove(fid):
 
 @bp.route("/api/debug/setting/unknown-ip-log", methods=["GET"])
 def api_setting_unknown_ip_log():
-    """Recent logins from IPs not in user's allowed IPs and not in familiar_ips (admin only)."""
+    """Recent login attempts (success and failure); needs_ip_approval when IP is not allowed (admin only)."""
     if _setting_admin() is None:
         return jsonify({"error": "Forbidden"}), 403
     from fa_debug.auth_db import connect_auth_db
     conn = connect_auth_db()
     try:
         cur = conn.execute(
-            """SELECT l.id, l.user_id, l.username, l.ip, l.success, l.created_at_ts
+            """SELECT l.id, l.user_id, l.username, l.ip, l.success, l.created_at_ts,
+                      CASE
+                        WHEN l.user_id IS NULL THEN 0
+                        WHEN COALESCE(u.allow_all_ip, 0) != 0 THEN 0
+                        WHEN EXISTS (
+                          SELECT 1 FROM user_allowed_ips a
+                          WHERE a.user_id = l.user_id AND a.ip = l.ip
+                        ) THEN 0
+                        WHEN EXISTS (SELECT 1 FROM familiar_ips f WHERE f.ip = l.ip) THEN 0
+                        ELSE 1
+                      END AS needs_ip_approval
                FROM login_log l
                LEFT JOIN users u ON u.id = l.user_id
-               LEFT JOIN user_allowed_ips a ON a.user_id = l.user_id AND a.ip = l.ip
-               LEFT JOIN familiar_ips f ON f.ip = l.ip
-               WHERE (COALESCE(u.allow_all_ip, 0) = 0)
-                 AND a.ip IS NULL AND f.ip IS NULL
-               ORDER BY l.created_at_ts DESC LIMIT 100"""
+               ORDER BY l.created_at_ts DESC LIMIT 200"""
         )
-        rows = [dict(r) for r in cur.fetchall()]
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["success"] = bool(d.get("success"))
+            d["needs_ip_approval"] = bool(d.get("needs_ip_approval"))
+            rows.append(d)
         return jsonify({"ok": True, "entries": rows})
     finally:
         conn.close()

@@ -44,6 +44,8 @@ flowchart LR
   flask --> ssh
 ```
 
+
+
 ## Tech Stack
 
 - **Backend:** Flask, Blueprint architecture, REST-style JSON APIs
@@ -79,3 +81,4 @@ Open `http://localhost:5556` (or port from `FLASK_PORT`).
 - `GET /api/sfc/tray-status` - SFC tray status proxy for ETF
 - `GET /api/debug/l10-test/status` - L10 fixture/slot status
 - `POST /api/debug/l10-test/online-queue/*` - L10 online-test queue controls
+
