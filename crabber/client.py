@@ -16,8 +16,10 @@ from crabber.log_unc_path import build_crabber_log_folder_unc, extract_node_log_
 
 def _get_config():
     try:
-        from config.debug_config import CRABBER_BASE_URL, CRABBER_TOKEN
-        return ((CRABBER_BASE_URL or "").strip(), (CRABBER_TOKEN or "").strip())
+        from crabber.profile import get_crabber_tuple
+
+        base, token, _, _ = get_crabber_tuple()
+        return ((base or "").strip(), (token or "").strip())
     except Exception:
         return ("", "")
 
@@ -77,9 +79,12 @@ def fetch_search_log_items_all_pages(
     sn: str = "",
     is_trial: bool = False,
     timeout: int = 20,
+    max_pages: Optional[int] = None,
 ) -> Tuple[Optional[List[dict]], Optional[dict], Optional[str]]:
     """
-    Fetch all pages from search_log_items.
+    Fetch pages from search_log_items (merged, sorted by log_time desc).
+    If max_pages is set, stop after that many pages (still returns merged rows from fetched pages).
+
     Returns (merged_log_list_sorted_desc, first_page_response, error_str).
     """
     page = 1
@@ -87,6 +92,8 @@ def fetch_search_log_items_all_pages(
     merged: List[dict] = []
     first_resp: Optional[dict] = None
     while True:
+        if max_pages is not None and page > int(max_pages):
+            break
         data, err = fetch_search_log_items_json(
             sn=sn,
             cur_page=page,
@@ -115,6 +122,86 @@ def fetch_search_log_items_all_pages(
         page += 1
     merged.sort(key=lambda x: str(x.get("log_time") or ""), reverse=True)
     return merged, first_resp, None
+
+
+def normalize_search_log_item_to_row(it: Any) -> Optional[dict]:
+    """Map one search_log_items element to the same row shape as fetch_test_history_for_sn tests[]."""
+    if not isinstance(it, dict):
+        return None
+    node_log_id_str = extract_node_log_id(it)
+    _exe_raw = it.get("exe_log_id") if it.get("exe_log_id") is not None else it.get("exeLogId")
+    exe_log_id_str = str(_exe_raw).strip() if _exe_raw is not None else ""
+    node_log_event = str(
+        it.get("node_log_event") or it.get("nodeLogEvent") or ""
+    ).strip()
+    raw_res = str(it.get("result") or it.get("Result") or "").strip()
+    log_time_iso = str(it.get("log_time") or it.get("LogTime") or "").strip()
+    test_time = log_time_iso or str(
+        it.get("test_time")
+        or it.get("end_time")
+        or it.get("time")
+        or it.get("start_time")
+        or it.get("create_time")
+        or ""
+    ).strip()
+    if not log_time_iso:
+        log_time_iso = test_time
+    log_folder_unc = (
+        build_crabber_log_folder_unc(log_time_iso, node_log_id_str)
+        if node_log_id_str
+        else ""
+    )
+    sfc_raw = it.get("sfc_event_date") or it.get("sfcEventDate")
+    sfc_event_date = str(sfc_raw).strip() if sfc_raw is not None and str(sfc_raw).strip() else ""
+    pn_name = str(
+        it.get("pn_name")
+        or it.get("pnName")
+        or it.get("pn")
+        or it.get("PN")
+        or it.get("part_number")
+        or ""
+    ).strip()
+    procedure = str(
+        it.get("procedure")
+        or it.get("procedure_id")
+        or it.get("procedureId")
+        or ""
+    ).strip()
+    revision = str(
+        it.get("revision")
+        or it.get("procedure_rev")
+        or it.get("procedureRev")
+        or ""
+    ).strip()
+    machine_id = str(
+        it.get("machine_id")
+        or it.get("machineId")
+        or it.get("mac_id")
+        or ""
+    ).strip()
+    row_sn = str(it.get("sn") or it.get("SN") or "").strip()
+    return {
+        "sn": row_sn,
+        "station": str(it.get("station") or it.get("Station") or "").strip(),
+        "result": _derive_crabber_display_result(raw_res, node_log_event),
+        "test_time": test_time,
+        "log_time": log_time_iso,
+        "sfc_event_date": sfc_event_date,
+        "node_log_id": node_log_id_str,
+        "exe_log_id": exe_log_id_str,
+        "log_folder_unc": log_folder_unc,
+        "pn": pn_name,
+        "pn_name": pn_name,
+        "machine": str(
+            it.get("machine") or it.get("machine_name") or it.get("Machine") or ""
+        ).strip(),
+        "machine_id": machine_id,
+        "phase": str(it.get("phase") or it.get("Phase") or "").strip(),
+        "project": str(it.get("project") or it.get("Project") or "").strip(),
+        "node_log_event": node_log_event,
+        "procedure": procedure,
+        "revision": revision,
+    }
 
 
 def tier_from_crabber_station(station: str) -> Optional[str]:
@@ -399,84 +486,10 @@ def fetch_test_history_for_sn(
     for it in items:
         if n >= limit:
             break
-        if not isinstance(it, dict):
+        row = normalize_search_log_item_to_row(it)
+        if row is None:
             continue
-        node_log_id_str = extract_node_log_id(it)
-        _exe_raw = it.get("exe_log_id") if it.get("exe_log_id") is not None else it.get("exeLogId")
-        exe_log_id_str = str(_exe_raw).strip() if _exe_raw is not None else ""
-        node_log_event = str(
-            it.get("node_log_event") or it.get("nodeLogEvent") or ""
-        ).strip()
-        raw_res = str(it.get("result") or it.get("Result") or "").strip()
-        log_time_iso = str(it.get("log_time") or it.get("LogTime") or "").strip()
-        test_time = log_time_iso or str(
-            it.get("test_time")
-            or it.get("end_time")
-            or it.get("time")
-            or it.get("start_time")
-            or it.get("create_time")
-            or ""
-        ).strip()
-        if not log_time_iso:
-            log_time_iso = test_time
-        log_folder_unc = (
-            build_crabber_log_folder_unc(log_time_iso, node_log_id_str)
-            if node_log_id_str
-            else ""
-        )
-        sfc_raw = it.get("sfc_event_date") or it.get("sfcEventDate")
-        sfc_event_date = str(sfc_raw).strip() if sfc_raw is not None and str(sfc_raw).strip() else ""
-        pn_name = str(
-            it.get("pn_name")
-            or it.get("pnName")
-            or it.get("pn")
-            or it.get("PN")
-            or it.get("part_number")
-            or ""
-        ).strip()
-        procedure = str(
-            it.get("procedure")
-            or it.get("procedure_id")
-            or it.get("procedureId")
-            or ""
-        ).strip()
-        revision = str(
-            it.get("revision")
-            or it.get("procedure_rev")
-            or it.get("procedureRev")
-            or ""
-        ).strip()
-        machine_id = str(
-            it.get("machine_id")
-            or it.get("machineId")
-            or it.get("mac_id")
-            or ""
-        ).strip()
-        row_sn = str(it.get("sn") or it.get("SN") or "").strip()
-        out.append(
-            {
-                "sn": row_sn,
-                "station": str(it.get("station") or it.get("Station") or "").strip(),
-                "result": _derive_crabber_display_result(raw_res, node_log_event),
-                "test_time": test_time,
-                "log_time": log_time_iso,
-                "sfc_event_date": sfc_event_date,
-                "node_log_id": node_log_id_str,
-                "exe_log_id": exe_log_id_str,
-                "log_folder_unc": log_folder_unc,
-                "pn": pn_name,
-                "pn_name": pn_name,
-                "machine": str(
-                    it.get("machine") or it.get("machine_name") or it.get("Machine") or ""
-                ).strip(),
-                "machine_id": machine_id,
-                "phase": str(it.get("phase") or it.get("Phase") or "").strip(),
-                "project": str(it.get("project") or it.get("Project") or "").strip(),
-                "node_log_event": node_log_event,
-                "procedure": procedure,
-                "revision": revision,
-            }
-        )
+        out.append(row)
         n += 1
 
     result["ok"] = True

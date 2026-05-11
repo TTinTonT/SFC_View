@@ -40,6 +40,11 @@ DEFAULT = {
     "CRABBER_TOKEN": "06939a6ac0ed828115deba6a6bed85de77c715bb",
     "CRABBER_USER_ID": "41",
     "CRABBER_SITENAME": "SanJose",
+    # Crabber SV profile (Online Test + Testing overview when user picks SV)
+    "CRABBER_SV_BASE_URL": "http://10.24.10.174:8000",
+    "CRABBER_SV_TOKEN": "b79ab46c6c7ba28e889a88e1eba73317f13c26d0",
+    "CRABBER_SV_USER_ID": "12",
+    "CRABBER_SV_SITENAME": "SV_Worker4",
     # Oberon L10 log share (UNC prefix; folder segment = node_log_id + log_time UTC)
     "CRABBER_LOG_UNC_ROOT": r"\\10.16.137.111\Oberon\L10",
     # Crabber replay / raw offline test
@@ -65,11 +70,16 @@ DEFAULT = {
     "REPLAY_BACKEND_COPY_MODE": "disabled",
     "REPLAY_BACKEND_LOG_DIR": "",
     "REPLAY_CLEANUP_CONSOLE_MAX_BYTES": "2097152",
-    # ETF
+    # ETF / L10 MTF tray (POST JSON body like official L10.html: Level_Grade).
+    # SJ browser page: http://10.16.137.115/testdashboard/L10.html → Test_Fixture_Status below.
     "SFC_TRAY_STATUS_URL": "http://10.16.137.115/SFCAPI/SFC/Test_Fixture_Status",
+    # SV browser page: http://10.16.137.115/testdashboard_SV/L10.html → SFCAPI_SV/Test_Fixture_Status.
+    "SFC_TRAY_STATUS_URL_SV": "http://10.16.137.115/SFCAPI_SV/SFC/Test_Fixture_Status",
     "SFC_LEVEL_GRADE": "L10",
     "ETF_POLL_INTERVAL_SEC": "60",
     "ETF_SSH_HOST": "10.16.138.67",
+    # SV Sunnyvale DHCP / tray scan (same script + SSH creds as ETF_SSH_*; only host differs)
+    "ETF_SV_SSH_HOST": "10.24.10.190",
     "ETF_SCRIPT_PATH": "/root/TIN/scan_tray_bmc_arp_ssh.sh",
     "ETF_STATE_DIR": "/root/TIN/scan_state",
     "ROOM6_SSH_HOSTS": "10.16.138.71,10.16.138.79,10.16.138.73",

@@ -336,11 +336,6 @@
       [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext].forEach(function (b) {
         if (b) b.disabled = false;
       });
-      if (hasInvalidDuplicate) {
-        treeDekit.disabled = true;
-        treeKitting.disabled = true;
-        btnRepair.disabled = true;
-      }
     }
     function autoSizeInput(inp) {
       if (!inp) return;
@@ -495,11 +490,8 @@
         var invalid = (res.json && res.json.invalid_duplicates) ? res.json.invalid_duplicates : [];
         hasInvalidDuplicate = invalid.length > 0;
         if (hasInvalidDuplicate) {
-          dupBanner.textContent = 'WARNING: Duplicate vendor SN detected (ASSY_FLAG=Y, non-CONFIG): ' + invalid.join(', ') + '. Please contact IT to fix data via IT Kitting page before proceeding.';
+          dupBanner.textContent = 'WARNING: Duplicate vendor SN detected (ASSY_FLAG=Y, non-CONFIG): ' + invalid.join(', ') + '. You may still de-kit, kit, or repair; IT Kitting cleanup is recommended.';
           dupBanner.classList.remove('hidden');
-          treeDekit.disabled = true;
-          treeKitting.disabled = true;
-          btnRepair.disabled = true;
         } else {
           dupBanner.classList.add('hidden');
         }
@@ -874,7 +866,6 @@
       var sn = (inputSn.value || '').trim();
       var emp = (inputEmpTop.value || '').trim();
       if (!sn) { showErr('Search SN first'); return; }
-      if (hasInvalidDuplicate) { showErr('Duplicate vendor SN data is invalid. Please fix via IT Kitting first.'); return; }
       if (!selReason.value || !selAction.value || !selDuty.value) { showErr('Please fill Reason/Action/Duty.'); return; }
       var kitBuilt = buildKitList(false);
       if (kitBuilt.error) { showErr(kitBuilt.error); return; }
@@ -912,7 +903,6 @@
       var sn = (inputSn.value || '').trim();
       var emp = (inputEmpTop.value || '').trim();
       if (!sn) { showErr('Search SN first.'); return; }
-      if (hasInvalidDuplicate) { showErr('Duplicate vendor SN data is invalid. Please fix via IT Kitting first.'); return; }
       var kitBuilt = buildKitList(true);
       if (kitBuilt.error) { showErr(kitBuilt.error); return; }
       if (!confirm('Kit ' + kitBuilt.list.length + ' node(s)? This will dekit old and insert new.')) return;
@@ -975,7 +965,12 @@
       tree.forEach(function (n) { byNum[n.num] = n; });
       var keys = subtreeNums.sort(function (a, b) { return a - b; }).map(function (num) {
         var n = byNum[num];
-        return { vendor_sn: n.vendor_sn, father_sn: n.father_sn };
+        return {
+          vendor_sn: n.vendor_sn,
+          father_sn: n.father_sn,
+          assy_seq: (n.assy_seq === undefined || n.assy_seq === null || n.assy_seq === '') ? null : n.assy_seq,
+          stack: n.stack != null && String(n.stack).trim() !== '' ? String(n.stack).trim() : null
+        };
       });
       lockUI('Executing dekit...');
       var requestId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : String(Date.now());

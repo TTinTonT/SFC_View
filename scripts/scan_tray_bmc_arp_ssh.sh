@@ -7,6 +7,10 @@ set -euo pipefail
 # ARP+SSH scan: uses ARP as IP source (in addition to DHCP).
 # USE_SSH_FRU=2 (default): hybrid - try ipmitool first, fallback SSH (covers both BMC types).
 # Set USE_ARP_SOURCE=0 USE_SSH_FRU=0 for legacy DHCP+ipmitool only.
+#
+# Remote IPMI/SSH targets each BMC IP FROM THIS MACHINE. Run this script on the DHCP/ETF
+# scan host (SV default 10.24.10.190). If you run ipmitool from a laptop without the same
+# L2/L3 path to the BMC subnet, FRU will fail and downstream UIs will show SN/PN as NA.
 
 LEASES_FILE="${LEASES_FILE:-/var/lib/dhcp/dhcpd.leases}"
 STATE_DIR="${SCAN_STATE_DIR:-/root/TIN/scan_state}"
@@ -222,8 +226,11 @@ run_one() {
     # SSH only
     fru_out="$(timeout "$FRU_TIMEOUT" sshpass -p "$BMC_PASS" ssh -o ConnectTimeout="$LOGIN_TIMEOUT" -o StrictHostKeyChecking=no "$BMC_USER@$ip" "ipmitool fru print" 2> "$errfile")" || true
   elif [[ "$USE_SSH_FRU" == "2" ]]; then
-    # Hybrid: try ipmitool first, fallback SSH
+    # Hybrid: try ipmitool first, fallback SSH. LAN ipmitool can return a minimal FRU blob that
+    # still matches *FRU Device Description* so SSH is skipped — then Chassis SN/PN parse as NA.
+    local lan_fru_only=0
     if ipmi_login_test "$ip" 2>/dev/null; then
+      lan_fru_only=1
       if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
         fru_out="$(timeout "$FRU_TIMEOUT" sudo ipmitool -I "$IPMI_IF" -C "$IPMI_CIPHER" -U "$BMC_USER" -P "$BMC_PASS" -H "$ip" -R "$IPMI_RETRY" -N "$IPMI_RETRANS" fru print 2> "$errfile")" || true
       else
@@ -232,6 +239,7 @@ run_one() {
     fi
     if [[ -z "$fru_out" || "$fru_out" != *"FRU Device Description"* ]]; then
       fru_out="$(timeout "$FRU_TIMEOUT" sshpass -p "$BMC_PASS" ssh -o ConnectTimeout="$LOGIN_TIMEOUT" -o StrictHostKeyChecking=no "$BMC_USER@$ip" "ipmitool fru print" 2> "$errfile")" || true
+      lan_fru_only=0
     fi
   else
     # USE_SSH_FRU=0: ipmitool only
@@ -259,6 +267,17 @@ run_one() {
   [[ -z "$smm_mac" ]] && smm_mac="NA"
   [[ -z "$chassis_sn" ]] && chassis_sn="NA"
   [[ -z "$chassis_pn" ]] && chassis_pn="NA"
+  # Second hop: same BMC over SSH often returns full FRU when remote ipmitool did not.
+  if [[ "$USE_SSH_FRU" == "2" && "${lan_fru_only:-0}" == "1" && ( "$chassis_sn" == "NA" || "$chassis_pn" == "NA" || "$bmc_mac" == "NA" ) ]]; then
+    fru_ssh="$(timeout "$FRU_TIMEOUT" sshpass -p "$BMC_PASS" ssh -o ConnectTimeout="$LOGIN_TIMEOUT" -o StrictHostKeyChecking=no "$BMC_USER@$ip" "ipmitool fru print" 2> "$errfile")" || true
+    if [[ -n "$fru_ssh" && "$fru_ssh" == *"FRU Device Description"* ]]; then
+      read -r b2 s2 sn2 pn2 < <(printf "%s\n" "$fru_ssh" | parse_fru)
+      [[ -n "$b2" && "$b2" != "NA" ]] && bmc_mac="$b2"
+      [[ -n "$s2" && "$s2" != "NA" ]] && smm_mac="$s2"
+      [[ -n "$sn2" && "$sn2" != "NA" ]] && chassis_sn="$sn2"
+      [[ -n "$pn2" && "$pn2" != "NA" ]] && chassis_pn="$pn2"
+    fi
+  fi
   status="OK"
   if [[ "$chassis_sn" != "NA" && "$chassis_pn" != "NA" ]]; then
     echo -e "$ip\t$now_ts\t$bmc_mac\t$smm_mac\t$chassis_sn\t$chassis_pn" >> "$new_cache"

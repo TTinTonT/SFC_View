@@ -14,7 +14,13 @@ import requests
 from config.app_config import ANALYTICS_CACHE_DIR
 from sfc import client as sfc_client
 from sfc import parser as sfc_parser
-from config.etf_config import ROOMS, ETF_POLL_INTERVAL_SEC, SFC_LEVEL_GRADE, SFC_TRAY_STATUS_URL
+from config.etf_config import (
+    ROOMS,
+    ETF_POLL_INTERVAL_SEC,
+    SFC_LEVEL_GRADE,
+    SFC_TRAY_STATUS_URL,
+    SFC_TRAY_STATUS_URL_SV,
+)
 from flask import Blueprint, jsonify, render_template, request
 
 bp = Blueprint("etf", __name__, url_prefix="", template_folder="../templates")
@@ -279,27 +285,12 @@ def _maybe_start_background():
         pass
 
 
-@bp.route("/api/sfc/tray-status")
-def api_sfc_tray_status():
-    """Proxy SFC Test_Fixture_Status API; return sn_map for frontend merge. On SFC failure returns 200 with ok=False so UI still loads."""
-    try:
-        r = requests.post(
-            SFC_TRAY_STATUS_URL,
-            json={"Level_Grade": SFC_LEVEL_GRADE},
-            timeout=15,
-        )
-        r.raise_for_status()
-        data = r.json()
-    except requests.RequestException as e:
-        return jsonify({"ok": False, "error": str(e), "sn_map": {}})
-    except (ValueError, TypeError) as e:
-        return jsonify({"ok": False, "error": f"Invalid response: {e}", "sn_map": {}})
-
+def _sn_map_from_sfc_test_fixture_payload(data: dict) -> dict:
+    """Build SN -> tray fields from SFC Test_Fixture_Status JSON (DATA list)."""
+    sn_map: dict = {}
     raw_list = data.get("DATA") if isinstance(data, dict) else None
     if not isinstance(raw_list, list):
-        return jsonify({"ok": True, "sn_map": {}})
-
-    sn_map = {}
+        return sn_map
     for item in raw_list:
         if not isinstance(item, dict):
             continue
@@ -321,6 +312,45 @@ def api_sfc_tray_status():
                 "last_end_time": (item.get("Last_End_Time") or "").strip() or None,
                 "remark": remark,
             }
+    return sn_map
+
+
+def _fetch_sfc_tray_sn_map(post_url: str):
+    """
+    POST Test_Fixture_Status to post_url. Returns (sn_map, error_str).
+    error_str None on success (sn_map may be empty). On failure sn_map is {}.
+    """
+    u = (post_url or "").strip().rstrip("/")
+    if not u:
+        return {}, "SFC tray URL not configured"
+    try:
+        r = requests.post(u, json={"Level_Grade": SFC_LEVEL_GRADE}, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as e:
+        return {}, str(e)
+    except (ValueError, TypeError) as e:
+        return {}, f"Invalid response: {e}"
+    if not isinstance(data, dict):
+        return {}, None
+    return _sn_map_from_sfc_test_fixture_payload(data), None
+
+
+@bp.route("/api/sfc/tray-status")
+def api_sfc_tray_status():
+    """Proxy SFC Test_Fixture_Status (SJ URL); return sn_map for ETF Debug merge."""
+    sn_map, err = _fetch_sfc_tray_sn_map(SFC_TRAY_STATUS_URL)
+    if err:
+        return jsonify({"ok": False, "error": err, "sn_map": {}})
+    return jsonify({"ok": True, "sn_map": sn_map})
+
+
+@bp.route("/api/sfc/tray-status-sv")
+def api_sfc_tray_status_sv():
+    """Sunnyvale tray dashboard: same sn_map shape as /api/sfc/tray-status using SFC_TRAY_STATUS_URL_SV."""
+    sn_map, err = _fetch_sfc_tray_sn_map(SFC_TRAY_STATUS_URL_SV)
+    if err:
+        return jsonify({"ok": False, "error": err, "sn_map": {}})
     return jsonify({"ok": True, "sn_map": sn_map})
 
 

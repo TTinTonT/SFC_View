@@ -6,7 +6,15 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-UiBucket = Literal["idle", "testing", "testing_pass", "testing_fail", "on_hold", "unknown"]
+UiBucket = Literal[
+    "idle",
+    "testing",
+    "verify",
+    "testing_pass",
+    "testing_fail",
+    "on_hold",
+    "unknown",
+]
 
 
 def norm_str(v: Any) -> str:
@@ -42,7 +50,12 @@ def classify_tray(item: Dict[str, Any]) -> UiBucket:
         return "testing_fail"
 
     if status == "VERIFY":
+        return "verify"
+
+    running_statuses = {"TESTING", "IN_TEST", "RUNNING", "EXECUTING", "RUN"}
+    if status in running_statuses and not group_na:
         return "testing"
+
     if status == "EMPTY" and not group_na:
         return "testing"
 

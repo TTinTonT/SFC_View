@@ -11,12 +11,14 @@ import requests
 
 def _cfg():
     try:
-        from config.debug_config import CRABBER_BASE_URL, CRABBER_TOKEN, CRABBER_USER_ID, CRABBER_SITENAME
+        from crabber.profile import get_crabber_tuple
+
+        base, token, uid, site = get_crabber_tuple()
         return (
-            (CRABBER_BASE_URL or "").strip().rstrip("/"),
-            (CRABBER_TOKEN or "").strip(),
-            str(CRABBER_USER_ID or "41").strip(),
-            (CRABBER_SITENAME or "SanJose").strip(),
+            (base or "").strip().rstrip("/"),
+            (token or "").strip(),
+            str(uid or "41").strip(),
+            (site or "SanJose").strip(),
         )
     except Exception:
         return "", "", "41", "SanJose"

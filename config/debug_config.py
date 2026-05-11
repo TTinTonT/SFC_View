@@ -43,7 +43,18 @@ HOST_SSH_PASSWORD = os.environ.get("HOST_SSH_PASSWORD", get_default("HOST_SSH_PA
 CRABBER_BASE_URL = os.environ.get("CRABBER_BASE_URL", get_default("CRABBER_BASE_URL")).rstrip("/")
 CRABBER_TOKEN = os.environ.get("CRABBER_TOKEN", get_default("CRABBER_TOKEN"))
 CRABBER_USER_ID = str(os.environ.get("CRABBER_USER_ID", get_default("CRABBER_USER_ID") or "41")).strip()
+# Sunnyvale Crabber often uses a different Django user id than SJ (e.g. cookie user_id=12 vs 41).
+_sv_uid = (os.environ.get("CRABBER_SV_USER_ID", get_default("CRABBER_SV_USER_ID") or "") or "").strip()
+CRABBER_SV_USER_ID = _sv_uid if _sv_uid else CRABBER_USER_ID
 CRABBER_SITENAME = (os.environ.get("CRABBER_SITENAME", get_default("CRABBER_SITENAME") or "SanJose")).strip()
+CRABBER_SV_BASE_URL = (
+    os.environ.get("CRABBER_SV_BASE_URL", get_default("CRABBER_SV_BASE_URL") or "http://10.24.10.174:8000") or ""
+).strip().rstrip("/")
+_crabber_sv_tok = os.environ.get("CRABBER_SV_TOKEN", get_default("CRABBER_SV_TOKEN") or "").strip()
+CRABBER_SV_TOKEN = _crabber_sv_tok if _crabber_sv_tok else CRABBER_TOKEN
+CRABBER_SV_SITENAME = (
+    os.environ.get("CRABBER_SV_SITENAME", get_default("CRABBER_SV_SITENAME") or "SV_Worker4") or "SV_Worker4"
+).strip()
 # Oberon L10 log share UNC prefix (see crabber.log_unc_path); override with CRABBER_LOG_UNC_ROOT
 CRABBER_LOG_UNC_ROOT = os.environ.get("CRABBER_LOG_UNC_ROOT", get_default("CRABBER_LOG_UNC_ROOT") or "").strip()
 CRABBER_REPLAY_TIMEOUT_SEC = int(

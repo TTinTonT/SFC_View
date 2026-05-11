@@ -3,7 +3,14 @@
     <div class="etf-ot-backdrop"></div>
     <div class="etf-ot-dialog" role="dialog" aria-labelledby="etf-ot-title">
       <div class="etf-ot-header">
-        <h3 id="etf-ot-title" class="etf-ot-title">Online Test</h3>
+        <div class="etf-ot-header-row">
+          <h3 id="etf-ot-title" class="etf-ot-title">Online Test</h3>
+          <label class="etf-ot-muted" for="etf-ot-crabber-site" style="margin:0 6px 0 0;white-space:nowrap">Crabber</label>
+          <select id="etf-ot-crabber-site" class="etf-ot-input" title="San Jose = default site; SV = alternate API host" style="max-width:10rem">
+            <option value="sj">San Jose</option>
+            <option value="sv">SV</option>
+          </select>
+        </div>
         <button type="button" class="etf-ot-close" id="etf-ot-close" title="Close">&times;</button>
       </div>
       <div class="etf-ot-body">

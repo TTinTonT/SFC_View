@@ -31,12 +31,16 @@ class TestClassifyTray(unittest.TestCase):
         r = _row(Status="Empty", Group_Name="N/A", Remark=None)
         self.assertEqual(classify_tray(r), "idle")
 
-    def test_verify_group_na_is_testing(self):
+    def test_verify_is_verify_bucket(self):
         r = _row(Status="Verify", Group_Name="N/A", Remark=None, Serial_Number="123")
+        self.assertEqual(classify_tray(r), "verify")
+
+    def test_empty_group_not_na_is_running(self):
+        r = _row(Status="Empty", Group_Name="FCT", Remark=None)
         self.assertEqual(classify_tray(r), "testing")
 
-    def test_empty_group_not_na_is_testing(self):
-        r = _row(Status="Empty", Group_Name="FCT", Remark=None)
+    def test_testing_status_is_running(self):
+        r = _row(Status="Testing", Group_Name="FCT", Remark=None)
         self.assertEqual(classify_tray(r), "testing")
 
     def test_pass_group_not_na(self):

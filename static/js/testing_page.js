@@ -69,6 +69,15 @@
     var autoRefreshRemainingSec = 0;
     var CRABBER_POLL_MS = 60000;
     var AUTO_REFRESH_MS = 60000;
+    function crabberProfileQuery() {
+      try {
+        var v = sessionStorage.getItem('sfc_crabber_profile') || 'sj';
+        if (v !== 'sj' && v !== 'sv') v = 'sj';
+        return '&crabber_profile=' + encodeURIComponent(v);
+      } catch (e) {
+        return '&crabber_profile=sj';
+      }
+    }
     var ecValidateInFlight = false;
     var failHistoryLoading = false;
     var lastAiActionAt = 0;
@@ -130,7 +139,7 @@
           stopCrabberPoll();
           return;
         }
-        api('/api/debug/testing/overview?sn=' + encodeURIComponent(sn)).then(function (res) {
+        api('/api/debug/testing/overview?sn=' + encodeURIComponent(sn) + crabberProfileQuery()).then(function (res) {
           if (!res.json || !res.json.ok) {
             stopCrabberPoll();
             return;
@@ -216,11 +225,6 @@
       [btnSearch, btnPass, btnFail, btnRepair, treeDekit, treeKitting, treeExpandAll, treeCollapseAll, btnValidateEc, btnUpdateFail, btnDidoNext, btnDoPass, btnDoFail, btnRoNext, btnOnlineTest, btnAiStart, btnAiEnd, btnAiUpload].forEach(function (b) {
         if (b) b.disabled = false;
       });
-      if (hasInvalidDuplicate) {
-        treeDekit.disabled = true;
-        treeKitting.disabled = true;
-        btnRepair.disabled = true;
-      }
     }
     function autoSizeInput(inp) {
       if (!inp) return;
@@ -323,7 +327,7 @@
       trayLinkLedSet('idle', '—');
     }
     function refreshCurrentSnData(sn, allowTerminalReconnect) {
-      var ovUrl = '/api/debug/testing/overview?sn=' + encodeURIComponent(sn);
+      var ovUrl = '/api/debug/testing/overview?sn=' + encodeURIComponent(sn) + crabberProfileQuery();
       var fsUrl = '/api/debug/repair/flow-state?sn=' + encodeURIComponent(sn);
       return Promise.all([api(ovUrl).catch(function () { return { json: { ok: false } }; }), api(fsUrl)])
         .then(function (pair) {
@@ -555,11 +559,8 @@
         var invalid = (res.json && res.json.invalid_duplicates) ? res.json.invalid_duplicates : [];
         hasInvalidDuplicate = invalid.length > 0;
         if (hasInvalidDuplicate) {
-          dupBanner.textContent = 'WARNING: Duplicate vendor SN detected (ASSY_FLAG=Y, non-CONFIG): ' + invalid.join(', ') + '. Please contact IT to fix data via IT Kitting page before proceeding.';
+          dupBanner.textContent = 'WARNING: Duplicate vendor SN detected (ASSY_FLAG=Y, non-CONFIG): ' + invalid.join(', ') + '. You may still de-kit, kit, or repair; IT Kitting cleanup is recommended.';
           dupBanner.classList.remove('hidden');
-          treeDekit.disabled = true;
-          treeKitting.disabled = true;
-          btnRepair.disabled = true;
         } else {
           dupBanner.classList.add('hidden');
         }
@@ -950,7 +951,6 @@
       var sn = (inputSn.value || '').trim();
       var emp = (inputEmpTop.value || '').trim();
       if (!sn) { showErr('Search SN first'); return; }
-      if (hasInvalidDuplicate) { showErr('Duplicate vendor SN data is invalid. Please fix via IT Kitting first.'); return; }
       if (!selReason.value || !selAction.value || !selDuty.value) { showErr('Please fill Reason/Action/Duty.'); return; }
       var kitBuilt = buildKitList(false);
       if (kitBuilt.error) { showErr(kitBuilt.error); return; }
@@ -988,7 +988,6 @@
       var sn = (inputSn.value || '').trim();
       var emp = (inputEmpTop.value || '').trim();
       if (!sn) { showErr('Search SN first.'); return; }
-      if (hasInvalidDuplicate) { showErr('Duplicate vendor SN data is invalid. Please fix via IT Kitting first.'); return; }
       var kitBuilt = buildKitList(true);
       if (kitBuilt.error) { showErr(kitBuilt.error); return; }
       if (!confirm('Kit ' + kitBuilt.list.length + ' node(s)? This will dekit old and insert new.')) return;
@@ -1051,7 +1050,12 @@
       tree.forEach(function (n) { byNum[n.num] = n; });
       var keys = subtreeNums.sort(function (a, b) { return a - b; }).map(function (num) {
         var n = byNum[num];
-        return { vendor_sn: n.vendor_sn, father_sn: n.father_sn };
+        return {
+          vendor_sn: n.vendor_sn,
+          father_sn: n.father_sn,
+          assy_seq: (n.assy_seq === undefined || n.assy_seq === null || n.assy_seq === '') ? null : n.assy_seq,
+          stack: n.stack != null && String(n.stack).trim() !== '' ? String(n.stack).trim() : null
+        };
       });
       lockUI('Executing dekit...');
       var requestId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : String(Date.now());
@@ -1258,7 +1262,7 @@
         if (!s) { showErr('Enter SN first'); return; }
         if (typeof window.etfOpenOnlineTestModal !== 'function') return;
         lockUI('Checking…');
-        api('/api/etf/online-test/wip?sn=' + encodeURIComponent(s.trim().toUpperCase())).then(function (res) {
+        api('/api/etf/online-test/wip?sn=' + encodeURIComponent(s.trim().toUpperCase()) + crabberProfileQuery()).then(function (res) {
           unlockUI();
           if (!res.json || !res.json.ok) {
             showErr((res.json && res.json.error) ? res.json.error : 'WIP check failed');

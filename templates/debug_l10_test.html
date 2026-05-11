@@ -53,21 +53,198 @@
     border: 1px solid rgba(0,0,0,0.08); width: 100%;
     transition: box-shadow 0.15s, transform 0.1s;
   }
-  .l10-tray-btn:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
   .l10-tray-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-  .l10-tray-btn[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--color-primary); }
-  .l10-tray--idle { background: #ffffff; color: #111827; }
-  .dark .l10-tray--idle { background: var(--color-bg); color: var(--color-text); border-color: var(--color-border); }
-  .l10-tray--testing { background: #fef9c3; color: #713f12; border-color: #fde047; }
-  .dark .l10-tray--testing { background: rgba(234, 179, 8, 0.2); color: #fde047; border-color: rgba(234, 179, 8, 0.45); }
-  .l10-tray--on_hold { background: #ca8a04; color: #fffbeb; border-color: #a16207; }
-  .dark .l10-tray--on_hold { background: #a16207; color: #fffbeb; }
-  .l10-tray--testing_pass { background: #22c55e; color: #052e16; border-color: #15803d; font-weight: 600; }
-  .dark .l10-tray--testing_pass { background: #15803d; color: #dcfce7; }
-  .l10-tray--testing_fail { background: #ef4444; color: #fff1f2; border-color: #b91c1c; font-weight: 600; }
-  .dark .l10-tray--testing_fail { background: #b91c1c; color: #fecaca; }
-  .l10-tray--unknown { background: #e5e7eb; color: #374151; border-style: dashed; }
-  .dark .l10-tray--unknown { background: #374151; color: #e5e7eb; border-color: #6b7280; }
+  @keyframes l10-tray-shine {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(280%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .l10-mtf-region .l10-tray-btn.l10-tray--testing::after { animation: none; opacity: 0; }
+  }
+  /* MTF: tabs = one site at a time; tray colors = pass green / fail red / verify yellow / running yellow + sweep */
+  .l10-mtf-site-picker { margin-bottom: 1.25rem; }
+  .l10-mtf-tabstrip {
+    display: flex;
+    gap: 0.35rem;
+    margin-bottom: 0;
+    flex-wrap: wrap;
+  }
+  .l10-mtf-tab {
+    flex: 1;
+    min-width: 11rem;
+    padding: 0.55rem 1rem;
+    border-radius: 10px 10px 0 0;
+    border: 1px solid var(--color-border);
+    border-bottom: none;
+    background: var(--color-bg);
+    color: var(--color-muted);
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+  }
+  .l10-mtf-tab:hover { color: var(--color-text); }
+  .l10-mtf-tab.is-active {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+  .l10-mtf-tab.is-active.l10-mtf-tab--sj { box-shadow: inset 0 -3px 0 0 #059669; }
+  .l10-mtf-tab.is-active.l10-mtf-tab--sv { box-shadow: inset 0 -3px 0 0 #14b8a6; }
+  .l10-mtf-panel {
+    border: 1px solid var(--color-border);
+    border-radius: 0 12px 12px 12px;
+    padding: 0.85rem 1rem 1.05rem;
+    background: var(--color-surface);
+  }
+  .l10-mtf-panel.hidden { display: none !important; }
+  .l10-mtf-group { padding: 0; border: none; background: transparent; box-shadow: none; }
+  .l10-mtf-group--sj { border-left: 4px solid #059669; padding-left: 0.65rem; margin-left: 0.1rem; }
+  .l10-mtf-group--sv { border-left: 4px solid #14b8a6; padding-left: 0.65rem; margin-left: 0.1rem; }
+  .l10-mtf-region .l10-queuebar {
+    background: rgba(99, 102, 241, 0.06);
+    border-bottom-color: var(--color-border);
+  }
+  .l10-mtf-region .l10-tray-btn[aria-expanded="true"] {
+    box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.85);
+  }
+  .l10-mtf-region .l10-tray-btn:hover { box-shadow: 0 1px 5px rgba(0,0,0,0.12); }
+  .l10-mtf-region .l10-tray--idle {
+    background: #ffffff;
+    color: #111827;
+    border-color: rgba(0,0,0,0.1);
+  }
+  .dark .l10-mtf-region .l10-tray--idle {
+    background: var(--color-bg);
+    color: var(--color-text);
+    border-color: var(--color-border);
+  }
+  .l10-mtf-region .l10-tray--verify {
+    background: #fef9c3;
+    color: #713f12;
+    border-color: #facc15;
+  }
+  .dark .l10-mtf-region .l10-tray--verify {
+    background: rgba(234, 179, 8, 0.22);
+    color: #fde047;
+    border-color: rgba(250, 204, 21, 0.5);
+  }
+  .l10-mtf-region .l10-tray-btn.l10-tray--testing {
+    position: relative;
+    overflow: hidden;
+    background: #fef08a;
+    color: #713f12;
+    border-color: #eab308;
+  }
+  .dark .l10-mtf-region .l10-tray-btn.l10-tray--testing {
+    background: rgba(202, 138, 4, 0.35);
+    color: #fef9c3;
+    border-color: rgba(250, 204, 21, 0.55);
+  }
+  .l10-mtf-region .l10-tray-btn.l10-tray--testing::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 42%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.85), transparent);
+    animation: l10-tray-shine 1.85s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .l10-mtf-region .l10-tray-btn.l10-tray--testing .l10-tray-row1,
+  .l10-mtf-region .l10-tray-btn.l10-tray--testing .l10-tray-row2 {
+    position: relative;
+    z-index: 1;
+  }
+  .l10-mtf-region .l10-tray--on_hold {
+    background: #92400e;
+    color: #fffbeb;
+    border-color: #78350f;
+  }
+  .dark .l10-mtf-region .l10-tray--on_hold {
+    background: #9a3412;
+    color: #ffedd5;
+    border-color: #c2410c;
+  }
+  .l10-mtf-region .l10-tray--testing_pass {
+    background: #22c55e;
+    color: #052e16;
+    border-color: #15803d;
+    font-weight: 600;
+  }
+  .dark .l10-mtf-region .l10-tray--testing_pass {
+    background: #15803d;
+    color: #dcfce7;
+    border-color: #4ade80;
+  }
+  .l10-mtf-region .l10-tray--testing_fail {
+    background: #ef4444;
+    color: #fff1f2;
+    border-color: #b91c1c;
+    font-weight: 600;
+  }
+  .dark .l10-mtf-region .l10-tray--testing_fail {
+    background: #b91c1c;
+    color: #fecaca;
+    border-color: #f87171;
+  }
+  .l10-mtf-region .l10-tray--unknown {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px dashed #9ca3af;
+  }
+  .dark .l10-mtf-region .l10-tray--unknown {
+    background: #374151;
+    color: #e5e7eb;
+    border-color: #6b7280;
+  }
+  /* Legend swatches (no animation on tiny squares) */
+  .l10-legend .l10-swatch.l10-tray--idle,
+  .l10-legend .l10-swatch.l10-tray--verify,
+  .l10-legend .l10-swatch.l10-tray--testing,
+  .l10-legend .l10-swatch.l10-tray--on_hold,
+  .l10-legend .l10-swatch.l10-tray--testing_pass,
+  .l10-legend .l10-swatch.l10-tray--testing_fail,
+  .l10-legend .l10-swatch.l10-tray--unknown,
+  .dark .l10-legend .l10-swatch.l10-tray--idle,
+  .dark .l10-legend .l10-swatch.l10-tray--verify,
+  .dark .l10-legend .l10-swatch.l10-tray--testing,
+  .dark .l10-legend .l10-swatch.l10-tray--on_hold,
+  .dark .l10-legend .l10-swatch.l10-tray--testing_pass,
+  .dark .l10-legend .l10-swatch.l10-tray--testing_fail,
+  .dark .l10-legend .l10-swatch.l10-tray--unknown { box-shadow: none; }
+  .l10-legend .l10-swatch.l10-tray--idle { background: #ffffff; border-color: #d1d5db; }
+  .l10-legend .l10-swatch.l10-tray--verify { background: #fef9c3; border-color: #facc15; }
+  .l10-legend .l10-swatch.l10-tray--testing { background: #fef08a; border-color: #eab308; }
+  .l10-legend .l10-swatch.l10-tray--on_hold { background: #92400e; border-color: #78350f; }
+  .l10-legend .l10-swatch.l10-tray--testing_pass { background: #22c55e; border-color: #15803d; }
+  .l10-legend .l10-swatch.l10-tray--testing_fail { background: #ef4444; border-color: #b91c1c; }
+  .l10-legend .l10-swatch.l10-tray--unknown { background: #f3f4f6; border-style: dashed; border-color: #9ca3af; }
+  .dark .l10-legend .l10-swatch.l10-tray--idle { background: var(--color-bg); border-color: var(--color-border); }
+  .dark .l10-legend .l10-swatch.l10-tray--verify { background: rgba(234, 179, 8, 0.25); border-color: #ca8a04; }
+  .dark .l10-legend .l10-swatch.l10-tray--testing { background: rgba(202, 138, 4, 0.35); border-color: #eab308; }
+  .dark .l10-legend .l10-swatch.l10-tray--on_hold { background: #9a3412; border-color: #c2410c; }
+  .dark .l10-legend .l10-swatch.l10-tray--testing_pass { background: #15803d; border-color: #4ade80; }
+  .dark .l10-legend .l10-swatch.l10-tray--testing_fail { background: #b91c1c; border-color: #f87171; }
+  .dark .l10-legend .l10-swatch.l10-tray--unknown { background: #374151; border-color: #6b7280; }
+  /* Crabber FA trays */
+  .l10-fa-dash .l10-tray-btn:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+  .l10-fa-dash .l10-tray--idle { background: #ffffff; color: #111827; border-color: rgba(0,0,0,0.08); }
+  .dark .l10-fa-dash .l10-tray--idle { background: var(--color-bg); color: var(--color-text); border-color: var(--color-border); }
+  .l10-fa-dash .l10-tray--verify { background: #fef9c3; color: #713f12; border-color: #fde047; }
+  .dark .l10-fa-dash .l10-tray--verify { background: rgba(234, 179, 8, 0.2); color: #fde047; border-color: rgba(234, 179, 8, 0.45); }
+  .l10-fa-dash .l10-tray--testing { background: #fef08a; color: #713f12; border-color: #eab308; }
+  .dark .l10-fa-dash .l10-tray--testing { background: rgba(234, 179, 8, 0.25); color: #fef9c3; border-color: #ca8a04; }
+  .l10-fa-dash .l10-tray--on_hold { background: #ca8a04; color: #fffbeb; border-color: #a16207; }
+  .dark .l10-fa-dash .l10-tray--on_hold { background: #a16207; color: #fffbeb; }
+  .l10-fa-dash .l10-tray--testing_pass { background: #22c55e; color: #052e16; border-color: #15803d; font-weight: 600; }
+  .dark .l10-fa-dash .l10-tray--testing_pass { background: #15803d; color: #dcfce7; }
+  .l10-fa-dash .l10-tray--testing_fail { background: #ef4444; color: #fff1f2; border-color: #b91c1c; font-weight: 600; }
+  .dark .l10-fa-dash .l10-tray--testing_fail { background: #b91c1c; color: #fecaca; }
+  .l10-fa-dash .l10-tray--unknown { background: #e5e7eb; color: #374151; border-style: dashed; border-color: #9ca3af; }
+  .dark .l10-fa-dash .l10-tray--unknown { background: #374151; color: #e5e7eb; border-color: #6b7280; }
   .l10-tray-row1 { display: flex; justify-content: space-between; gap: 0.25rem; font-weight: 600; line-height: 1.2; }
   .l10-tray-row2 {
     display: flex; justify-content: space-between; align-items: flex-start; gap: 0.35rem;
@@ -94,6 +271,7 @@
   .etf-ot-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
   .etf-ot-dialog { position: relative; z-index: 1; width: 100%; max-width: 520px; max-height: 90vh; overflow: auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
   .etf-ot-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--color-border); }
+  .etf-ot-header-row { display: flex; align-items: center; gap: 0.45rem; flex: 1; min-width: 0; flex-wrap: wrap; }
   .etf-ot-title { font-size: 1.1rem; font-weight: 700; margin: 0; color: var(--color-text); }
   .etf-ot-close { background: none; border: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--color-muted); }
   .etf-ot-body { padding: 1rem; }
@@ -134,6 +312,64 @@
   .l10-force-btn:hover { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
   .l10-queue-svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
   .l10-tray-wrap { z-index: 3; position: relative; }
+  .l10-fa-dash { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px dashed var(--color-border); }
+  .l10-fa-regions-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+  .l10-fa-col-sv {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-left: 3px solid #14b8a6;
+    padding-left: 0.65rem;
+    margin-left: 0.05rem;
+    min-width: 0;
+  }
+  @media (max-width: 900px) {
+    .l10-fa-regions-inner { grid-template-columns: 1fr; }
+    .l10-fa-col-sv { border-left: none; padding-left: 0; margin-left: 0; border-top: 2px solid #14b8a6; padding-top: 0.75rem; }
+  }
+  .l10-fa-region-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.55rem;
+    color: var(--color-text);
+  }
+  .l10-etf-sv-block { margin-top: 0; padding-top: 0; border-top: none; }
+  .l10-etf-sv-block--merged {
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--color-border);
+  }
+  .l10-etf-sv-scroll { overflow-x: auto; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg); }
+  .l10-etf-sv-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+  .l10-etf-sv-table th {
+    text-align: left; padding: 0.4rem 0.5rem; font-weight: 600; color: var(--color-muted);
+    text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.65rem; border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface); white-space: nowrap;
+  }
+  .l10-etf-sv-td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--color-border); vertical-align: top; color: var(--color-text); }
+  .l10-etf-sv-td-muted { padding: 0.75rem; color: var(--color-muted); font-size: 0.75rem; }
+  .l10-etf-sv-mono { font-family: ui-monospace, monospace; font-size: 0.68rem; word-break: break-all; }
+  .l10-etf-sv-tr--dash { background: var(--color-surface); }
+  .l10-etf-sv-tr--scan { background: #ffffff; color: #111827; }
+  .dark .l10-etf-sv-tr--scan { background: #f8fafc; color: var(--color-text); }
+  .l10-etf-sv-tr--st-testing { background: #fef9c3; color: #713f12; }
+  .dark .l10-etf-sv-tr--st-testing { background: rgba(234, 179, 8, 0.22); color: #fef9c3; }
+  .l10-etf-sv-tr--st-pass { background: #dcfce7; color: #052e16; }
+  .dark .l10-etf-sv-tr--st-pass { background: rgba(22, 163, 74, 0.28); color: #bbf7d0; }
+  .l10-etf-sv-tr--st-fail { background: #fee2e2; color: #7f1d1d; }
+  .dark .l10-etf-sv-tr--st-fail { background: rgba(185, 28, 28, 0.28); color: #fecaca; }
+  .l10-etf-sv-tr:hover { filter: brightness(0.98); }
+  .l10-etf-sv-legend-scan {
+    display: inline-block; padding: 0.05rem 0.35rem; border-radius: 4px; background: #ffffff; border: 1px solid rgba(0,0,0,0.12); font-size: 0.7rem;
+  }
+  .dark .l10-etf-sv-legend-scan { background: #f8fafc; border-color: var(--color-border); }
+  .l10-etf-sv-merge-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.35rem; color: var(--color-text); }
+  .l10-etf-sv-merge-desc { max-width: 100%; margin-bottom: 0.35rem; line-height: 1.35; }
   </style>
 </head>
 <body>
@@ -143,14 +379,15 @@
     <main>
       <div class="panel">
         <h1 class="text-2xl font-bold mb-2">L10 test</h1>
-        <p class="text-sm mb-3" style="color: var(--color-muted);">Test bases (fixtures) and trays (slots) from SFC. Collapsed cards hide idle trays only.</p>
+        <p class="text-sm mb-3" style="color: var(--color-muted); max-width: 56rem;">Use the <strong>SJ / SV</strong> tabs to show one MTF site at a time. Each polls its own <code>Test_Fixture_Status</code> (<strong>SJ</strong> → <code>SFC_TRAY_STATUS_URL</code>, <strong>SV</strong> → <code>SFC_TRAY_STATUS_URL_SV</code>). Tray colors: <strong>green</strong> pass, <strong>red</strong> fail, <strong>yellow</strong> verify, <strong>yellow + moving highlight</strong> when a run is in progress (SFC <code>Testing</code> / occupied <code>Empty</code> slot). Crabber FA shows SJ rack cards; <strong>FA — SV</strong> is a single column: Crabber slot info merges into the <strong>ETF SV DHCP</strong> table by serial number (no separate SV card rack). That table tints rows <strong>yellow</strong> (testing), <strong>green</strong> (pass), <strong>red</strong> (fail) and keeps the last merged slot/remark for each SN in this browser session if Crabber no longer lists the tray.</p>
 
         <div class="l10-legend" id="l10-legend" aria-label="Status colors">
-          <span><span class="l10-swatch l10-tray--idle"></span> Idle</span>
-          <span><span class="l10-swatch l10-tray--testing"></span> Testing</span>
-          <span><span class="l10-swatch l10-tray--on_hold"></span> On hold</span>
           <span><span class="l10-swatch l10-tray--testing_pass"></span> Pass</span>
           <span><span class="l10-swatch l10-tray--testing_fail"></span> Fail</span>
+          <span><span class="l10-swatch l10-tray--verify"></span> Verify</span>
+          <span><span class="l10-swatch l10-tray--testing"></span> Running</span>
+          <span><span class="l10-swatch l10-tray--idle"></span> Idle</span>
+          <span><span class="l10-swatch l10-tray--on_hold"></span> On hold</span>
           <span><span class="l10-swatch l10-tray--unknown"></span> Other</span>
         </div>
 
@@ -159,12 +396,50 @@
           <span id="l10-meta-countdown" class="l10-meta-countdown"></span>
         </div>
         <div id="l10-error" class="msg-error mb-3 hidden" role="alert"></div>
-        <div class="l10-cd-row" title="Applied after a successful Online test start on this page; controls wait before the next test on the same test base.">
-          <span><strong>Cooldown</strong> after each successful start (same test base):</span>
-          <label>Min <input type="number" id="l10-cd-min" min="0" max="180" value="2" step="1"></label>
-          <label>Sec <input type="number" id="l10-cd-sec" min="0" max="59" value="0" step="1"></label>
+
+        <div class="l10-mtf-site-picker" aria-label="MTF site selector">
+          <div class="l10-mtf-tabstrip" role="tablist">
+            <button type="button" class="l10-mtf-tab l10-mtf-tab--sj is-active" role="tab" id="l10-tab-sj" aria-selected="true" aria-controls="l10-mtf-panel-sj" tabindex="0">SJ MTF — San José</button>
+            <button type="button" class="l10-mtf-tab l10-mtf-tab--sv" role="tab" id="l10-tab-sv" aria-selected="false" aria-controls="l10-mtf-panel-sv" tabindex="-1">SV MTF — Sunnyvale</button>
+          </div>
+          <div id="l10-mtf-panel-sj" class="l10-mtf-panel" role="tabpanel" aria-labelledby="l10-tab-sj">
+            <div class="l10-mtf-group l10-mtf-group--sj">
+              <section class="l10-mtf-region l10-mtf-region--sj" aria-labelledby="l10-heading-sj-mtf">
+                <h2 id="l10-heading-sj-mtf" class="text-xl font-bold mb-1" style="color:var(--color-text);">San José test bases</h2>
+                <p class="text-sm mb-3" style="color:var(--color-muted);">San José tray API only. Collapsed cards hide idle trays.</p>
+                <div class="l10-cd-row" title="Applied after a successful Online test start on this page; controls wait before the next test on the same test base.">
+                  <span><strong>Cooldown</strong> after each successful start (same SJ test base):</span>
+                  <label>Min <input type="number" id="l10-cd-min" min="0" max="180" value="2" step="1"></label>
+                  <label>Sec <input type="number" id="l10-cd-sec" min="0" max="59" value="0" step="1"></label>
+                </div>
+                <div id="l10-grid-sj" class="l10-grid" data-site="sj"></div>
+              </section>
+            </div>
+          </div>
+          <div id="l10-mtf-panel-sv" class="l10-mtf-panel hidden" role="tabpanel" aria-labelledby="l10-tab-sv">
+            <div class="l10-mtf-group l10-mtf-group--sv">
+              <section class="l10-mtf-region l10-mtf-region--sv" aria-labelledby="l10-heading-sv-mtf">
+                <h2 id="l10-heading-sv-mtf" class="text-xl font-bold mb-1" style="color:var(--color-text);">Sunnyvale test bases</h2>
+                <p class="text-sm mb-3" style="color:var(--color-muted);">SV tray API (<code>SFC_TRAY_STATUS_URL_SV</code>). Queue is SV-only.</p>
+                <div class="l10-cd-row" title="Cooldown before the next online test start on this SV test base.">
+                  <span><strong>Cooldown</strong> after each successful start (same SV test base):</span>
+                  <label>Min <input type="number" id="l10-cd-min-sv" min="0" max="180" value="2" step="1"></label>
+                  <label>Sec <input type="number" id="l10-cd-sec-sv" min="0" max="59" value="0" step="1"></label>
+                </div>
+                <div id="l10-grid-sv" class="l10-grid" data-site="sv"></div>
+              </section>
+            </div>
+          </div>
         </div>
-        <div id="l10-grid" class="l10-grid"></div>
+
+        <div class="l10-fa-dash" id="l10-crabber-fa-dashboard">
+          <h2 class="text-lg font-bold mb-1" style="color:var(--color-text);">Crabber FA — SJ &amp; SV</h2>
+          <p class="text-sm mb-2" style="color: var(--color-muted); max-width: 52rem;">
+            L10 tests in PROC on machines whose name ends with <code style="font-size:0.75rem;">_FA_<em>NNN</em></code>; global slot <strong>1–13</strong> = ETF&nbsp;1, <strong>14–26</strong> = ETF&nbsp;2. Sample first pages only — increase later if needed.
+          </p>
+          <div id="l10-crabber-fa-meta" class="text-xs mb-2" style="color: var(--color-muted);"></div>
+          <div id="l10-crabber-fa-regions"></div>
+        </div>
       </div>
     </main>
     {% include 'partials/etf_online_test_modal.html' %}

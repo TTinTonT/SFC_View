@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Change OK (de-kit/kit): fetch_assy_tree, count_dekitted_parts, build_numbered_tree,
-expand_selection_to_flat, dekit_nodes, insert_assy_row.
+Kitting / de-kit (Change OK): fetch_assy_tree, dekit_nodes, insert_assy_row, validators.
 """
-from .sql_queries import (
+from repair_module.sql.kitting_sql import (
     KITTING_FETCH_ASSY_TREE,
     KITTING_COUNT_DEKITTED,
     KITTING_INSERT_SELECT,
@@ -20,7 +19,7 @@ def _is_config_vendor(vendor_sn):
 
 
 def fetch_assy_tree(conn, sn, assy_flag=None):
-    """Lấy row assy cho SN theo query chuẩn UI. Trả về (cols, rows)."""
+    """Load assy rows for SN. Returns (cols, rows)."""
     cur = conn.cursor()
     try:
         cur.execute(KITTING_FETCH_ASSY_TREE, {"sn": sn.upper()})
@@ -36,7 +35,7 @@ def fetch_assy_tree(conn, sn, assy_flag=None):
 
 
 def count_dekitted_parts(conn, sn):
-    """Đếm số part ASSY_FLAG='N' trong KITTING_GROUP."""
+    """Count ASSY_FLAG='N' rows in kitting group."""
     cur = conn.cursor()
     try:
         cur.execute(KITTING_COUNT_DEKITTED, [sn.upper()])
@@ -46,7 +45,7 @@ def count_dekitted_parts(conn, sn):
 
 
 def build_numbered_tree(cols, rows):
-    """Dựng cây theo FATHER_SN. Trả về (numbered_list, vendor_to_row)."""
+    """Build tree keyed by VENDOR_SN/FATHER_SN (legacy shape). Returns (numbered_list, vendor_to_row)."""
     col_idx = {c.upper(): i for i, c in enumerate(cols)}
     idx_vendor = col_idx.get("VENDOR_SN", -1)
     idx_father = col_idx.get("FATHER_SN", -1)
@@ -63,7 +62,7 @@ def build_numbered_tree(cols, rows):
             vendor_to_row[node_key] = row_dict
             rows_list.append((vsn, father, row_dict))
 
-    vendor_sns_set = set(vsn for vsn, _, _ in rows_list)
+    vendor_sns_set = {vsn for vsn, _, _ in rows_list}
     children_of = {}
     for vsn, father, _ in rows_list:
         if father is not None and father in vendor_sns_set:
@@ -74,6 +73,7 @@ def build_numbered_tree(cols, rows):
     def sort_key(node_key):
         r = vendor_to_row.get(node_key, {})
         return (r.get("ASSY_ORD") if idx_assy_ord >= 0 else None) or 0
+
     roots = sorted(roots, key=sort_key)
     for k in children_of:
         children_of[k] = sorted(children_of[k], key=lambda nk: sort_key(nk))
@@ -103,8 +103,7 @@ def build_numbered_tree(cols, rows):
 
 def build_numbered_tree_preserve_order(cols, rows):
     """
-    Build numbered tree theo SQL order (ASSY_SEQ), key node = (SN, VENDOR_SN, FATHER_SN).
-    Parent rule: child.FATHER_SN == parent.VENDOR_SN trong cùng SN.
+    Build numbered tree in SQL order (ASSY_SEQ); node key = (SN, VENDOR_SN, FATHER_SN).
     """
     rows_in_order = []
     vendor_to_keys = {}
@@ -174,7 +173,7 @@ def build_numbered_tree_preserve_order(cols, rows):
 
 
 def collect_subtree_nodes(numbered_list, root_key):
-    """Collect subtree node_keys theo thứ tự xuất hiện trong numbered_list."""
+    """Collect subtree node_keys in numbered_list order."""
     by_parent = {}
     for _, nk, _, _, parent_num, _ in numbered_list:
         by_parent.setdefault(parent_num, []).append(nk)
@@ -201,7 +200,7 @@ def collect_subtree_nodes(numbered_list, root_key):
 
 
 def expand_selection_to_flat(numbered_list, vendor_to_row, selected_numbers):
-    """Mở rộng selection: father -> cả cụm. Trả về list (num, node_key, row, is_father, parent_node_key, depth)."""
+    """Expand selection: father -> full subtree."""
     selected_set = set(int(str(x).strip()) for x in selected_numbers if str(x).strip().isdigit())
     by_num = {t[0]: t for t in numbered_list}
     added_node_keys = set()
@@ -229,8 +228,8 @@ def expand_selection_to_flat(numbered_list, vendor_to_row, selected_numbers):
 
 
 def _collect_subtree(root_node_key, vendor_to_row):
-    """Trả về set node_key thuộc cây con của root."""
-    parent_vsns = set(k[0] for k in vendor_to_row)
+    """Return set of node_keys in subtree of root."""
+    parent_vsns = {k[0] for k in vendor_to_row}
     children_of = {}
     for (vsn, father), row in vendor_to_row.items():
         if father is not None and father in parent_vsns:
@@ -248,7 +247,6 @@ def _collect_subtree(root_node_key, vendor_to_row):
 
 
 def _coerce_dekit_spec(key):
-    """Normalize de-kit target to dict vendor_sn, father_sn, assy_seq, stack."""
     if isinstance(key, dict):
         v = (key.get("vendor_sn") or "").strip()
         f = key.get("father_sn")
@@ -273,7 +271,6 @@ def _dekit_is_scoped(spec):
 
 
 def _execute_dekit_update(cur, sn, emp, spec):
-    """Run one scoped or legacy UPDATE; returns rowcount."""
     sql = (
         "UPDATE SFISM4.R_ASSY_COMPONENT_T "
         "SET ASSY_FLAG = 'N', IN_STATION_TIME = SYSDATE, EMP_NO = :emp "
@@ -297,7 +294,7 @@ def _execute_dekit_update(cur, sn, emp, spec):
 
 
 def dekit_nodes(conn, sn, node_keys, emp, auto_commit=True, skip_missing=False):
-    """UPDATE ASSY_FLAG='N' per target. Dict keys may include assy_seq/stack so one row matches (duplicate vendor SN)."""
+    """UPDATE ASSY_FLAG='N' per target; dict keys may include assy_seq/stack for a single physical row."""
     if not node_keys:
         return 0, ""
     cur = conn.cursor()
@@ -335,10 +332,6 @@ def dekit_nodes(conn, sn, node_keys, emp, auto_commit=True, skip_missing=False):
 
 
 def verify_dekit_targets(cur, sn, specs):
-    """
-    After de-kit UPDATEs: every matching row must be ASSY_FLAG=N.
-    Scoped specs (assy_seq and/or stack) must match exactly one row.
-    """
     for spec in specs:
         sql = (
             "SELECT COUNT(*), NVL(SUM(CASE WHEN UPPER(NVL(ASSY_FLAG, '')) = 'N' THEN 1 ELSE 0 END), 0) "
@@ -368,7 +361,6 @@ def verify_dekit_targets(cur, sn, specs):
 
 
 def dekit_specs_from_request_items(dekit_keys):
-    """Build normalized de-kit specs from JSON list of dicts (vendor_sn, father_sn, assy_seq, stack)."""
     specs = []
     for item in dekit_keys or []:
         if not isinstance(item, dict):
@@ -406,7 +398,7 @@ def sort_dekit_specs_by_tree_depth(numbered_list, specs):
 
 
 def insert_assy_row(conn, sn, old_vendor_sn, old_father_sn, new_vendor_sn, new_father_sn, emp, auto_commit=True):
-    """INSERT row mới từ row cũ (sau de-kit)."""
+    """INSERT new row from de-kitted source row."""
     cur = conn.cursor()
     try:
         cur.execute(KITTING_INSERT_SELECT, {"sn": sn.upper(), "old": old_vendor_sn, "old_f": old_father_sn})
@@ -415,7 +407,6 @@ def insert_assy_row(conn, sn, old_vendor_sn, old_father_sn, new_vendor_sn, new_f
         col_idx = {c.upper(): i for i, c in enumerate(cols)}
         if not rows:
             return False, "source_not_found"
-        # KITTING_INSERT_SELECT orders by IN_STATION_TIME DESC. Repeated dekit/kit can leave multiple N rows for the same key; pick latest (same as CONFIG path).
         row = rows[0]
         idx_vendor = col_idx.get("VENDOR_SN", -1)
         idx_father = col_idx.get("FATHER_SN", -1)
@@ -478,7 +469,6 @@ def validate_tree_integrity(conn, sn):
         vsn = str(row.get("VENDOR_SN") or "").strip().upper()
         assy_flag = str(row.get("ASSY_FLAG") or "").strip().upper()
         sub_model = str(row.get("SUB_MODEL_NAME") or "").strip().upper()
-        # Ignore non-unique PN-like rows in duplicate guard; these are expected repeats and not traceable serialized components.
         is_pn_like_component = sub_model.endswith("-PN")
         if not vsn or assy_flag != "Y" or _is_config_vendor(vsn) or is_pn_like_component:
             continue
@@ -514,7 +504,6 @@ def validate_kit_request(conn, sn, kit_list):
             errors.append(f"Node not found in DB for ({ov}, {ofs or 'NULL'}).")
             continue
         flag = str(row.get("ASSY_FLAG") or "").upper()
-        # KITTING_INSERT_SELECT reads from ASSY_FLAG='N' rows; dekit sets Y->N. Allow both Y (dekit then insert) and N (re-kit after prior dekit).
         if flag not in ("Y", "N"):
             errors.append(
                 f"Invalid ASSY_FLAG for node ({ov}, {ofs or 'NULL'}): expected Y or N, got {flag!r}."
@@ -539,11 +528,7 @@ def validate_kit_request(conn, sn, kit_list):
 
 
 def check_vendor_in_other_trays(conn, new_vendor_sns, current_sn):
-    """
-    Check new vendor SNs against trays other than current_sn.
-    Returns list of dicts: vendor_sn, tray_sn, father_sn, sub_model_name, child_count.
-    Empty list if no conflicts (new SN, or only on current tray).
-    """
+    """Returns list of conflict dicts; empty if none."""
     current_upper = (current_sn or "").strip().upper()
     raw_conflicts = []
     seen = set()
@@ -615,10 +600,7 @@ def check_vendor_in_other_trays(conn, new_vendor_sns, current_sn):
 
 
 def dekit_vendor_from_other_tray(conn, tray_sn, vendor_sn, emp, auto_commit=False):
-    """
-    Dekit vendor_sn and all descendants on another tray.
-    Uses skip_missing=True for cross-tray race conditions.
-    """
+    """Dekit vendor_sn and descendants on another tray."""
     cols, rows = fetch_assy_tree(conn, tray_sn)
     if not rows:
         return 0, ""

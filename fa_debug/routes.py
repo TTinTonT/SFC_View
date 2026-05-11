@@ -11,8 +11,9 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from contextlib import contextmanager
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 from flask import Blueprint, jsonify, redirect, render_template, request
@@ -45,9 +46,70 @@ from fa_debug.l10_online_test_queue import (
     complete as l10_online_queue_complete,
     enqueue as l10_online_queue_enqueue,
     force_next as l10_online_queue_force_next,
-    snapshot_all as l10_online_queue_snapshot_all,
+    snapshot_queues_by_site as l10_online_queue_snapshot_by_site,
+    snapshot_site as l10_online_queue_snapshot_site,
+)
+from fa_debug.l10_crabber_fa_dashboard import (
+    FA_SLOTS_PER_ETF,
+    build_fa_etf_fixture_list,
+    iter_fa_l10_proc_normalized_rows_from_items,
+    parse_global_slot_fa_machine,
 )
 from fa_debug.l10_test_status import group_fixtures_from_sfc_payload
+
+
+def _norm_l10_queue_site(raw: Any) -> str:
+    t = str(raw or "sj").strip().lower()
+    return t if t in ("sj", "sv") else "sj"
+
+
+def _debug_l10_tray_status_bundle(tray_url: str, site_key: str) -> Dict[str, Any]:
+    """POST Test_Fixture_Status to tray_url and build JSON for L10 page (fixtures + queued site snapshot)."""
+    from config.etf_config import SFC_LEVEL_GRADE
+
+    fetched_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    oq = l10_online_queue_snapshot_site(site_key)
+    basis: Dict[str, Any] = {
+        "ok": False,
+        "error": None,
+        "fetched_at": fetched_at,
+        "sfc_result": None,
+        "local_time": None,
+        "slots_per_mtf": None,
+        "fixtures": [],
+        "online_queue": oq,
+        "level_grade": SFC_LEVEL_GRADE,
+        "site": site_key,
+    }
+    tu = (tray_url or "").strip().rstrip("/")
+    if not tu:
+        basis["error"] = "Tray status URL empty"
+        return basis
+    try:
+        r = requests.post(tu, json={"Level_Grade": SFC_LEVEL_GRADE}, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as e:
+        basis["error"] = str(e)
+        return basis
+    except (ValueError, TypeError) as e:
+        basis["error"] = f"Invalid SFC JSON: {e}"
+        return basis
+    if not isinstance(data, dict):
+        basis["error"] = "SFC response is not an object"
+        return basis
+    fixtures_list = group_fixtures_from_sfc_payload(data)
+    basis.update({
+        "ok": True,
+        "error": None,
+        "sfc_result": data.get("RESULT"),
+        "local_time": data.get("Local_Time"),
+        "slots_per_mtf": data.get("Slots_Per_MTF"),
+        "fixtures": fixtures_list,
+        "online_queue": l10_online_queue_snapshot_site(site_key),
+    })
+    return basis
+
 
 bp = Blueprint("fa_debug", __name__, url_prefix="", template_folder="../templates")
 _logger = logging.getLogger(__name__)
@@ -618,71 +680,181 @@ def debug_l10_test():
 
 @bp.route("/api/debug/l10-test/status")
 def api_debug_l10_test_status():
-    """Proxy SFC Test_Fixture_Status; return fixtures with ui_bucket per tray (for L10 test page)."""
-    from config.etf_config import SFC_LEVEL_GRADE, SFC_TRAY_STATUS_URL
+    """SJ tray status: Proxy SFC Test_Fixture_Status (San José URL)."""
+    from config.etf_config import SFC_TRAY_STATUS_URL
 
+    return jsonify(_debug_l10_tray_status_bundle(str(SFC_TRAY_STATUS_URL or "").strip(), "sj"))
+
+
+@bp.route("/api/debug/l10-test/status-sv")
+def api_debug_l10_test_status_sv():
+    """SV tray status: Same JSON contract as /status using SFC_TRAY_STATUS_URL_SV."""
+    from config.etf_config import SFC_LEVEL_GRADE, SFC_TRAY_STATUS_URL_SV
+
+    url = str(SFC_TRAY_STATUS_URL_SV or "").strip()
     fetched_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    if not url:
+        return jsonify({
+            "ok": False,
+            "error": "SFC_TRAY_STATUS_URL_SV is not configured.",
+            "fetched_at": fetched_at,
+            "sfc_result": None,
+            "local_time": None,
+            "slots_per_mtf": None,
+            "fixtures": [],
+            "online_queue": l10_online_queue_snapshot_site("sv"),
+            "level_grade": SFC_LEVEL_GRADE,
+            "site": "sv",
+        })
+    return jsonify(_debug_l10_tray_status_bundle(url, "sv"))
+
+
+@bp.route("/api/debug/l10-test/crabber-fa-dashboard", methods=["GET"])
+def api_debug_l10_crabber_fa_dashboard():
+    """Recent Crabber log rows (both SJ + SV): L10 PROC tests on FA_* machines, grouped by ETF racks."""
+    from crabber.client import fetch_search_log_items_all_pages
+    from crabber.profile import clear_crabber_context, set_crabber_context_for_profile
+
     try:
-        r = requests.post(
-            SFC_TRAY_STATUS_URL,
-            json={"Level_Grade": SFC_LEVEL_GRADE},
-            timeout=20,
-        )
-        r.raise_for_status()
-        data = r.json()
-    except requests.RequestException as e:
-        return jsonify({
-            "ok": False,
-            "error": str(e),
-            "fetched_at": fetched_at,
-            "sfc_result": None,
-            "local_time": None,
-            "slots_per_mtf": None,
-            "fixtures": [],
-            "online_queue": l10_online_queue_snapshot_all(),
-        })
-    except (ValueError, TypeError) as e:
-        return jsonify({
-            "ok": False,
-            "error": f"Invalid SFC JSON: {e}",
-            "fetched_at": fetched_at,
-            "sfc_result": None,
-            "local_time": None,
-            "slots_per_mtf": None,
-            "fixtures": [],
-            "online_queue": l10_online_queue_snapshot_all(),
-        })
+        mp = int(request.args.get("max_pages") or 6)
+    except (TypeError, ValueError):
+        mp = 6
+    mp = min(20, max(1, mp))
+    try:
+        scan_cap = int(request.args.get("max_scan") or 800)
+    except (TypeError, ValueError):
+        scan_cap = 800
+    scan_cap = min(4000, max(50, scan_cap))
+    timeout_s = 22
 
-    if not isinstance(data, dict):
-        return jsonify({
-            "ok": False,
-            "error": "SFC response is not an object",
-            "fetched_at": fetched_at,
-            "sfc_result": None,
-            "local_time": None,
-            "slots_per_mtf": None,
-            "fixtures": [],
-            "online_queue": l10_online_queue_snapshot_all(),
-        })
+    def run_side(profile_key: str) -> Dict[str, Any]:
+        set_crabber_context_for_profile(profile_key)
+        try:
+            items, _, err = fetch_search_log_items_all_pages(
+                "",
+                is_trial=False,
+                timeout=timeout_s,
+                max_pages=mp,
+            )
+            if err:
+                return {"ok": False, "error": err, "fixtures": [], "matching_rows": 0}
+            rows = iter_fa_l10_proc_normalized_rows_from_items(items or [], max_scan=scan_cap)
+            fixtures = build_fa_etf_fixture_list(rows)
+            return {
+                "ok": True,
+                "error": None,
+                "fixtures": fixtures,
+                "matching_rows": len(rows),
+            }
+        finally:
+            clear_crabber_context()
 
-    fixtures = group_fixtures_from_sfc_payload(data)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        fut_sj = ex.submit(run_side, "sj")
+        fut_sv = ex.submit(run_side, "sv")
+        sj = fut_sj.result()
+        sv = fut_sv.result()
+
     return jsonify({
         "ok": True,
-        "error": None,
-        "fetched_at": fetched_at,
-        "sfc_result": data.get("RESULT"),
-        "local_time": data.get("Local_Time"),
-        "slots_per_mtf": data.get("Slots_Per_MTF"),
-        "level_grade": SFC_LEVEL_GRADE,
-        "fixtures": fixtures,
-        "online_queue": l10_online_queue_snapshot_all(),
+        "slots_per_etf": FA_SLOTS_PER_ETF,
+        "max_pages": mp,
+        "sj": sj,
+        "sv": sv,
     })
+
+
+def _pick_latest_crabber_test_row(tests: List[dict], sn_upper: str) -> Optional[dict]:
+    """First row matching SN (search_log order is newest-first); else first row."""
+    for t in tests or []:
+        if not isinstance(t, dict):
+            continue
+        row_sn = str(t.get("sn") or t.get("SN") or "").strip().upper()
+        if row_sn and row_sn != sn_upper:
+            continue
+        return t
+    if tests and isinstance(tests[0], dict):
+        return tests[0]
+    return None
+
+
+def _serialize_crabber_latest_row(t: dict) -> dict:
+    machine = str(t.get("machine") or "")
+    gsi = parse_global_slot_fa_machine(machine)
+    return {
+        "result": str(t.get("result") or ""),
+        "machine": machine,
+        "log_time": str(t.get("log_time") or t.get("test_time") or ""),
+        "procedure": str(t.get("procedure") or ""),
+        "station": str(t.get("station") or ""),
+        "node_log_event": str(t.get("node_log_event") or ""),
+        "slot_hint": str(gsi) if gsi is not None else "",
+    }
+
+
+@bp.route("/api/debug/l10-test/crabber-latest-for-sns", methods=["POST"])
+def api_debug_l10_crabber_latest_for_sns():
+    """
+    Latest Crabber search_log row per SN (for ETF SV DHCP table coloring / remark).
+    JSON body: sns (list of SN strings), optional crabber_profile (default sv). Max 30 SNs.
+    """
+    data = request.get_json(silent=True) or {}
+    sns_raw = data.get("sns")
+    if not isinstance(sns_raw, list):
+        return jsonify({"ok": False, "error": "sns must be a list"}), 400
+    sns: List[str] = []
+    for s in sns_raw[:30]:
+        t = str(s or "").strip()
+        if t:
+            sns.append(t)
+    if not sns:
+        return jsonify({"ok": True, "by_sn": {}})
+
+    from crabber.client import fetch_test_history_for_sn
+    from crabber.profile import clear_crabber_context, normalize_crabber_profile, set_crabber_context_for_profile
+
+    raw_pf = data.get("crabber_profile")
+    if raw_pf is None or str(raw_pf).strip() == "":
+        raw_pf = "sv"
+    try:
+        profile_key = normalize_crabber_profile(str(raw_pf).strip())
+    except ValueError:
+        profile_key = "sv"
+
+    def _one_sn(sn_line: str) -> tuple[str, dict]:
+        set_crabber_context_for_profile(profile_key)
+        try:
+            su = sn_line.strip().upper()
+            hist = fetch_test_history_for_sn(sn_line, timeout=12, limit=40)
+            if not hist.get("ok"):
+                return su, {
+                    "ok": False,
+                    "error": str(hist.get("error") or "unknown"),
+                    "latest": None,
+                }
+            tests = hist.get("tests") or []
+            row = _pick_latest_crabber_test_row(tests, su)
+            if not row:
+                return su, {"ok": True, "error": None, "latest": None}
+            return su, {"ok": True, "error": None, "latest": _serialize_crabber_latest_row(row)}
+        except Exception as e:
+            return sn_line.strip().upper(), {"ok": False, "error": str(e), "latest": None}
+        finally:
+            clear_crabber_context()
+
+    by_sn: Dict[str, Any] = {}
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        for su, entry in ex.map(_one_sn, sns):
+            by_sn[su] = entry
+
+    return jsonify({"ok": True, "by_sn": by_sn})
 
 
 @bp.route("/api/debug/l10-test/online-queue", methods=["GET"])
 def api_debug_l10_test_online_queue_get():
-    """Lightweight snapshot of per-fixture online test queues (in-memory)."""
-    return jsonify({"ok": True, "fixtures": l10_online_queue_snapshot_all()})
+    """Per-site snapshots of online test queues (fixture_no -> queue state)."""
+    both = l10_online_queue_snapshot_by_site()
+    return jsonify({"ok": True, "sj": both["sj"], "sv": both["sv"]})
 
 
 @bp.route("/api/debug/l10-test/online-queue/enqueue", methods=["POST"])
@@ -691,7 +863,8 @@ def api_debug_l10_test_online_queue_enqueue():
     fixture_no = data.get("fixture_no") or data.get("fixture") or ""
     slot_no = data.get("slot_no") or data.get("slot") or ""
     sn = data.get("sn") or ""
-    out = l10_online_queue_enqueue(str(fixture_no), str(slot_no), str(sn))
+    site = _norm_l10_queue_site(data.get("site"))
+    out = l10_online_queue_enqueue(str(fixture_no), str(slot_no), str(sn), site=site)
     status = 200 if out.get("ok") else 400
     return jsonify(out), status
 
@@ -703,7 +876,8 @@ def api_debug_l10_test_online_queue_complete():
     job_id = data.get("job_id") or ""
     delay_min = data.get("delay_min", 0)
     delay_sec = data.get("delay_sec", 0)
-    out = l10_online_queue_complete(str(fixture_no), str(job_id), delay_min, delay_sec)
+    site = _norm_l10_queue_site(data.get("site"))
+    out = l10_online_queue_complete(str(fixture_no), str(job_id), delay_min, delay_sec, site=site)
     status = 200 if out.get("ok") else 400
     return jsonify(out), status
 
@@ -713,7 +887,8 @@ def api_debug_l10_test_online_queue_abandon():
     data = request.get_json(silent=True) or {}
     fixture_no = data.get("fixture_no") or ""
     job_id = data.get("job_id") or ""
-    out = l10_online_queue_abandon(str(fixture_no), str(job_id))
+    site = _norm_l10_queue_site(data.get("site"))
+    out = l10_online_queue_abandon(str(fixture_no), str(job_id), site=site)
     status = 200 if out.get("ok") else 400
     return jsonify(out), status
 
@@ -723,7 +898,8 @@ def api_debug_l10_test_online_queue_force_next():
     data = request.get_json(silent=True) or {}
     fixture_no = data.get("fixture_no") or ""
     job_id = data.get("job_id") or None
-    out = l10_online_queue_force_next(str(fixture_no), str(job_id) if job_id else None)
+    site = _norm_l10_queue_site(data.get("site"))
+    out = l10_online_queue_force_next(str(fixture_no), str(job_id) if job_id else None, site=site)
     status = 200 if out.get("ok") else 400
     return jsonify(out), status
 
@@ -957,6 +1133,35 @@ def _route_items(route_cols, route_rows):
     return route
 
 
+@contextmanager
+def _crabber_profile_scope():
+    """Set request-scoped Crabber base/token/sitename from crabber_profile (GET query or POST JSON)."""
+    from crabber.profile import (
+        clear_crabber_context,
+        normalize_crabber_profile,
+        set_crabber_context_for_profile,
+    )
+
+    raw = None
+    if request.method == "GET":
+        raw = request.args.get("crabber_profile")
+    else:
+        data = request.get_json(silent=True) or {}
+        raw = data.get("crabber_profile")
+        if raw is None:
+            raw = request.args.get("crabber_profile")
+    try:
+        pk = normalize_crabber_profile(raw)
+    except ValueError:
+        yield False
+        return
+    set_crabber_context_for_profile(pk)
+    try:
+        yield True
+    finally:
+        clear_crabber_context()
+
+
 @bp.route("/api/debug/jump-station/wip", methods=["GET"])
 def api_jump_station_wip():
     """Get WIP and route list for SN. Same current-station logic as Repair (get_station_and_next)."""
@@ -994,55 +1199,58 @@ def api_testing_overview():
     sn_upper = sn_raw.upper()
     out: dict = {"ok": True, "sn": sn_raw, "tray": {}, "wip": {}, "crabber": {}}
 
-    try:
-        from etf.routes import _maybe_start_background, etf_search_rows_cached
-
-        _maybe_start_background()
-        rows = etf_search_rows_cached(sn_raw)
-        best = None
-        qlow = sn_raw.lower()
-        for r in rows:
-            if str(r.get("sn") or "").strip().lower() == qlow:
-                best = r
-                break
-        if best is None and rows:
-            best = rows[0]
-        if best:
-            out["tray"] = {"connected": True, "row": best, "message": ""}
-        else:
-            out["tray"] = {
-                "connected": False,
-                "row": None,
-                "message": "No tray DHCP cache row found for this SN.",
-            }
-    except Exception as e:
-        out["tray"] = {"connected": False, "row": None, "message": f"Tray cache lookup failed: {e}"}
-
-    try:
-        from sfis_tool.db import get_conn
-        from sfis_tool.wip import get_station_and_next
-
-        conn = get_conn()
+    with _crabber_profile_scope() as crabber_ok:
+        if not crabber_ok:
+            return jsonify({"ok": False, "error": "invalid crabber_profile"}), 400
         try:
-            row = get_station_and_next(conn, sn_upper)
-            if row:
-                wip = dict(zip(_WIP_KEYS, row))
-                out["wip"] = {"ok": True, "wip": _serialize_wip(wip)}
+            from etf.routes import _maybe_start_background, etf_search_rows_cached
+
+            _maybe_start_background()
+            rows = etf_search_rows_cached(sn_raw)
+            best = None
+            qlow = sn_raw.lower()
+            for r in rows:
+                if str(r.get("sn") or "").strip().lower() == qlow:
+                    best = r
+                    break
+            if best is None and rows:
+                best = rows[0]
+            if best:
+                out["tray"] = {"connected": True, "row": best, "message": ""}
             else:
-                out["wip"] = {"ok": False, "error": "No WIP for this SN"}
-        finally:
-            conn.close()
-    except Exception as e:
-        out["wip"] = {"ok": False, "error": str(e)}
+                out["tray"] = {
+                    "connected": False,
+                    "row": None,
+                    "message": "No tray DHCP cache row found for this SN.",
+                }
+        except Exception as e:
+            out["tray"] = {"connected": False, "row": None, "message": f"Tray cache lookup failed: {e}"}
 
-    try:
-        from crabber.client import fetch_test_history_for_sn
+        try:
+            from sfis_tool.db import get_conn
+            from sfis_tool.wip import get_station_and_next
 
-        out["crabber"] = fetch_test_history_for_sn(sn_raw)
-    except Exception as e:
-        out["crabber"] = {"ok": False, "tests": [], "error": str(e)}
+            conn = get_conn()
+            try:
+                row = get_station_and_next(conn, sn_upper)
+                if row:
+                    wip = dict(zip(_WIP_KEYS, row))
+                    out["wip"] = {"ok": True, "wip": _serialize_wip(wip)}
+                else:
+                    out["wip"] = {"ok": False, "error": "No WIP for this SN"}
+            finally:
+                conn.close()
+        except Exception as e:
+            out["wip"] = {"ok": False, "error": str(e)}
 
-    return jsonify(out)
+        try:
+            from crabber.client import fetch_test_history_for_sn
+
+            out["crabber"] = fetch_test_history_for_sn(sn_raw)
+        except Exception as e:
+            out["crabber"] = {"ok": False, "tests": [], "error": str(e)}
+
+        return jsonify(out)
 
 
 @bp.route("/api/debug/jump-station/execute", methods=["POST"])
@@ -1783,12 +1991,15 @@ def api_repair_execute():
             check_vendor_in_other_trays,
             dekit_nodes,
             dekit_vendor_from_other_tray,
+            dekit_specs_from_request_items,
             insert_assy_row,
             validate_kit_request,
             validate_tree_integrity,
             snapshot_tree,
             build_numbered_tree_preserve_order,
             fetch_assy_tree,
+            sort_dekit_specs_by_tree_depth,
+            verify_dekit_targets,
         )
         conn = get_conn()
         try:
@@ -1807,15 +2018,19 @@ def api_repair_execute():
             if action == "repair" and not check_has_unrepaired(conn, sn):
                 return jsonify({"ok": False, "error": "No un-repaired record"})
             tree_valid, bad_duplicates = validate_tree_integrity(conn, sn)
+            duplicate_vendor_warning = None
             if not tree_valid:
-                return jsonify({
-                    "ok": False,
-                    "error": (
-                        "Cannot proceed: duplicate vendor SN found with ASSY_FLAG=Y (non-CONFIG). "
-                        f"Please fix via IT Kitting first: {', '.join(bad_duplicates)}"
-                    ),
-                    "invalid_duplicates": bad_duplicates,
-                }), 400
+                duplicate_vendor_warning = (
+                    "Duplicate vendor SN (ASSY_FLAG=Y, non-CONFIG): "
+                    + ", ".join(bad_duplicates)
+                    + ". IT Kitting cleanup recommended; kitting/repair will proceed."
+                )
+
+            def _attach_dup_warn(out: dict) -> None:
+                if duplicate_vendor_warning:
+                    out["duplicate_vendor_warning"] = duplicate_vendor_warning
+                    out["invalid_duplicates"] = bad_duplicates
+
             before_snapshot = snapshot_tree(conn, sn)
 
             repair_station = (
@@ -1824,43 +2039,37 @@ def api_repair_execute():
             )
 
             if action == "dekit":
-                keys = []
-                for item in dekit_keys:
-                    if not isinstance(item, dict):
-                        continue
-                    v = (item.get("vendor_sn") or "").strip()
-                    f = item.get("father_sn")
-                    f = f.strip() if isinstance(f, str) else f
-                    if v:
-                        keys.append((v, f))
+                specs = dekit_specs_from_request_items(dekit_keys)
+                if not specs:
+                    return jsonify({"ok": False, "error": "No valid dekit_keys (need vendor_sn per row).", "step": "dekit"}), 400
                 cols, rows = fetch_assy_tree(conn, sn)
                 numbered_list, _ = build_numbered_tree_preserve_order(cols, rows)
-                depth_map = {}
-                for _, nk, _, _, _, depth in numbered_list:
-                    depth_map[(str(nk[1]), "" if nk[2] is None else str(nk[2]))] = depth
-                keys = sorted(keys, key=lambda x: depth_map.get((str(x[0]), "" if x[1] is None else str(x[1])), 999))
-                total, err = dekit_nodes(conn, sn, keys, emp, auto_commit=False)
+                specs = sort_dekit_specs_by_tree_depth(numbered_list, specs)
+                total, err = dekit_nodes(conn, sn, specs, emp, auto_commit=False)
                 if err:
                     conn.rollback()
                     return jsonify({"ok": False, "error": f"De-kit failed: {err}", "step": "dekit"})
-                after_snapshot = snapshot_tree(conn, sn)
-                for v, f in keys:
-                    key = (str(v), "" if f is None else str(f))
-                    row_after = after_snapshot.get(key) or {}
-                    if str(row_after.get("ASSY_FLAG") or "").upper() != "N":
-                        conn.rollback()
-                        return jsonify({
-                            "ok": False,
-                            "error": (
-                                f"Rollback: post-validation failed -- node {v} expected ASSY_FLAG=N but got "
-                                f"{row_after.get('ASSY_FLAG')!r}. All changes reverted."
-                            ),
-                            "step": "dekit",
-                        }), 400
+                vcur = conn.cursor()
+                try:
+                    ok_v, bad_spec, reason = verify_dekit_targets(vcur, sn, specs)
+                finally:
+                    vcur.close()
+                if not ok_v:
+                    conn.rollback()
+                    bv = (bad_spec or {}).get("vendor_sn", "?")
+                    return jsonify({
+                        "ok": False,
+                        "error": (
+                            f"Rollback: post-validation failed -- node {bv} ({reason}). "
+                            "All changes reverted."
+                        ),
+                        "step": "dekit",
+                    }), 400
                 conn.commit()
                 row2 = get_station_and_next(conn, sn)
                 current_station = dict(zip(_WIP_KEYS, row2)) if row2 else None
                 resp = {"ok": True, "message": f"De-kit OK ({total} row(s)).", "current_station": current_station}
+                _attach_dup_warn(resp)
                 _cache_repair_response(sn, request_id, resp)
                 return jsonify(resp)
 
@@ -1957,20 +2166,53 @@ def api_repair_execute():
                             "locked_sns": locked_sns,
                             "error": lock_msg or "Part(s) are QA locked (PPID lock). Please unlock before retry."
                         })
+                # Two-phase bulk kitting: de-kit all distinct targets, verify N, then sequential inserts.
                 node_keys = [(item.get("old_vendor_sn"), item.get("old_father_sn")) for item in kit_list if (item.get("old_vendor_sn") or "").strip()]
                 node_keys = sorted(
                     [(k[0], k[1]) for k in node_keys if k[0]],
-                    key=lambda x: depth_map_raw.get((sn.upper(), str(x[0]), "" if x[1] is None else str(x[1])), 999),
+                    key=lambda x: (
+                        depth_map_raw.get((sn.upper(), str(x[0]), "" if x[1] is None else str(x[1])), 999),
+                        str(x[0]),
+                    ),
                 )
-                total, err = dekit_nodes(conn, sn, node_keys, emp, auto_commit=False, skip_missing=True)
+                nk_seen = set()
+                node_keys_dedup = []
+                for nk in node_keys:
+                    kk = (str(nk[0]), "" if nk[1] is None else str(nk[1]))
+                    if kk in nk_seen:
+                        continue
+                    nk_seen.add(kk)
+                    node_keys_dedup.append(nk)
+                total, err = dekit_nodes(conn, sn, node_keys_dedup, emp, auto_commit=False, skip_missing=True)
                 if err:
                     conn.rollback()
                     return jsonify({"ok": False, "error": f"De-kit failed: {err}", "step": "dekit"})
+                after_dekit_snap = snapshot_tree(conn, sn)
+                for nk in node_keys_dedup:
+                    v, f = nk[0], nk[1]
+                    key_s = (str(v), "" if f is None else str(f))
+                    row_d = after_dekit_snap.get(key_s) or {}
+                    if str(row_d.get("ASSY_FLAG") or "").upper() != "N":
+                        conn.rollback()
+                        bad_flag = row_d.get("ASSY_FLAG")
+                        bad_disp = repr(bad_flag) if bad_flag is not None else "MISSING ROW"
+                        return jsonify({
+                            "ok": False,
+                            "step": "dekit_verify",
+                            "error": (
+                                "Bulk de-kit incomplete (no kit inserts run yet): node "
+                                f"{v} under father {key_s[1]!r} expected ASSY_FLAG=N but got {bad_disp}. "
+                                "Verify FATHER_SN matches Oracle or fix data in IT Kitting."
+                            ),
+                        }), 400
                 kit_sorted = sorted(
                     list(kit_list),
-                    key=lambda item: depth_map_raw.get(
-                        (sn.upper(), str((item.get("old_vendor_sn") or "").strip()), "" if item.get("old_father_sn") is None else str(item.get("old_father_sn")).strip()),
-                        999,
+                    key=lambda item: (
+                        depth_map_raw.get(
+                            (sn.upper(), str((item.get("old_vendor_sn") or "").strip()), "" if item.get("old_father_sn") is None else str(item.get("old_father_sn")).strip()),
+                            999,
+                        ),
+                        str((item.get("old_vendor_sn") or "").strip()),
                     ),
                 )
                 for item in kit_sorted:
@@ -1984,22 +2226,9 @@ def api_repair_execute():
                     if not ok:
                         conn.rollback()
                         return jsonify({"ok": False, "error": f"Kit failed: {err}", "step": "kit", "vendor_sn": ov})
-                after_kit_snapshot = snapshot_tree(conn, sn)
-                for item in kit_sorted:
-                    ov = (item.get("old_vendor_sn") or "").strip()
-                    of = item.get("old_father_sn")
-                    key = (str(ov), "" if of is None else str(of))
-                    row_after = after_kit_snapshot.get(key) or {}
-                    if str(row_after.get("ASSY_FLAG") or "").upper() != "N":
-                        conn.rollback()
-                        return jsonify({
-                            "ok": False,
-                            "error": (
-                                f"Rollback: post-validation failed -- node {ov} expected ASSY_FLAG=N but got "
-                                f"{row_after.get('ASSY_FLAG')!r}. All changes reverted."
-                            ),
-                            "step": "post_validate",
-                        }), 400
+                # Do not re-validate old (vendor,father) keys via snapshot_tree after inserts: that map is
+                # one row per (VENDOR_SN,FATHER_SN); intra-tray swaps can leave both an N shell and a new Y
+                # row sharing the same key, so the dict shows Y and falsely triggered rollback.
                 if action == "kitting":
                     conn.commit()
                     row2 = get_station_and_next(conn, sn)
@@ -2009,6 +2238,7 @@ def api_repair_execute():
                         "message": f"Kitting OK ({len(kit_list)} row(s)).",
                         "current_station": current_station
                     }
+                    _attach_dup_warn(resp)
                     _cache_repair_response(sn, request_id, resp)
                     return jsonify(resp)
             elif action == "kitting":
@@ -2055,6 +2285,7 @@ def api_repair_execute():
             if jump_warning:
                 message = "Repair OK, but jump failed (0 rows updated). Please check station manually."
             resp = {"ok": True, "message": message, "current_station": current_station, "jump_warning": jump_warning}
+            _attach_dup_warn(resp)
             _cache_repair_response(sn, request_id, resp)
             return jsonify(resp)
         finally:
@@ -2803,6 +3034,13 @@ def api_etf_online_test_wip():
     sn = (request.args.get("sn") or "").strip().upper()
     if not sn:
         return jsonify({"ok": False, "error": "sn required"}), 400
+    with _crabber_profile_scope() as crabber_ok:
+        if not crabber_ok:
+            return jsonify({"ok": False, "error": "invalid crabber_profile"}), 400
+        return _etf_online_test_wip_impl(sn)
+
+
+def _etf_online_test_wip_impl(sn):
     try:
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next
@@ -2861,57 +3099,63 @@ def api_etf_online_test_wip():
 @bp.route("/api/etf/online-test/reason-codes", methods=["GET"])
 def api_etf_online_test_reason_codes():
     """DEBUG reason codes for Online Test repair step (same as repair page DO/RO)."""
-    try:
-        from sfis_tool.db import get_conn
-        from sfis_tool.sql_queries import REASON_CODE_DEBUG_LIST
-        conn = get_conn()
+    with _crabber_profile_scope() as crabber_ok:
+        if not crabber_ok:
+            return jsonify({"ok": False, "error": "invalid crabber_profile"}), 400
         try:
-            cur = conn.cursor()
+            from sfis_tool.db import get_conn
+            from sfis_tool.sql_queries import REASON_CODE_DEBUG_LIST
+            conn = get_conn()
             try:
-                cur.execute(REASON_CODE_DEBUG_LIST)
-                rows = cur.fetchall()
-                return jsonify({
-                    "ok": True,
-                    "reason_codes": [{"code": row[0], "desc": row[1] or ""} for row in rows],
-                })
+                cur = conn.cursor()
+                try:
+                    cur.execute(REASON_CODE_DEBUG_LIST)
+                    rows = cur.fetchall()
+                    return jsonify({
+                        "ok": True,
+                        "reason_codes": [{"code": row[0], "desc": row[1] or ""} for row in rows],
+                    })
+                finally:
+                    cur.close()
             finally:
-                cur.close()
-        finally:
-            conn.close()
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+                conn.close()
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/etf/online-test/pn-list", methods=["GET", "POST", "DELETE"])
 def api_etf_online_test_pn_list():
     """PN base list for Crabber. GET=list, POST=add base, DELETE=remove custom base."""
-    if request.method == "GET":
-        return jsonify({"ok": True, "bases": _merge_pn_base_list()})
+    with _crabber_profile_scope() as crabber_ok:
+        if not crabber_ok:
+            return jsonify({"ok": False, "error": "invalid crabber_profile"}), 400
+        if request.method == "GET":
+            return jsonify({"ok": True, "bases": _merge_pn_base_list()})
 
-    data = request.get_json(silent=True) or {}
+        data = request.get_json(silent=True) or {}
 
-    if request.method == "DELETE":
+        if request.method == "DELETE":
+            base = (data.get("base") or data.get("pn") or "").strip()
+            if not base:
+                return jsonify({"ok": False, "error": "base required"}), 400
+            custom = _load_custom_pn_bases()
+            before = len(custom)
+            custom = [c for c in custom if c.upper() != base.upper()]
+            if len(custom) < before:
+                _save_custom_pn_bases(custom)
+            return jsonify({"ok": True, "bases": _merge_pn_base_list()})
+
         base = (data.get("base") or data.get("pn") or "").strip()
         if not base:
             return jsonify({"ok": False, "error": "base required"}), 400
+        existing = {b["base"].upper() for b in _merge_pn_base_list()}
+        if base.upper() in existing:
+            return jsonify({"ok": True, "bases": _merge_pn_base_list()})
         custom = _load_custom_pn_bases()
-        before = len(custom)
-        custom = [c for c in custom if c.upper() != base.upper()]
-        if len(custom) < before:
+        if base.upper() not in {c.upper() for c in custom}:
+            custom.append(base)
             _save_custom_pn_bases(custom)
         return jsonify({"ok": True, "bases": _merge_pn_base_list()})
-
-    base = (data.get("base") or data.get("pn") or "").strip()
-    if not base:
-        return jsonify({"ok": False, "error": "base required"}), 400
-    existing = {b["base"].upper() for b in _merge_pn_base_list()}
-    if base.upper() in existing:
-        return jsonify({"ok": True, "bases": _merge_pn_base_list()})
-    custom = _load_custom_pn_bases()
-    if base.upper() not in {c.upper() for c in custom}:
-        custom.append(base)
-        _save_custom_pn_bases(custom)
-    return jsonify({"ok": True, "bases": _merge_pn_base_list()})
 
 
 @bp.route("/api/etf/online-test/repair", methods=["POST"])
@@ -2924,94 +3168,97 @@ def api_etf_online_test_repair():
     emp = resolve_sfis_emp(request, data.get("emp"))
     if not sn or not reason_code:
         return jsonify({"ok": False, "error": "sn and reason_code required"}), 400
-    sn_lock = _get_sn_lock(sn)
-    if not sn_lock.acquire(blocking=False):
-        return jsonify({"ok": False, "error": "SN is being processed. Please wait."}), 409
-    try:
-        from sfis_tool.db import get_conn
-        from sfis_tool.wip import get_station_and_next
-        from sfis_tool.repair_ok import (
-            check_has_unrepaired,
-            execute_repair_ok,
-            get_group_info,
-            jump_routing,
-            get_jump_param_from_route,
-            resolve_jump_target,
-        )
-        from sfis_tool.repair_flow import detect_repair_mode, get_dido_suffix_from_node
-        from sfis_tool.sql_queries import REASON_CODE_DEBUG_VALIDATE
-        conn = get_conn()
+    with _crabber_profile_scope() as crabber_ok:
+        if not crabber_ok:
+            return jsonify({"ok": False, "error": "invalid crabber_profile"}), 400
+        sn_lock = _get_sn_lock(sn)
+        if not sn_lock.acquire(blocking=False):
+            return jsonify({"ok": False, "error": "SN is being processed. Please wait."}), 409
         try:
-            cur = conn.cursor()
-            cur.execute(REASON_CODE_DEBUG_VALIDATE, {"rc": reason_code})
-            vrow = cur.fetchone()
-            cur.close()
-            if not vrow or vrow[0] == 0:
-                return jsonify({"ok": False, "error": "Invalid DEBUG reason code."}), 400
-            row = get_station_and_next(conn, sn)
-            if not row:
-                return jsonify({"ok": False, "error": "No WIP for this SN."}), 400
-            wip = dict(zip(_WIP_KEYS, row))
-            if not check_has_unrepaired(conn, sn):
-                return jsonify({"ok": False, "error": "No open repair record."}), 400
-            current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
-            mode = detect_repair_mode(wip)
-            suffix = get_dido_suffix_from_node(current_node)
-            ui_mode = mode.get("ui_mode") or "main_line"
-            base = (mode.get("base") or "").strip()
-            jump_target = None
-            if ui_mode == "repair_dido":
-                if suffix == "DO":
-                    if not base:
-                        return jsonify({"ok": False, "error": "Cannot resolve repair base."}), 400
-                    jump_target = base
-                elif suffix == "RO":
-                    jump_target = "FLA"
+            from sfis_tool.db import get_conn
+            from sfis_tool.wip import get_station_and_next
+            from sfis_tool.repair_ok import (
+                check_has_unrepaired,
+                execute_repair_ok,
+                get_group_info,
+                jump_routing,
+                get_jump_param_from_route,
+                resolve_jump_target,
+            )
+            from sfis_tool.repair_flow import detect_repair_mode, get_dido_suffix_from_node
+            from sfis_tool.sql_queries import REASON_CODE_DEBUG_VALIDATE
+            conn = get_conn()
+            try:
+                cur = conn.cursor()
+                cur.execute(REASON_CODE_DEBUG_VALIDATE, {"rc": reason_code})
+                vrow = cur.fetchone()
+                cur.close()
+                if not vrow or vrow[0] == 0:
+                    return jsonify({"ok": False, "error": "Invalid DEBUG reason code."}), 400
+                row = get_station_and_next(conn, sn)
+                if not row:
+                    return jsonify({"ok": False, "error": "No WIP for this SN."}), 400
+                wip = dict(zip(_WIP_KEYS, row))
+                if not check_has_unrepaired(conn, sn):
+                    return jsonify({"ok": False, "error": "No open repair record."}), 400
+                current_node = (wip.get("NEXT_STATION") or "").strip() or (wip.get("GROUP_NAME") or "").strip()
+                mode = detect_repair_mode(wip)
+                suffix = get_dido_suffix_from_node(current_node)
+                ui_mode = mode.get("ui_mode") or "main_line"
+                base = (mode.get("base") or "").strip()
+                jump_target = None
+                if ui_mode == "repair_dido":
+                    if suffix == "DO":
+                        if not base:
+                            return jsonify({"ok": False, "error": "Cannot resolve repair base."}), 400
+                        jump_target = base
+                    elif suffix == "RO":
+                        jump_target = "FLA"
+                    else:
+                        return jsonify({
+                            "ok": False,
+                            "error": "Use the Repair page to advance DI/RI before Retest.",
+                        }), 400
+                elif ui_mode == "repair_r_only":
+                    jump_target = resolve_jump_target(reason_code, (wip.get("GROUP_NAME") or "").strip())
                 else:
-                    return jsonify({
-                        "ok": False,
-                        "error": "Use the Repair page to advance DI/RI before Retest.",
-                    }), 400
-            elif ui_mode == "repair_r_only":
-                jump_target = resolve_jump_target(reason_code, (wip.get("GROUP_NAME") or "").strip())
-            else:
-                jump_target = resolve_jump_target(reason_code, (wip.get("GROUP_NAME") or "").strip())
-            repair_station = wip.get("STATION_NAME") or current_node
-            n, ok_repair, err, repair_time = execute_repair_ok(
-                conn, sn, repair_station, emp, reason_code,
-                duty_station="TEST FIXTURE", remark=remark,
-                repair_action="RETEST", duty_type="RETEST", auto_commit=False
-            )
-            if not ok_repair or n == 0:
-                conn.rollback()
-                return jsonify({"ok": False, "error": err or "Repair update failed."}), 400
-            v_line = wip.get("LINE_NAME") or ""
-            jump_param = get_jump_param_from_route(conn, sn, jump_target)
-            info = get_group_info(conn, v_line, jump_param)
-            if not info:
-                conn.rollback()
-                return jsonify({"ok": False, "error": "GetGroupInfo failed for jump target."}), 400
-            ok = jump_routing(
-                conn, sn,
-                info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
-                emp, in_station_time=repair_time, auto_commit=False,
-            )
-            if not ok:
-                conn.rollback()
-                return jsonify({"ok": False, "error": "Jump updated 0 rows."}), 400
-            conn.commit()
-            row2 = get_station_and_next(conn, sn)
-            wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
-            return jsonify({"ok": True, "wip": _serialize_wip(wip2), "jump_target": jump_target})
+                    jump_target = resolve_jump_target(reason_code, (wip.get("GROUP_NAME") or "").strip())
+                repair_station = wip.get("STATION_NAME") or current_node
+                n, ok_repair, err, repair_time = execute_repair_ok(
+                    conn, sn, repair_station, emp, reason_code,
+                    duty_station="TEST FIXTURE", remark=remark,
+                    repair_action="RETEST", duty_type="RETEST", auto_commit=False
+                )
+                if not ok_repair or n == 0:
+                    conn.rollback()
+                    return jsonify({"ok": False, "error": err or "Repair update failed."}), 400
+                v_line = wip.get("LINE_NAME") or ""
+                jump_param = get_jump_param_from_route(conn, sn, jump_target)
+                info = get_group_info(conn, v_line, jump_param)
+                if not info:
+                    conn.rollback()
+                    return jsonify({"ok": False, "error": "GetGroupInfo failed for jump target."}), 400
+                ok = jump_routing(
+                    conn, sn,
+                    info["LINE_NAME"], info["SECTION_NAME"], info["GROUP_NAME"], info["STATION_NAME"],
+                    emp, in_station_time=repair_time, auto_commit=False,
+                )
+                if not ok:
+                    conn.rollback()
+                    return jsonify({"ok": False, "error": "Jump updated 0 rows."}), 400
+                conn.commit()
+                row2 = get_station_and_next(conn, sn)
+                wip2 = dict(zip(_WIP_KEYS, row2)) if row2 else None
+                return jsonify({"ok": True, "wip": _serialize_wip(wip2), "jump_target": jump_target})
+            finally:
+                conn.close()
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
         finally:
-            conn.close()
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        try:
-            sn_lock.release()
-        except Exception:
-            pass
+            try:
+                sn_lock.release()
+            except Exception:
+                pass
 
 
 @bp.route("/api/etf/online-test/prepare", methods=["POST"])
@@ -3022,86 +3269,104 @@ def api_etf_online_test_prepare():
     if not pn_name:
         return jsonify({"ok": False, "error": "pn_name required"}), 400
     sn_norm = (data.get("sn") or "").strip().upper()
-    sn_lk = None
-    if sn_norm:
-        sn_lk = _get_sn_lock(sn_norm)
-        if not sn_lk.acquire(blocking=False):
-            return jsonify({
-                "ok": False,
-                "error": "Another operation is in progress for this SN. Please wait.",
-            }), 409
-    try:
+    with _crabber_profile_scope() as crabber_ok:
+        if not crabber_ok:
+            return jsonify({"ok": False, "error": "invalid crabber_profile"}), 400
+        sn_lk = None
         if sn_norm:
-            from crabber.client import sn_has_active_crabber_test
+            sn_lk = _get_sn_lock(sn_norm)
+            if not sn_lk.acquire(blocking=False):
+                return jsonify({
+                    "ok": False,
+                    "error": "Another operation is in progress for this SN. Please wait.",
+                }), 409
+        try:
+            if sn_norm:
+                from crabber.client import sn_has_active_crabber_test
 
-            active, _ = sn_has_active_crabber_test(sn_norm)
-            if active:
+                active, _ = sn_has_active_crabber_test(sn_norm)
+                if active:
+                    return jsonify({
+                        "ok": False,
+                        "error": (
+                            "A test is already running on Crabber for this SN (PROC/Testing). "
+                            "Finish or cancel before starting another."
+                        ),
+                    }), 409
+            from crabber.profile import get_crabber_tuple
+            from crabber.online_test import (
+                check_pn_mapping,
+                check_sp_units,
+                get_shelf_scan_item_list,
+                parse_first_pn_mapping,
+                pick_default_units,
+            )
+            _, _, crab_uid, _ = get_crabber_tuple()
+            user_id = str(crab_uid or "41").strip()
+            is_rd = bool(data.get("is_rd"))
+            raw_map = check_pn_mapping(pn_name, user_id, is_rd=is_rd)
+            mfg_id, opt_pn = parse_first_pn_mapping(raw_map)
+            if mfg_id is None:
+                return jsonify({"ok": False, "error": "check_pn_mapping: could not resolve mfg_id", "raw": raw_map}), 400
+            try:
+                mfg_id = int(mfg_id)
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "Invalid opt_mfg_id from mapping"}), 400
+            sp_units = check_sp_units(pn_name, user_id, mfg_id, is_rd=is_rd)
+            units = pick_default_units(sp_units)
+            try:
+                units = int(data.get("units") or units)
+            except (TypeError, ValueError):
+                units = int(units)
+            shelf = get_shelf_scan_item_list(pn_name, mfg_id, user_id, units, is_rd=is_rd)
+            if not isinstance(shelf, dict):
+                return jsonify({"ok": False, "error": "Unexpected shelf response", "raw": shelf}), 502
+            machines = shelf.get("machines") or []
+            scan_items = shelf.get("scan_items") or []
+            env_items = shelf.get("env_items") or []
+            shelf_proc_data = shelf.get("shelf_proc_data") or {}
+            sfc_ext = (
+                shelf.get("sfc_ext")
+                or shelf_proc_data.get("sfc_ext")
+                or ((shelf.get("mfg_project") or {}).get("sfc_ext") if isinstance(shelf.get("mfg_project"), dict) else None)
+                or ((shelf.get("mfg_station") or {}).get("sfc_ext") if isinstance(shelf.get("mfg_station"), dict) else None)
+                or ""
+            )
+            return jsonify({
+                "ok": True,
+                "pn_name": pn_name,
+                "opt_pn_name": opt_pn,
+                "mfg_id": mfg_id,
+                "units": units,
+                "sp_units": sp_units,
+                "machines": machines,
+                "scan_items": scan_items,
+                "env_items": env_items,
+                "shelf_proc_data": shelf_proc_data,
+                "sfc_ext": sfc_ext,
+            })
+        except requests.exceptions.HTTPError as e:
+            resp = getattr(e, "response", None)
+            code = getattr(resp, "status_code", None) if resp is not None else None
+            if code == 401:
                 return jsonify({
                     "ok": False,
                     "error": (
-                        "A test is already running on Crabber for this SN (PROC/Testing). "
-                        "Finish or cancel before starting another."
+                        "Crabber API returned 401 Unauthorized. For Sunnyvale (crabber_profile=sv) set "
+                        "CRABBER_SV_TOKEN to the same Token the SV Crabber UI uses (Authorization header), and "
+                        "optionally CRABBER_SV_USER_ID to match cookie user_id (e.g. 12). "
+                        "CRABBER_TOKEN / CRABBER_USER_ID alone are usually San José only."
                     ),
-                }), 409
-        from config.debug_config import CRABBER_USER_ID
-        from crabber.online_test import (
-            check_pn_mapping,
-            check_sp_units,
-            get_shelf_scan_item_list,
-            parse_first_pn_mapping,
-            pick_default_units,
-        )
-        user_id = str(CRABBER_USER_ID or "41").strip()
-        is_rd = bool(data.get("is_rd"))
-        raw_map = check_pn_mapping(pn_name, user_id, is_rd=is_rd)
-        mfg_id, opt_pn = parse_first_pn_mapping(raw_map)
-        if mfg_id is None:
-            return jsonify({"ok": False, "error": "check_pn_mapping: could not resolve mfg_id", "raw": raw_map}), 400
-        try:
-            mfg_id = int(mfg_id)
-        except (TypeError, ValueError):
-            return jsonify({"ok": False, "error": "Invalid opt_mfg_id from mapping"}), 400
-        sp_units = check_sp_units(pn_name, user_id, mfg_id, is_rd=is_rd)
-        units = pick_default_units(sp_units)
-        try:
-            units = int(data.get("units") or units)
-        except (TypeError, ValueError):
-            units = int(units)
-        shelf = get_shelf_scan_item_list(pn_name, mfg_id, user_id, units, is_rd=is_rd)
-        if not isinstance(shelf, dict):
-            return jsonify({"ok": False, "error": "Unexpected shelf response", "raw": shelf}), 502
-        machines = shelf.get("machines") or []
-        scan_items = shelf.get("scan_items") or []
-        env_items = shelf.get("env_items") or []
-        shelf_proc_data = shelf.get("shelf_proc_data") or {}
-        sfc_ext = (
-            shelf.get("sfc_ext")
-            or shelf_proc_data.get("sfc_ext")
-            or ((shelf.get("mfg_project") or {}).get("sfc_ext") if isinstance(shelf.get("mfg_project"), dict) else None)
-            or ((shelf.get("mfg_station") or {}).get("sfc_ext") if isinstance(shelf.get("mfg_station"), dict) else None)
-            or ""
-        )
-        return jsonify({
-            "ok": True,
-            "pn_name": pn_name,
-            "opt_pn_name": opt_pn,
-            "mfg_id": mfg_id,
-            "units": units,
-            "sp_units": sp_units,
-            "machines": machines,
-            "scan_items": scan_items,
-            "env_items": env_items,
-            "shelf_proc_data": shelf_proc_data,
-            "sfc_ext": sfc_ext,
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        if sn_lk is not None:
-            try:
-                sn_lk.release()
-            except Exception:
-                pass
+                }), 502
+            return jsonify({"ok": False, "error": str(e)}), 502
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+        finally:
+            if sn_lk is not None:
+                try:
+                    sn_lk.release()
+                except Exception:
+                    pass
 
 
 @bp.route("/api/etf/online-test/start", methods=["POST"])
@@ -3132,48 +3397,64 @@ def api_etf_online_test_start():
     except (TypeError, ValueError):
         units = 1
     sn_norm = sn.strip().upper()
-    sn_lock = _get_sn_lock(sn_norm)
-    if not sn_lock.acquire(blocking=False):
-        return jsonify({
-            "ok": False,
-            "error": "Another operation is in progress for this SN. Please wait.",
-        }), 409
-    try:
-        from crabber.client import sn_has_active_crabber_test
-
-        active, _ = sn_has_active_crabber_test(sn_norm)
-        if active:
+    with _crabber_profile_scope() as crabber_ok:
+        if not crabber_ok:
+            return jsonify({"ok": False, "error": "invalid crabber_profile"}), 400
+        sn_lock = _get_sn_lock(sn_norm)
+        if not sn_lock.acquire(blocking=False):
             return jsonify({
                 "ok": False,
-                "error": (
-                    "A test is already running on Crabber for this SN (PROC/Testing). "
-                    "Finish or cancel before starting another."
-                ),
+                "error": "Another operation is in progress for this SN. Please wait.",
             }), 409
-        from config.debug_config import CRABBER_USER_ID
-        from crabber.online_test import build_scan_code_map, run_start_test_sequence
-        user_id = str(CRABBER_USER_ID or "41").strip()
-        scan_map = build_scan_code_map(scan_items, env_items, sn_norm, emp)
-        trial_run = bool(data.get("trial_run"))
-        result = run_start_test_sequence(
-            machine_id=machine_id,
-            shelf_proc_data=shelf_proc_data,
-            units=units,
-            pn_name=pn_name,
-            owner=emp,
-            user_id=user_id,
-            scan_code_map=scan_map,
-            sfc_ext=sfc_ext,
-            trial_run=trial_run,
-        )
-        return jsonify({"ok": True, **result})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
         try:
-            sn_lock.release()
-        except Exception:
-            pass
+            from crabber.client import sn_has_active_crabber_test
+
+            active, _ = sn_has_active_crabber_test(sn_norm)
+            if active:
+                return jsonify({
+                    "ok": False,
+                    "error": (
+                        "A test is already running on Crabber for this SN (PROC/Testing). "
+                        "Finish or cancel before starting another."
+                    ),
+                }), 409
+            from crabber.profile import get_crabber_tuple
+            from crabber.online_test import build_scan_code_map, run_start_test_sequence
+            _, _, crab_uid, _ = get_crabber_tuple()
+            user_id = str(crab_uid or "41").strip()
+            scan_map = build_scan_code_map(scan_items, env_items, sn_norm, emp)
+            trial_run = bool(data.get("trial_run"))
+            result = run_start_test_sequence(
+                machine_id=machine_id,
+                shelf_proc_data=shelf_proc_data,
+                units=units,
+                pn_name=pn_name,
+                owner=emp,
+                user_id=user_id,
+                scan_code_map=scan_map,
+                sfc_ext=sfc_ext,
+                trial_run=trial_run,
+            )
+            return jsonify({"ok": True, **result})
+        except requests.exceptions.HTTPError as e:
+            resp = getattr(e, "response", None)
+            code = getattr(resp, "status_code", None) if resp is not None else None
+            if code == 401:
+                return jsonify({
+                    "ok": False,
+                    "error": (
+                        "Crabber API returned 401 Unauthorized. For Sunnyvale set CRABBER_SV_TOKEN (SV UI token) "
+                        "and optionally CRABBER_SV_USER_ID to match the SV Crabber user id."
+                    ),
+                }), 502
+            return jsonify({"ok": False, "error": str(e)}), 502
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+        finally:
+            try:
+                sn_lock.release()
+            except Exception:
+                pass
 
 
 @bp.route("/api/etf/offline-replay/search", methods=["POST"])

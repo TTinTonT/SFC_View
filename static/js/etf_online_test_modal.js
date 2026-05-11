@@ -17,6 +17,34 @@
     return d || "SJOP";
   }
 
+  const OT_CRABBER_STORAGE_KEY = "sfc_crabber_profile";
+
+  function otReadCrabberProfile() {
+    try {
+      let v = sessionStorage.getItem(OT_CRABBER_STORAGE_KEY) || "sj";
+      if (v !== "sj" && v !== "sv") v = "sj";
+      return v;
+    } catch (_) {
+      return "sj";
+    }
+  }
+
+  /** Query segment: `crabber_profile=sj|sv` (no leading ? or &). */
+  function otQsCrabberOnly() {
+    return "crabber_profile=" + encodeURIComponent(otReadCrabberProfile());
+  }
+
+  function otBodyWithProfile(obj) {
+    return { ...obj, crabber_profile: otReadCrabberProfile() };
+  }
+
+  function otSyncCrabberSiteSelect() {
+    const sel = document.getElementById("etf-ot-crabber-site");
+    if (!sel) return;
+    const v = otReadCrabberProfile();
+    sel.value = sel.querySelector(`option[value="${v}"]`) ? v : "sj";
+  }
+
   let otCtx = {
     sn: "",
     wip: null,
@@ -93,7 +121,7 @@
   }
 
   function loadOtReasonCodes() {
-    return fetch("/api/etf/online-test/reason-codes")
+    return fetch("/api/etf/online-test/reason-codes?" + otQsCrabberOnly())
       .then((r) => r.json())
       .then((data) => {
         const sel = document.getElementById("etf-ot-reason");
@@ -142,7 +170,7 @@
       ).join("");
     }
     otPushBusy();
-    return fetch("/api/etf/online-test/pn-list")
+    return fetch("/api/etf/online-test/pn-list?" + otQsCrabberOnly())
       .then((r) => r.json())
       .then((data) => {
         if (data.ok && data.bases) otRenderBases(data.bases);
@@ -210,9 +238,10 @@
       _otStartedSuccess: false,
     };
     modal.setAttribute("aria-hidden", "false");
+    otSyncCrabberSiteSelect();
     otShowStep("loading");
     otPushBusy();
-    fetch("/api/etf/online-test/wip?sn=" + encodeURIComponent(otCtx.sn))
+    fetch("/api/etf/online-test/wip?sn=" + encodeURIComponent(otCtx.sn) + "&" + otQsCrabberOnly())
       .then((r) => r.json())
       .then((data) => {
         if (!data.ok) {
@@ -248,6 +277,16 @@
   }
 
   (function bindOnlineTestModal() {
+    document.getElementById("etf-ot-crabber-site")?.addEventListener("change", (ev) => {
+      const t = ev.target;
+      const raw = (t && t.value) || "sj";
+      const v = raw === "sv" ? "sv" : "sj";
+      try {
+        sessionStorage.setItem(OT_CRABBER_STORAGE_KEY, v);
+      } catch (_) {
+        /* ignore */
+      }
+    });
     document.getElementById("etf-ot-close")?.addEventListener("click", closeOnlineTestModal);
     document.getElementById("etf-ot-done")?.addEventListener("click", closeOnlineTestModal);
     document.querySelector("#etf-online-test-modal .etf-ot-backdrop")?.addEventListener("click", closeOnlineTestModal);
@@ -264,7 +303,7 @@
       fetch("/api/etf/online-test/repair", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sn: otCtx.sn, reason_code: reason, remark, emp }),
+        body: JSON.stringify(otBodyWithProfile({ sn: otCtx.sn, reason_code: reason, remark, emp })),
       })
         .then((r) => r.json())
         .then((data) => {
@@ -272,7 +311,7 @@
             window.alert(data.error || "Repair failed");
             return;
           }
-          return fetch("/api/etf/online-test/wip?sn=" + encodeURIComponent(otCtx.sn)).then((r) => r.json());
+          return fetch("/api/etf/online-test/wip?sn=" + encodeURIComponent(otCtx.sn) + "&" + otQsCrabberOnly()).then((r) => r.json());
         })
         .then((data) => {
           if (!data || !data.ok) return;
@@ -302,7 +341,7 @@
       fetch("/api/etf/online-test/pn-list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base: v }),
+        body: JSON.stringify(otBodyWithProfile({ base: v })),
       })
         .then((r) => r.json())
         .then((data) => {
@@ -331,7 +370,7 @@
       fetch("/api/etf/online-test/pn-list", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base: base }),
+        body: JSON.stringify(otBodyWithProfile({ base })),
       })
         .then((r) => r.json())
         .then((data) => {
@@ -360,7 +399,7 @@
       fetch("/api/etf/online-test/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pn_name: pn, sn: otCtx.sn || "" }),
+        body: JSON.stringify(otBodyWithProfile({ pn_name: pn, sn: otCtx.sn || "" })),
       })
         .then((r) => r.json())
         .then((data) => {
@@ -406,7 +445,7 @@
       fetch("/api/etf/online-test/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(otBodyWithProfile(body)),
       })
         .then((r) => r.json())
         .then((data) => {
