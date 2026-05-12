@@ -311,7 +311,13 @@ def _extract_items_list(obj: Any) -> Optional[list]:
     return None
 
 
-def get_sn_tier_from_crabber(sn: str, timeout: int = 15) -> Optional[str]:
+def _norm_crabber_base(base: str) -> str:
+    return (base or "").strip().rstrip("/")
+
+
+def _get_sn_tier_with_base_token(
+    sn: str, base: str, token: str, timeout: int = 15
+) -> Optional[str]:
     """
     GET /api/search_log_items/?sn=XXX; classify SN as L10/L11 from station.
     - total_logs < 1 or no log_list -> None (invalid).
@@ -319,11 +325,11 @@ def get_sn_tier_from_crabber(sn: str, timeout: int = 15) -> Optional[str]:
     - total_logs > 1 -> check station of log_list[1]: FVT -> L11, SYSTEM -> L10.
     Returns "L10" | "L11" | None.
     """
-    base, token = _get_config()
-    if not base or not (sn or "").strip():
+    root = _norm_crabber_base(base)
+    if not root or not (sn or "").strip():
         return None
     sn = sn.strip()
-    search_url = build_search_log_items_url(base, sn=sn, cur_page=1, is_trial=False)
+    search_url = build_search_log_items_url(root, sn=sn, cur_page=1, is_trial=False)
     try:
         r = requests.get(search_url, headers=_headers(token), timeout=timeout)
         if not r.ok:
@@ -348,6 +354,45 @@ def get_sn_tier_from_crabber(sn: str, timeout: int = 15) -> Optional[str]:
         return "L11"
     if "SYSTEM" in station:
         return "L10"
+    return None
+
+
+def get_sn_tier_from_crabber(sn: str, timeout: int = 15) -> Optional[str]:
+    """
+    Classify SN as L10/L11 via Crabber search_log_items (same rules as
+    _get_sn_tier_with_base_token).
+
+    Tries the request-scoped Crabber tuple first (see crabber.profile), then
+    San Jose and Sunnyvale profiles in order, skipping duplicate (base, token)
+    pairs so Analytics picks up SV-only SNs without double-calling the same host.
+    """
+    from crabber.profile import resolve_tuple_for_profile
+
+    if not (sn or "").strip():
+        return None
+
+    seen: set = set()
+    order: List[Tuple[str, str]] = []
+
+    def _enqueue(b: str, t: str) -> None:
+        root = _norm_crabber_base(b)
+        tok = (t or "").strip()
+        key = (root, tok)
+        if not root or key in seen:
+            return
+        seen.add(key)
+        order.append((root, tok))
+
+    b0, t0 = _get_config()
+    _enqueue(b0, t0)
+    for profile in ("sj", "sv"):
+        b, t, _, _ = resolve_tuple_for_profile(profile)
+        _enqueue(b, t)
+
+    for base, token in order:
+        tier = _get_sn_tier_with_base_token(sn, base, token, timeout=timeout)
+        if tier is not None:
+            return tier
     return None
 
 

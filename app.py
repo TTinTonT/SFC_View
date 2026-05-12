@@ -648,7 +648,15 @@ def api_auth_forgot_password():
 @app.route("/")
 def index():
     """Serve analytics dashboard."""
-    return render_template("analytics_dashboard.html")
+    from crabber.profile import resolve_tuple_for_profile
+
+    sj_b, _, _, _ = resolve_tuple_for_profile("sj")
+    sv_b, _, _, _ = resolve_tuple_for_profile("sv")
+    return render_template(
+        "analytics_dashboard.html",
+        crabber_sj_base=(sj_b or "").strip(),
+        crabber_sv_base=(sv_b or "").strip(),
+    )
 
 
 @app.route("/api/sfc/ppid-wip")
