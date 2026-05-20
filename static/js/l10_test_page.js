@@ -138,6 +138,31 @@
     }
   }
 
+  /** Parse Crabber ISO, SFC "YYYY/MM/DD HH:mm:ss", or other last-end strings. */
+  function parseLastEndToDate(raw) {
+    if (raw == null) return null;
+    const s = String(raw).trim();
+    if (!s) return null;
+    const sfc = s.match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (sfc) {
+      const d = new Date(+sfc[1], +sfc[2] - 1, +sfc[3], +sfc[4], +sfc[5], +sfc[6]);
+      return Number.isFinite(d.getTime()) ? d : null;
+    }
+    const d = new Date(s);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
+  /** User-facing Last end: Pacific (CA) instead of raw ISO stamp. */
+  function formatLastEndDisplay(raw) {
+    if (!raw) return "—";
+    const d = parseLastEndToDate(raw);
+    if (!d) {
+      const t = String(raw).trim();
+      return t || "—";
+    }
+    return formatPacificInstant(d);
+  }
+
   function readCooldownForSite(site) {
     const isSv = site === "sv";
     const minEl = document.getElementById(isSv ? "l10-cd-min-sv" : "l10-cd-min");
@@ -766,8 +791,7 @@
             const snRaw = snDisp !== "—" ? String(snDisp).trim() : "";
             const st = esc(s.result || (s.occupied ? "PROC" : "—"));
             const sub = `${esc(s.machine || "")}`.trim();
-            const sub2 =
-              `${esc(String(s.log_time || "")).slice(0, 16)}`.trim();
+            const sub2 = esc(formatLastEndDisplay(String(s.log_time || "").trim()));
             parts.push('<div class="l10-tray-wrap">');
             parts.push(
               `<button type="button" class="l10-tray-btn ${esc(trayClass(s.ui_bucket))}"` +
@@ -939,7 +963,7 @@
           `<td class="l10-etf-sv-td l10-etf-sv-mono">${esc(String(r.sys_ip || "—"))}</td>` +
           `<td class="l10-etf-sv-td">${esc(slotDisp || "—")}</td>` +
           `<td class="l10-etf-sv-td">${esc(fixDisp || "—")}</td>` +
-          `<td class="l10-etf-sv-td l10-etf-sv-mono">${esc(letRaw ? letRaw.slice(0, 24) : "—")}</td>` +
+          `<td class="l10-etf-sv-td" title="${escAttr(letRaw)}">${esc(formatLastEndDisplay(letRaw))}</td>` +
           `<td class="l10-etf-sv-td" title="${escAttr(remark)}">${esc(remark || "—")}</td>` +
           `</tr>`,
       );

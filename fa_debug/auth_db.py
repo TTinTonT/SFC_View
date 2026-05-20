@@ -84,6 +84,21 @@ def init_auth_db() -> None:
                 )
             """)
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS permanent_api_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    token TEXT UNIQUE NOT NULL,
+                    label TEXT NOT NULL DEFAULT 'default',
+                    revoked INTEGER NOT NULL DEFAULT 0,
+                    created_at_ts INTEGER NOT NULL,
+                    last_used_at_ts INTEGER NOT NULL
+                )
+            """)
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_perm_token_user_label "
+                "ON permanent_api_tokens (user_id, label) WHERE revoked = 0"
+            )
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS login_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER,
@@ -184,6 +199,26 @@ def ensure_auth_db() -> None:
                         PRIMARY KEY (user_id, page_key)
                     )
                 """)
+                conn.commit()
+            cur = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='permanent_api_tokens'"
+            )
+            if cur.fetchone() is None:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS permanent_api_tokens (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        token TEXT UNIQUE NOT NULL,
+                        label TEXT NOT NULL DEFAULT 'default',
+                        revoked INTEGER NOT NULL DEFAULT 0,
+                        created_at_ts INTEGER NOT NULL,
+                        last_used_at_ts INTEGER NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_perm_token_user_label "
+                    "ON permanent_api_tokens (user_id, label) WHERE revoked = 0"
+                )
                 conn.commit()
             cur = conn.execute("SELECT value FROM app_settings WHERE key = 'admin_pw_reset_v1'")
             if cur.fetchone() is None:

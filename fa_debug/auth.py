@@ -3,13 +3,23 @@
 
 from __future__ import annotations
 
+import hmac
 import secrets
 import time
 from typing import Any, Dict, Optional, Tuple
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from config.app_config import AUTH_SESSION_TTL_MINUTES
+from config.app_config import (
+    AUTH_COOKIE_DOMAIN,
+    AUTH_PERMANENT_COOKIE_ENABLED,
+    AUTH_PERMANENT_COOKIE_MAX_AGE_SECONDS,
+    AUTH_PERMANENT_COOKIE_NAME,
+    AUTH_SESSION_TTL_MINUTES,
+    AUTH_STATIC_API_TOKEN,
+    AUTH_STATIC_API_USERNAME,
+    FLASK_DEBUG,
+)
 from fa_debug.auth_db import connect_auth_db, ensure_auth_db, get_app_setting
 
 SESSION_TTL_SECONDS = (AUTH_SESSION_TTL_MINUTES or 30) * 60
@@ -198,6 +208,123 @@ def delete_session(conn, token: str) -> None:
     conn.commit()
 
 
+def get_or_create_permanent_token(conn, user_id: int, label: str = "default") -> str:
+    """Long-lived API token (no idle TTL). One active token per user+label."""
+    lbl = (label or "default").strip() or "default"
+    cur = conn.execute(
+        "SELECT token FROM permanent_api_tokens WHERE user_id = ? AND label = ? AND revoked = 0",
+        (user_id, lbl),
+    )
+    row = cur.fetchone()
+    if row:
+        return row["token"]
+    token = secrets.token_urlsafe(32)
+    now = _now_ts()
+    conn.execute(
+        """INSERT INTO permanent_api_tokens
+           (user_id, token, label, revoked, created_at_ts, last_used_at_ts)
+           VALUES (?, ?, ?, 0, ?, ?)""",
+        (user_id, token, lbl, now, now),
+    )
+    conn.commit()
+    return token
+
+
+def get_user_by_permanent_token(conn, token: str) -> Optional[Dict]:
+    """Validate permanent token. No session idle TTL; skips IP/time-window checks (for other apps)."""
+    if not token:
+        return None
+    cur = conn.execute(
+        """SELECT user_id, last_used_at_ts FROM permanent_api_tokens
+           WHERE token = ? AND revoked = 0""",
+        (token,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    now = _now_ts()
+    conn.execute(
+        "UPDATE permanent_api_tokens SET last_used_at_ts = ? WHERE token = ?",
+        (now, token),
+    )
+    conn.commit()
+    cur = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],))
+    u = cur.fetchone()
+    if not u:
+        return None
+    user = dict(u)
+    is_admin = (user.get("role") or "").lower() == "admin"
+    if not is_admin and is_user_locked(conn, user["id"]):
+        return None
+    return user
+
+
+def revoke_permanent_token(conn, user_id: int, token: Optional[str] = None, label: str = "default") -> None:
+    if token:
+        conn.execute(
+            "UPDATE permanent_api_tokens SET revoked = 1 WHERE user_id = ? AND token = ?",
+            (user_id, token),
+        )
+    else:
+        lbl = (label or "default").strip() or "default"
+        conn.execute(
+            "UPDATE permanent_api_tokens SET revoked = 1 WHERE user_id = ? AND label = ? AND revoked = 0",
+            (user_id, lbl),
+        )
+    conn.commit()
+
+
+def _cookie_kwargs() -> Dict[str, Any]:
+    secure = not FLASK_DEBUG
+    kw: Dict[str, Any] = {
+        "httponly": True,
+        "samesite": "Lax",
+        "secure": secure,
+        "path": "/",
+    }
+    if AUTH_COOKIE_DOMAIN:
+        kw["domain"] = AUTH_COOKIE_DOMAIN
+    return kw
+
+
+def apply_auth_cookies(resp, user_id: int, session_token: str, session_ttl_sec: Optional[int]) -> None:
+    """Set short-lived session cookie and optional permanent cookie on a Flask response."""
+    kw = _cookie_kwargs()
+    cookie_max_age = session_ttl_sec if session_ttl_sec is not None else 365 * 24 * 60 * 60
+    resp.set_cookie("auth_token", session_token, max_age=cookie_max_age, **kw)
+    if not AUTH_PERMANENT_COOKIE_ENABLED:
+        return
+    conn = connect_auth_db()
+    try:
+        perm = get_or_create_permanent_token(conn, user_id)
+    finally:
+        conn.close()
+    resp.set_cookie(
+        AUTH_PERMANENT_COOKIE_NAME,
+        perm,
+        max_age=AUTH_PERMANENT_COOKIE_MAX_AGE_SECONDS,
+        **kw,
+    )
+
+
+def clear_auth_cookies(resp, *, revoke_permanent: bool = False, user_id: Optional[int] = None, permanent_token: Optional[str] = None) -> None:
+    """Clear session cookie. Permanent cookie stays unless revoke_permanent (for other apps)."""
+    kw = _cookie_kwargs()
+    resp.delete_cookie("auth_token", path=kw.get("path", "/"), domain=kw.get("domain"))
+    if revoke_permanent:
+        if user_id is not None:
+            conn = connect_auth_db()
+            try:
+                revoke_permanent_token(conn, user_id, token=permanent_token)
+            finally:
+                conn.close()
+        resp.delete_cookie(
+            AUTH_PERMANENT_COOKIE_NAME,
+            path=kw.get("path", "/"),
+            domain=kw.get("domain"),
+        )
+
+
 def login_flow(username: str, password: str, ip: str) -> Tuple[bool, Optional[str], Optional[Dict]]:
     """
     Returns (success, error_message, user_dict).
@@ -261,15 +388,74 @@ def set_user_page_permissions(conn, user_id: int, page_keys: list) -> None:
     conn.commit()
 
 
-def get_current_user(request) -> Optional[Dict]:
-    """Get user from auth_token cookie; refresh session TTL. Returns None if invalid/expired."""
-    token = request.cookies.get("auth_token") or (request.headers.get("Authorization") or "").replace("Bearer ", "").strip()
-    if not token:
+def _extract_bearer(request) -> str:
+    return (request.headers.get("Authorization") or "").replace("Bearer ", "").strip()
+
+
+def _static_api_credential_from_request(request) -> str:
+    return (
+        _extract_bearer(request)
+        or (request.headers.get("X-SFC-View-Api-Key") or "").strip()
+        or (request.headers.get("X-Api-Key") or "").strip()
+    )
+
+
+def _static_api_token_matches(provided: str) -> bool:
+    expected = (AUTH_STATIC_API_TOKEN or "").strip()
+    if not expected or not provided:
+        return False
+    return hmac.compare_digest(provided, expected)
+
+
+def get_user_for_static_api(request) -> Optional[Dict]:
+    """
+    Built-in token from config/static_api_token.py — never expires, not in auth.db.
+    Skips IP/time-window checks (automation). Still blocked if mapped user is locked (non-admin).
+    """
+    cred = _static_api_credential_from_request(request)
+    if not _static_api_token_matches(cred):
         return None
     ensure_auth_db()
     conn = connect_auth_db()
     try:
-        return get_user_by_token(conn, token)
+        user = get_user_by_username(conn, AUTH_STATIC_API_USERNAME)
+        if not user:
+            return None
+        is_admin = (user.get("role") or "").lower() == "admin"
+        if not is_admin and is_user_locked(conn, user["id"]):
+            return None
+        return user
+    finally:
+        conn.close()
+
+
+def get_current_user(request) -> Optional[Dict]:
+    """Static API token, then session, then permanent cookie / Bearer."""
+    static_user = get_user_for_static_api(request)
+    if static_user is not None:
+        return static_user
+
+    bearer = _extract_bearer(request)
+    session_tok = request.cookies.get("auth_token") or bearer
+    perm_tok = request.cookies.get(AUTH_PERMANENT_COOKIE_NAME) or (
+        request.headers.get("X-Auth-Permanent") or ""
+    ).strip()
+    if not session_tok and not perm_tok and not bearer:
+        return None
+    ensure_auth_db()
+    conn = connect_auth_db()
+    try:
+        if session_tok and not _static_api_token_matches(session_tok):
+            user = get_user_by_token(conn, session_tok)
+            if user:
+                return user
+        for candidate in (perm_tok, bearer):
+            if not candidate or _static_api_token_matches(candidate):
+                continue
+            user = get_user_by_permanent_token(conn, candidate)
+            if user:
+                return user
+        return None
     finally:
         conn.close()
 

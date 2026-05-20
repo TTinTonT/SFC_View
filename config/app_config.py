@@ -45,6 +45,33 @@ TOP_K_ERRORS_DEFAULT = get_top_k_errors_default()
 # Auth (debug area)
 AUTH_DB_PATH = os.environ.get("AUTH_DB_PATH") or os.path.join(ANALYTICS_CACHE_DIR, "auth.db")
 AUTH_SESSION_TTL_MINUTES = int(os.environ.get("AUTH_SESSION_TTL_MINUTES", get_default("AUTH_SESSION_TTL_MINUTES") or "30"))
+AUTH_PERMANENT_COOKIE_ENABLED = (
+    os.environ.get("AUTH_PERMANENT_COOKIE_ENABLED", get_default("AUTH_PERMANENT_COOKIE_ENABLED") or "true")
+).lower() in ("1", "true", "yes")
+AUTH_PERMANENT_COOKIE_NAME = (
+    os.environ.get("AUTH_PERMANENT_COOKIE_NAME", get_default("AUTH_PERMANENT_COOKIE_NAME") or "auth_token_permanent")
+).strip() or "auth_token_permanent"
+AUTH_PERMANENT_COOKIE_MAX_AGE_SECONDS = int(
+    os.environ.get(
+        "AUTH_PERMANENT_COOKIE_MAX_AGE_SECONDS",
+        get_default("AUTH_PERMANENT_COOKIE_MAX_AGE_SECONDS") or str(10 * 365 * 24 * 60 * 60),
+    )
+)
+# Optional: e.g. ".factory.local" so sibling apps on subdomains share the cookie
+AUTH_COOKIE_DOMAIN = (os.environ.get("AUTH_COOKIE_DOMAIN") or get_default("AUTH_COOKIE_DOMAIN") or "").strip() or None
+
+# Built-in static API token (see config/static_api_token.py). Env overrides file default.
+from config.static_api_token import SFC_VIEW_STATIC_API_TOKEN as _FILE_STATIC_TOKEN
+from config.static_api_token import SFC_VIEW_STATIC_API_USERNAME as _FILE_STATIC_USER
+
+_env_static = os.environ.get("AUTH_STATIC_API_TOKEN")
+if _env_static is not None:
+    AUTH_STATIC_API_TOKEN = _env_static.strip()
+else:
+    AUTH_STATIC_API_TOKEN = (_FILE_STATIC_TOKEN or "").strip()
+AUTH_STATIC_API_USERNAME = (
+    os.environ.get("AUTH_STATIC_API_USERNAME") or _FILE_STATIC_USER or "admin"
+).strip().lower()
 SMTP_HOST = os.environ.get("SMTP_HOST", get_default("SMTP_HOST") or "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", get_default("SMTP_PORT") or "587"))
 SMTP_USER = os.environ.get("SMTP_USER", get_default("SMTP_USER") or "")

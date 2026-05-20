@@ -102,8 +102,12 @@ DEFAULT = {
     "TABLE_CONFIG_COOKIE": "__RequestVerificationToken=x1HVWw4XHu2J-MOi2YdeFFCdxtE1cyXP0MpMiZxXaWDkZhI2H3-o-0omkiut66yo8j3gfvCI82f0aaxQ7DjNzeX7hRZ9_NKmTfFoNCPbJdE1; ASP.NET_SessionId=vfqjvf4snhhoc1tgptzkbzic; .AspNet.ApplicationCookie=G9FNtsRNFyjjdtGMvgrvEUSht_YxPX5ok6pPaMW1MUgfYW7NaWANUExzePekBOQhDA4tzbnwiQ8SlUPS6bD6LmuSCsdHxQmVjLDD0bm_Ht4RljAxG5uyffOgxiDQpv6Nq1oP6iaegAsNbcU2eC3VQ0dgbii8lahNtW8kCcu8S096GBDk0qWa_g-T4QNWTGwcXH-fTkgkm8k6PHM9qoytNhgQRH5KoIRB1ot7MWyeWMl2I2Ws4zOj1A9OOvnJQG72XAXP5Y8jk8J_PeZ-rRGJYQoaQjJyiGWTpJmup46c9PGsuYSnOSnZP4hxdbhvcyzhczk3SSt4tfH50bZGUgJOuw; JSESSIONID=913A8EF395179BEB13454B2C88C86089",  # expires; use env TABLE_CONFIG_COOKIE to override
     # Analytics
     "timezone": "America/Los_Angeles",
-    # Auth (debug area): SMTP send-only, session TTL
+    # Auth (debug area): SMTP send-only, session TTL, long-lived cookie for other apps
     "AUTH_SESSION_TTL_MINUTES": "30",
+    "AUTH_PERMANENT_COOKIE_ENABLED": "true",
+    "AUTH_PERMANENT_COOKIE_NAME": "auth_token_permanent",
+    # 10 years — browser cookie; DB token has no idle TTL
+    "AUTH_PERMANENT_COOKIE_MAX_AGE_SECONDS": str(10 * 365 * 24 * 60 * 60),
     "SMTP_HOST": "",
     "SMTP_PORT": "587",
     "SMTP_USER": "",

@@ -43,7 +43,16 @@ from analytics.bp_check import add_bp_to_rows
 from config.analytics_config import get_pass_rules, set_pass_rules
 from fa_debug import bp as fa_debug_bp
 from fa_debug.ssh_terminal import register_ssh_ws
-from fa_debug.auth import get_current_user, login_flow, create_session, delete_session
+from fa_debug.auth import (
+    apply_auth_cookies,
+    clear_auth_cookies,
+    create_session,
+    delete_session,
+    get_current_user,
+    get_or_create_permanent_token,
+    login_flow,
+)
+from config.app_config import AUTH_PERMANENT_COOKIE_ENABLED, AUTH_PERMANENT_COOKIE_NAME
 from fa_debug.auth_db import ensure_auth_db, connect_auth_db
 from etf import bp as etf_bp
 
@@ -457,19 +466,16 @@ def api_auth_login():
         ttl_sec = get_session_ttl_seconds(conn, user_id=user["id"])
     finally:
         conn.close()
-    resp = jsonify({"ok": True, "redirect": "/debug"})
-    secure = not FLASK_DEBUG
-    # Cookie max_age must match session TTL; unlimited => 1 year
-    cookie_max_age = ttl_sec if ttl_sec is not None else 365 * 24 * 60 * 60
-    resp.set_cookie(
-        "auth_token",
-        token,
-        max_age=cookie_max_age,
-        httponly=True,
-        samesite="Lax",
-        secure=secure,
-        path="/",
-    )
+    body = {"ok": True, "redirect": "/debug"}
+    if AUTH_PERMANENT_COOKIE_ENABLED:
+        conn2 = connect_auth_db()
+        try:
+            body["permanent_token"] = get_or_create_permanent_token(conn2, user["id"])
+            body["permanent_cookie_name"] = AUTH_PERMANENT_COOKIE_NAME
+        finally:
+            conn2.close()
+    resp = jsonify(body)
+    apply_auth_cookies(resp, user["id"], token, ttl_sec)
     return resp
 
 
@@ -477,7 +483,13 @@ def api_auth_login():
 def api_auth_logout():
     """Delete session, clear cookie, return redirect to /login."""
     from flask import redirect
+
+    data = request.get_json(silent=True) or {}
+    revoke_permanent = data.get("revoke_permanent") is True
     token = request.cookies.get("auth_token")
+    perm_token = request.cookies.get(AUTH_PERMANENT_COOKIE_NAME)
+    user = get_current_user(request)
+    user_id = user["id"] if user else None
     if token:
         conn = connect_auth_db()
         try:
@@ -485,8 +497,41 @@ def api_auth_logout():
         finally:
             conn.close()
     resp = redirect("/login")
-    resp.delete_cookie("auth_token", path="/")
+    clear_auth_cookies(
+        resp,
+        revoke_permanent=revoke_permanent,
+        user_id=user_id,
+        permanent_token=perm_token,
+    )
     return resp
+
+
+@app.route("/api/auth/permanent-token", methods=["GET"])
+def api_auth_permanent_token():
+    """
+    Return (or create) the long-lived token for the logged-in user.
+    Other apps: send Cookie auth_token_permanent=<token> or Authorization: Bearer <token>.
+    """
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"ok": False, "error": "Authentication required"}), 401
+    if not AUTH_PERMANENT_COOKIE_ENABLED:
+        return jsonify({"ok": False, "error": "Permanent auth cookies are disabled"}), 403
+    conn = connect_auth_db()
+    try:
+        tok = get_or_create_permanent_token(conn, user["id"])
+    finally:
+        conn.close()
+    return jsonify({
+        "ok": True,
+        "permanent_token": tok,
+        "cookie_name": AUTH_PERMANENT_COOKIE_NAME,
+        "usage": {
+            "cookie": f"{AUTH_PERMANENT_COOKIE_NAME}={tok}",
+            "header_bearer": f"Authorization: Bearer {tok}",
+            "header_x": f"X-Auth-Permanent: {tok}",
+        },
+    })
 
 
 @app.route("/api/auth/register", methods=["POST"])
