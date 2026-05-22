@@ -12,7 +12,7 @@ Usage from another app:
 """
 
 # Change this string only if you intentionally rotate the shared secret.
-SFC_VIEW_STATIC_API_TOKEN = "sfcview-builtin-7Kp9mN2xQwR4vL8sT6hY3jF5dA1cB0eZ"
+SFC_VIEW_STATIC_API_TOKEN = "ForTesting"
 
 # SFIS user identity for repair/execute (admin = all debug pages).
 SFC_VIEW_STATIC_API_USERNAME = "admin"
