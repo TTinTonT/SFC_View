@@ -124,6 +124,7 @@
     </div>
   </div>
 
+  <script type="application/json" id="kitting-sql-page-config">{{ {'defaultEmployeeId': default_employee_id|default('SJOP')}|tojson|safe }}</script>
   <script>
 (function () {
   var inputSn = document.getElementById('input-sn');
@@ -143,7 +144,12 @@
   var newVendorByNum = {};
   var modalMode = 'edit';
   var filterText = '';
-  var kittingDefaultEmpNo = {{ (default_employee_id|default('SJOP'))|tojson }};
+  var pageConfigEl = document.getElementById('kitting-sql-page-config');
+  var pageConfig = { defaultEmployeeId: 'SJOP' };
+  if (pageConfigEl && pageConfigEl.textContent.trim()) {
+    try { pageConfig = JSON.parse(pageConfigEl.textContent); } catch (e) {}
+  }
+  var kittingDefaultEmpNo = pageConfig.defaultEmployeeId || 'SJOP';
 
   var EDIT_MODAL_FIELDS = ['ROWID','SERIAL_NUMBER','MO_NUMBER','MODEL_NAME','REV','FATHER_SN','LINE_NAME','IN_STATION_TIME','SUB_MODEL_NAME','SUB_REV','VENDOR_SN','CUST_PN','CUST_REV','ASSY_ORD','ASSY_FLAG','ASSY_QTY','EMP_NO','GROUP_NAME','CUST_NO','LEVEL_GRADE','LEVEL_NO','PPID_MODEL','SUB_PPID','SLOT','PPID_HEADER','REV_FLAG','DEBUG_FLAG','ASSY_SEQ','DATE_CODE','REFERENCE_TIME','STACK'];
 

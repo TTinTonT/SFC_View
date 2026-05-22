@@ -7,6 +7,9 @@ import json
 from typing import Any, Optional
 
 import requests
+from requests import HTTPError
+
+from crabber.trial_run_shelf import process_sfc_payload_indicates_failure
 
 
 def _cfg():
@@ -99,6 +102,61 @@ def get_shelf_scan_item_list(
             "units": units,
         },
     )
+
+
+def get_station_list(*, is_mfg: bool = True, timeout: int = 60) -> Any:
+    """Crabber MFG station dropdown (same as shelf UI)."""
+    return _get("/api/getStationList/", {"is_mfg": "true" if is_mfg else "false"}, timeout=timeout)
+
+
+def get_shelf_procedure_released(
+    *,
+    project_id: int,
+    station_id: str | None,
+    page: int = 1,
+    page_size: int = 240,
+    timeout: int = 120,
+) -> Any:
+    """
+    Crabber released shelf procedures for MFG shelf grid.
+    station_id: use None or '' to pass literal 'null' (all stations), matching Crabber query.
+    """
+    params: dict[str, Any] = {
+        "project_id": project_id,
+        "page": max(1, int(page)),
+        "page_size": max(1, min(500, int(page_size))),
+    }
+    if station_id is None or str(station_id).strip() == "":
+        params["station_id"] = "null"
+    else:
+        params["station_id"] = str(station_id).strip()
+    return _get("/api/get_shelf_procedure_released/", params, timeout=timeout)
+
+
+def get_rd_shelf_scan_item_list(
+    *,
+    sp_id: int,
+    user_id: str,
+    trial_run: bool = True,
+    source: str = "",
+    timeout: int = 120,
+) -> Any:
+    """
+    Crabber operator-console shelf payload for a specific released shelf procedure (sp_id).
+    Matches browser: /api/get_rd_shelf_scan_item_list/?sp_id=&user_id=&trial_run=&source=
+    """
+    params = {
+        "sp_id": int(sp_id),
+        "user_id": str(user_id),
+        "trial_run": "true" if trial_run else "false",
+        "source": source or "",
+    }
+    try:
+        return _get("/api/get_rd_shelf_scan_item_list/", params, timeout=timeout)
+    except HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            return _get("/api/get_rel_shelf_scan_item_list/", params, timeout=timeout)
+        raise
 
 
 def get_machine_config(machine_id: int, spid: int) -> Any:
@@ -283,6 +341,8 @@ def run_start_test_sequence(
     """
     Run Crabber start chain after user picked machine.
     Returns dict with step results or raises on HTTP/required field errors.
+    When trial_run is True only: if process_sfc payload indicates NG / input error,
+    returns {"ok": False, "error", "steps", "log_id"} and does not call send_list.
     """
     spd = shelf_proc_data or {}
     list_id = int(spd.get("id") or 0)
@@ -322,6 +382,18 @@ def run_start_test_sequence(
     }
 
     psfc = process_sfc(proc_payload)
+    if trial_run:
+        sfc_failed, sfc_reason = process_sfc_payload_indicates_failure(psfc)
+        if sfc_failed:
+            steps.append({"step": "process_sfc", "ok": False, "data": psfc, "error": sfc_reason})
+            log_early = psfc.get("log_id") if isinstance(psfc, dict) else None
+            return {
+                "ok": False,
+                "error": sfc_reason,
+                "steps": steps,
+                "log_id": log_early,
+                "send_list": None,
+            }
     steps.append({"step": "process_sfc", "ok": True, "data": psfc})
 
     acc = check_set_shelf_procedure_accessibility(shelf_proc_id)

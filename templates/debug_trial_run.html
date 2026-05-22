@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en" class="h-full fa-debug-shell">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trial Run – Debug</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/css/theme_shared.css">
+  <link rel="stylesheet" href="/static/css/fa_debug_shell.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); margin: 0; padding: 0; }
+  .panel { background: var(--color-surface); border: 1.5px solid var(--color-border); border-radius: 16px; padding: 1.25rem 1.5rem 2rem; max-width: 100%; width: 100%; margin: 0 auto; }
+
+  /* MFG shelf canvas (Crabber-inspired) */
+  .tr-shelf-wrap { margin-top: 0.5rem; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
+  .tr-shelf-topbar { background: linear-gradient(180deg, #5a7a9a 0%, #4a6a8a 100%); color: #f1f5f9; padding: 0.65rem 1rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .tr-shelf-back { background: rgba(255,255,255,0.15); border: none; color: #fff; padding: 0.35rem 0.75rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.8rem; }
+  .tr-shelf-back:hover { background: rgba(255,255,255,0.25); }
+  .tr-shelf-title { font-size: 1.15rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+  .tr-shelf-subbar { background: rgba(45, 74, 110, 0.95); color: #e2e8f0; padding: 0.5rem 1rem; font-size: 0.8rem; font-weight: 600; }
+  .tr-shelf-filters { background: #3d6ea3; padding: 0.85rem 1rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
+  .tr-shelf-filters label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.85); }
+  .tr-shelf-filters select { min-width: 14rem; padding: 0.45rem 0.6rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.35); background: #fff; color: #0f172a; font-size: 0.875rem; }
+  .tr-shelf-canvas { background: linear-gradient(180deg, #4a7eb8 0%, #3d6fa8 40%, #356498 100%); padding: 1.25rem 1rem 2rem; min-height: 420px; }
+  .tr-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+  .tr-card { background: #fff; border-radius: 14px; padding: 0.85rem 1rem 1rem; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12); color: #0f172a; display: flex; flex-direction: column; gap: 0.5rem; }
+  .tr-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+  .tr-card-doc { color: #64748b; padding: 0.15rem; cursor: default; }
+  .tr-card-tp { font-size: 0.78rem; font-weight: 700; color: #475569; white-space: nowrap; }
+  .tr-card-badge { display: inline-flex; align-items: center; gap: 0.35rem; background: #0ea5e9; color: #fff; font-size: 0.75rem; font-weight: 700; padding: 0.35rem 0.55rem; border-radius: 999px; width: fit-content; max-width: 100%; }
+  .tr-card-badge span { word-break: break-word; }
+  .tr-card-badge svg { flex-shrink: 0; opacity: 0.95; }
+  .tr-card-badge-unmapped { background: #94a3b8; color: #f8fafc; }
+  .tr-card-project { font-size: 0.95rem; font-weight: 800; color: #0d9488; letter-spacing: 0.02em; }
+  .tr-card-testname { font-size: 1rem; font-weight: 800; font-style: italic; color: #0f172a; line-height: 1.25; }
+  .tr-card-meta { font-size: 0.78rem; color: #64748b; line-height: 1.4; }
+  .tr-card-actions { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.25rem; }
+  .tr-btn { width: 100%; border: none; border-radius: 10px; padding: 0.55rem 0.75rem; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tr-btn-trial { background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%); color: #fff; box-shadow: 0 2px 0 #15803d; }
+  .tr-btn-trial:hover { filter: brightness(1.05); }
+  .tr-btn-sfc { background: linear-gradient(180deg, #2dd4bf 0%, #14b8a6 100%); color: #042f2e; font-weight: 800; box-shadow: 0 2px 0 #0f766e; }
+  .tr-btn-sfc:hover { filter: brightness(1.05); }
+  .tr-btn-post { background: linear-gradient(180deg, #475569 0%, #334155 100%); color: #f1f5f9; box-shadow: 0 2px 0 #1e293b; }
+  .tr-btn-post:hover { filter: brightness(1.08); }
+  .tr-shelf-foot { display: flex; justify-content: center; gap: 0.35rem; padding: 1rem; background: rgba(45, 74, 110, 0.5); }
+  .tr-page-btn { padding: 0.35rem 0.65rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.12); color: #fff; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+  .tr-page-btn.active { background: rgba(255,255,255,0.35); }
+  .tr-mock-note { font-size: 0.75rem; color: var(--color-muted); margin-top: 0.75rem; }
+  .tr-shelf-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.35rem; }
+  .tr-btn-refresh { padding: 0.35rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.2); color: #fff; font-weight: 600; cursor: pointer; font-size: 0.8rem; }
+  .tr-btn-refresh:hover { background: rgba(255,255,255,0.35); }
+  .tr-btn-sfc:disabled, .tr-btn-post:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.3); }
+  /* Trial modal */
+  .tr-modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); display: none; align-items: center; justify-content: center; z-index: 200; padding: 1rem; }
+  .tr-modal-overlay[aria-hidden="false"] { display: flex; }
+  .tr-modal-overlay .tr-modal-backdrop { position: absolute; inset: 0; z-index: 0; }
+  .tr-modal { position: relative; z-index: 1; background: var(--color-surface); border-radius: 16px; max-width: 520px; width: 100%; max-height: 90vh; overflow: auto; border: 1.5px solid var(--color-border); box-shadow: 0 20px 50px rgba(0,0,0,0.25); }
+  .tr-modal-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border); }
+  .tr-modal-hd h2 { font-size: 1.1rem; font-weight: 700; margin: 0; }
+  .tr-modal-close { border: none; background: transparent; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--color-muted); }
+  .tr-modal-body { padding: 1rem 1.25rem 1.25rem; }
+  .tr-field { margin-bottom: 0.85rem; }
+  .tr-field label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem; color: var(--color-muted); }
+  .tr-field input { width: 100%; max-width: 100%; padding: 0.5rem 0.65rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text); font-size: 0.9rem; box-sizing: border-box; }
+  .tr-modal-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .tr-btn-secondary { padding: 0.45rem 0.9rem; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+  .tr-btn-primary { padding: 0.45rem 0.9rem; border-radius: 8px; border: none; background: var(--color-primary); color: #fff; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+  .tr-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  #tr-machine-filter { width: 100%; margin-bottom: 0.5rem; }
+  .tr-machine-list { max-height: 220px; overflow: auto; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); }
+  .tr-machine-item { padding: 0.45rem 0.65rem; border-bottom: 1px solid var(--color-border); cursor: pointer; font-size: 0.82rem; }
+  .tr-machine-item:last-child { border-bottom: none; }
+  .tr-machine-item:hover { background: var(--color-hover); }
+  .tr-machine-item.selected { background: rgba(99,102,241,0.15); outline: 2px solid var(--color-primary); }
+  .tr-occ { display: block; font-size: 0.72rem; color: var(--color-muted); margin-top: 0.15rem; }
+  #tr-machine-picked { font-size: 0.8rem; margin: 0.35rem 0; color: var(--color-muted); }
+  #tr-result-detail { white-space: pre-wrap; font-size: 0.72rem; max-height: 200px; overflow: auto; margin-top: 0.5rem; padding: 0.5rem; background: var(--color-bg); border-radius: 8px; border: 1px solid var(--color-border); }
+  </style>
+</head>
+<body class="h-full">
+  <div id="app-wrapper" class="app-wrapper">
+    {% set fa_debug_active = 'trial-run' %}
+    {% set fa_debug_show_filters = false %}
+    {% include 'partials/fa_debug_header.html' %}
+
+    <main>
+  <div class="panel">
+    <h1 class="text-2xl font-bold mb-1">Trial Run</h1>
+    <p class="text-sm text-[var(--color-muted)] mb-3">Lists only Crabber shelf rows that allow trial run (<code class="text-xs">is_pn_mapping</code> true). Trial starts in-app (no Crabber UI). SFC Settings / Post-action are not wired.</p>
+
+    <div class="tr-shelf-wrap">
+      <div class="tr-shelf-topbar">
+        <button type="button" class="tr-shelf-back" onclick="history.back()" title="Back">BACK</button>
+        <span class="tr-shelf-title">MFG SHELF</span>
+      </div>
+      <div class="tr-shelf-subbar">Test-Procedure list — project NVIDIA_NVL144 (id 48)</div>
+      <div class="tr-shelf-filters">
+        <label>Station
+          <select id="tr-filter-station" aria-label="Station">
+            <option value="">Loading…</option>
+          </select>
+        </label>
+        <div class="tr-shelf-toolbar">
+          <button type="button" class="tr-btn-refresh" id="tr-btn-refresh-shelf">Refresh list</button>
+        </div>
+      </div>
+      <div class="tr-shelf-canvas">
+        <p id="tr-shelf-status" class="tr-mock-note" style="color: rgba(255,255,255,0.9); margin-bottom: 0.75rem;"></p>
+        <div id="tr-card-grid" class="tr-card-grid"></div>
+      </div>
+    </div>
+  </div>
+    </main>
+
+  <div id="tr-modal" class="tr-modal-overlay" aria-hidden="true">
+    <div class="tr-modal-backdrop" aria-hidden="true"></div>
+    <div class="tr-modal" role="dialog" aria-labelledby="tr-modal-title">
+      <div class="tr-modal-hd">
+        <h2 id="tr-modal-title">Trial run</h2>
+        <button type="button" class="tr-modal-close" id="tr-modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="tr-modal-body">
+        <div id="tr-step-config" class="tr-step">
+          <p class="text-sm text-[var(--color-muted)] mb-2">Enter tray SN and operator ID, then load machines for this shelf procedure.</p>
+          <div class="tr-field">
+            <label for="tr-input-sn">Serial number (SCAN_SYSTEM_SN)</label>
+            <input type="text" id="tr-input-sn" autocomplete="off" data-tr-busy-disable />
+          </div>
+          <div class="tr-field">
+            <label for="tr-input-emp">Operator ID (OP_ID)</label>
+            <input type="text" id="tr-input-emp" autocomplete="off" data-tr-busy-disable />
+          </div>
+          <div class="tr-modal-actions">
+            <button type="button" class="tr-btn-primary" id="tr-btn-prepare" data-tr-busy-disable>Next: select machine</button>
+          </div>
+        </div>
+        <div id="tr-step-machines" class="tr-step" style="display: none;">
+          <p class="text-sm text-[var(--color-muted)] mb-2">Filter and click a machine (same list as Crabber; use the filter box to narrow).</p>
+          <input type="search" id="tr-machine-filter" placeholder="Filter machines…" autocomplete="off" data-tr-busy-disable />
+          <div id="tr-machine-list" class="tr-machine-list"></div>
+          <p id="tr-machine-picked"></p>
+          <div class="tr-modal-actions">
+            <button type="button" class="tr-btn-secondary" id="tr-btn-back-machines" data-tr-busy-disable>Back</button>
+            <button type="button" class="tr-btn-primary" id="tr-btn-start" disabled data-tr-busy-disable>Start trial run</button>
+          </div>
+        </div>
+        <div id="tr-step-result" class="tr-step" style="display: none;">
+          <p id="tr-result-msg" class="text-sm font-semibold"></p>
+          <pre id="tr-result-detail"></pre>
+          <div class="tr-modal-actions">
+            <button type="button" class="tr-btn-primary" id="tr-result-done">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>window.__DEFAULT_EMPLOYEE_ID__ = {{ (default_employee_id|default('SJOP'))|tojson }}; window.__TRIAL_RUN_PROJECT_ID__ = 48;</script>
+  <script src="/static/js/trial_run_page.js" defer></script>
+  <script src="/static/js/fa_debug_theme.js" defer></script>
+  </div>
+</body>
+</html>
