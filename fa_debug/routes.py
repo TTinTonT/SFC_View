@@ -1414,7 +1414,7 @@ def api_testing_overview():
 
 @bp.route("/api/debug/jump-station/execute", methods=["POST"])
 def api_jump_station_execute():
-    """Execute jump: current_group (station before target, e.g. FLA) + target_group (e.g. FLB), or target_group only. SQL uses current."""
+    """Execute jump: target_group = UI destination (e.g. FLA); jump_param = station-before from route."""
     data = request.get_json(silent=True) or {}
     sn = (data.get("sn") or "").strip().upper()
     if not sn:
@@ -1432,7 +1432,7 @@ def api_jump_station_execute():
     try:
         from sfis_tool.db import get_conn
         from sfis_tool.wip import get_station_and_next
-        from sfis_tool.jump_route import get_station_order_and_next, check_jump_station as do_check_jump_station
+        from sfis_tool.jump_route import check_jump_station as do_check_jump_station
         from sfis_tool.repair_ok import get_group_info, jump_routing, get_jump_param_from_route
         conn = get_conn()
         try:
@@ -1441,14 +1441,9 @@ def api_jump_station_execute():
                 return jsonify({"ok": False, "error": "No WIP for this SN."})
             wip = dict(zip(_WIP_KEYS, row))
             v_line = wip.get("LINE_NAME") or ""
-            if current_group:
-                order, _, _ = get_station_order_and_next(conn, sn)
-                try:
-                    idx = list(order).index(current_group)
-                    if idx + 1 < len(order):
-                        target_group = order[idx + 1]
-                except (ValueError, TypeError):
-                    pass
+            # UI sends target_group = user-selected destination (e.g. FLA). Do not derive target from
+            # current_group via order.index() — route may list the same GROUP_NAME twice (e.g. FILL_COOLANT
+            # -> FLA and FILL_COOLANT -> T_VI), which would pick the wrong branch.
             if check_jump_station and not do_check_jump_station(conn, target_group, sn):
                 return jsonify({"ok": False, "error": "CheckJumpStation: not allowed (kitting/assy)."})
             # target_group from UI = desired destination (e.g. FLA). Convert to station-before (BAT)
